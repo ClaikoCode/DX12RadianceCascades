@@ -115,7 +115,7 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>rcpch.h</PrecompiledHeaderFile>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <AdditionalIncludeDirectories>$(SolutionDir)Packages\WinPixEventRuntime.1.0.240308001\Include\WinPixEventRuntime\;$(SolutionDir)MiniEngine\Model\;$(SolutionDir)MiniEngine\Core\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)Packages\WinPixEventRuntime.1.0.240308001\Include\WinPixEventRuntime\;$(SolutionDir)MiniEngine\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ShowIncludes>false</ShowIncludes>
     </ClCompile>
     <Link>
@@ -135,7 +135,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <AdditionalIncludeDirectories>$(SolutionDir)Packages\WinPixEventRuntime.1.0.240308001\Include\WinPixEventRuntime\;$(SolutionDir)MiniEngine\Model\;$(SolutionDir)MiniEngine\Core\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)Packages\WinPixEventRuntime.1.0.240308001\Include\WinPixEventRuntime\;$(SolutionDir)MiniEngine\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ShowIncludes>false</ShowIncludes>
     </ClCompile>
     <Link>
