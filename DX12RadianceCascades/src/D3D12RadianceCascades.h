@@ -22,4 +22,8 @@ public:
     virtual IDXGISwapChain* GetSwapchain() { return m_deviceResources->GetSwapChain(); }
 
 private:
+
+    void InitDeviceResources();
+    void CreateWindowDependentResources();
+
 };
