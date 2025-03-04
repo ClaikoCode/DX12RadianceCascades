@@ -213,6 +213,10 @@ void ResetUniquePtrArray(T* uniquePtrArray)
     }
 }
 
+/*
+
+The code below has been commented out in favor of other GPU abstractions given by MiniEngine/Core.
+
 class GpuUploadBuffer
 {
 public:
@@ -346,3 +350,4 @@ public:
         return m_resource->GetGPUVirtualAddress() + instanceIndex * InstanceSize();
     }
 };
+*/

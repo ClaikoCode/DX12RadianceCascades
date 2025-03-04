@@ -3,6 +3,7 @@
 #include "DXSample.h"
 #include "StepTimer.h"
 #include "RaytracingHlslCompat.h"
+#include "Core\ColorBuffer.h"
 
 class D3D12RadianceCascades : public DXSample
 {
@@ -26,4 +27,6 @@ private:
     void InitDeviceResources();
     void CreateWindowDependentResources();
 
+private:
+    ColorBuffer m_colorBufferTest;
 };

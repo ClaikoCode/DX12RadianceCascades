@@ -10,6 +10,7 @@
 //*********************************************************
 
 #pragma once
+#include "Core\UploadBuffer.h"
 
 #define SizeOfInUint32(obj) ((sizeof(obj) - 1) / sizeof(UINT32) + 1)
 
@@ -58,7 +59,7 @@ public:
 };
 
 // Shader table = {{ ShaderRecord 1}, {ShaderRecord 2}, ...}
-class ShaderTable : public GpuUploadBuffer
+class ShaderTable : public UploadBuffer
 {
     uint8_t* m_mappedShaderRecords;
     UINT m_shaderRecordSize;
@@ -75,8 +76,8 @@ public:
         m_shaderRecordSize = Align(shaderRecordSize, D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT);
         m_shaderRecords.reserve(numShaderRecords);
         UINT bufferSize = numShaderRecords * m_shaderRecordSize;
-        Allocate(device, bufferSize, resourceName);
-        m_mappedShaderRecords = MapCpuWriteOnly();
+        Create(resourceName, bufferSize);
+        m_mappedShaderRecords = (uint8_t*)Map();
     }
     
     void push_back(const ShaderRecord& shaderRecord)

@@ -1,9 +1,8 @@
 #include "rcpch.h"
-#include "D3D12RadianceCascades.h"
+#include "Core\CommandListManager.h" // Included as the global variable was not accessible otherwise due to not having the definition.
+#include "Core\GraphicsCore.h"
 #include "DirectXRaytracingHelper.h"
 #include "D3D12RadianceCascades.h"
-
-
 
 constexpr DXGI_FORMAT c_DefaultBBFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
 constexpr D3D_FEATURE_LEVEL c_DefaultFeatureLevel = D3D_FEATURE_LEVEL_12_0;
@@ -21,26 +20,29 @@ D3D12RadianceCascades::D3D12RadianceCascades(UINT width, UINT height, std::wstri
 
 void D3D12RadianceCascades::OnDeviceLost()
 {
-
+	// Should release any resources that will not be released themselves.
 }
 
 void D3D12RadianceCascades::OnDeviceRestored()
 {
-
+	// Empty
 }
 
 void D3D12RadianceCascades::OnInit()
 {
 	InitDeviceResources();
 
+	m_colorBufferTest.Create(L"Test Color Buffer", m_width, m_height, 1, DXGI_FORMAT_R8G8_UINT);
 }
 
 void D3D12RadianceCascades::OnUpdate()
 {
+	// Empty
 }
 
 void D3D12RadianceCascades::OnRender()
 {
+	// Empty
 }
 
 void D3D12RadianceCascades::OnSizeChanged(UINT width, UINT height, bool minimized)
@@ -57,6 +59,8 @@ void D3D12RadianceCascades::OnSizeChanged(UINT width, UINT height, bool minimize
 
 void D3D12RadianceCascades::OnDestroy()
 {
+	m_deviceResources->WaitForGpu();
+	OnDeviceLost(); 
 }
 
 void D3D12RadianceCascades::InitDeviceResources()
@@ -75,6 +79,10 @@ void D3D12RadianceCascades::InitDeviceResources()
 
 	m_deviceResources->CreateDeviceResources();
 	m_deviceResources->CreateWindowSizeDependentResources();
+
+	// Create necessary global resources.
+	Graphics::g_Device = m_deviceResources->GetD3DDevice();
+	Graphics::g_CommandManager.Create(m_deviceResources->GetD3DDevice());
 }
 
 void D3D12RadianceCascades::CreateWindowDependentResources()
