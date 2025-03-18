@@ -1,12 +1,13 @@
 #include "rcpch.h"
+
 #include "Core\CommandListManager.h" // Included as the global variable was not accessible otherwise due to not having the definition.
+#include "Core\CommandContext.h"
 #include "Core\GraphicsCore.h"
+#include "Core\GpuTimeManager.h"
+
 #include "DirectXRaytracingHelper.h"
 #include "D3D12RadianceCascades.h"
-
-constexpr DXGI_FORMAT c_DefaultBBFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
-constexpr D3D_FEATURE_LEVEL c_DefaultFeatureLevel = D3D_FEATURE_LEVEL_12_0;
-constexpr uint32_t c_BackBufferCount = 2u;
+#include "d3dcompiler.h"
 
 #define OUT_STR(message) message L"\n\n"
 #define ERR_STR(message) L"ERROR: " OUT_STR(message)
@@ -20,7 +21,14 @@ D3D12RadianceCascades::D3D12RadianceCascades(UINT width, UINT height, std::wstri
 
 void D3D12RadianceCascades::OnDeviceLost()
 {
-	// Should release any resources that will not be released themselves.
+	Graphics::g_CommandManager.IdleGPU();
+	Graphics::g_CommandManager.Shutdown();
+	GpuTimeManager::Shutdown();
+
+	// Uncommented until a need is noticed to clear like this.
+	//PSO::DestroyAll();
+	//RootSignature::DestroyAll();
+	//DescriptorAllocator::DestroyAll();
 }
 
 void D3D12RadianceCascades::OnDeviceRestored()
@@ -32,17 +40,30 @@ void D3D12RadianceCascades::OnInit()
 {
 	InitDeviceResources();
 
-	m_colorBufferTest.Create(L"Test Color Buffer", m_width, m_height, 1, DXGI_FORMAT_R8G8_UINT);
+	m_sceneColorBuffer.Create(L"Scene Color Buffer", m_width, m_height, 1, DXGI_FORMAT_R8G8_UINT);
+	m_sceneDepthBuffer.Create(L"Scene Depth Buffer", m_width, m_height, DXGI_FORMAT_D32_FLOAT);
+
+	for (uint32_t i = 0; i < c_BackBufferCount; i++)
+	{
+		ComPtr<ID3D12Resource> bbResource = nullptr;
+		GetSwapchain()->GetBuffer(i, IID_PPV_ARGS(bbResource.GetAddressOf()));
+		
+		std::wstring bbName = std::wstring(L"Back Buffer ") + std::to_wstring(i);
+		m_renderTargets[i].CreateFromSwapChain(bbName, bbResource.Detach());
+		m_renderTargets[i].SetClearColor(c_BackBufferClearColor);
+	}
 }
 
 void D3D12RadianceCascades::OnUpdate()
 {
-	// Empty
+
 }
 
 void D3D12RadianceCascades::OnRender()
 {
-	// Empty
+	Prepare();
+
+	Present();
 }
 
 void D3D12RadianceCascades::OnSizeChanged(UINT width, UINT height, bool minimized)
@@ -60,7 +81,29 @@ void D3D12RadianceCascades::OnSizeChanged(UINT width, UINT height, bool minimize
 void D3D12RadianceCascades::OnDestroy()
 {
 	m_deviceResources->WaitForGpu();
-	OnDeviceLost(); 
+	OnDeviceLost();
+}
+
+void D3D12RadianceCascades::Prepare()
+{
+	m_deviceResources->Prepare();
+	GraphicsContext& gfxContext = GraphicsContext::Begin(L"Prepare Back Buffer");
+	
+	ColorBuffer& renderTarget = GetCurrentBackBuffer();
+	gfxContext.TransitionResource(renderTarget, D3D12_RESOURCE_STATE_RENDER_TARGET, true);
+	gfxContext.ClearColor(renderTarget);
+
+	gfxContext.Finish();
+}
+
+void D3D12RadianceCascades::Present()
+{
+	GraphicsContext& gfxContext = GraphicsContext::Begin(L"Present Back Buffer");
+
+	gfxContext.TransitionResource(GetCurrentBackBuffer(), D3D12_RESOURCE_STATE_PRESENT);
+
+	gfxContext.Finish();
+	m_deviceResources->Present();
 }
 
 void D3D12RadianceCascades::InitDeviceResources()
@@ -78,13 +121,22 @@ void D3D12RadianceCascades::InitDeviceResources()
 	ThrowIfFalse(IsDirectXRaytracingSupported(m_deviceResources->GetAdapter()), ERR_STR(L"Raytracing is not supported on your current hardware / drivers."));
 
 	m_deviceResources->CreateDeviceResources();
-	m_deviceResources->CreateWindowSizeDependentResources();
-
-	// Create necessary global resources.
+	
+	// Manual setup of necessary global resources.
 	Graphics::g_Device = m_deviceResources->GetD3DDevice();
 	Graphics::g_CommandManager.Create(m_deviceResources->GetD3DDevice());
+	GpuTimeManager::Initialize();
+
+	// Override the command queue so that creation of swapchain is tied to Graphics:: global managers.
+	m_deviceResources->OverrideCommandQueue(Graphics::g_CommandManager.GetQueue().GetCommandQueue());
+	m_deviceResources->CreateWindowSizeDependentResources();
 }
 
 void D3D12RadianceCascades::CreateWindowDependentResources()
 {
+}
+
+ColorBuffer& D3D12RadianceCascades::GetCurrentBackBuffer()
+{
+	return m_renderTargets[m_deviceResources->GetCurrentFrameIndex()];
 }
