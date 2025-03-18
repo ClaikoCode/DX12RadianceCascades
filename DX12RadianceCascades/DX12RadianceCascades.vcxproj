@@ -115,13 +115,14 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>rcpch.h</PrecompiledHeaderFile>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <AdditionalIncludeDirectories>$(SolutionDir)Packages\WinPixEventRuntime.1.0.240308001\Include\WinPixEventRuntime\;$(SolutionDir)MiniEngine\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)Packages\WinPixEventRuntime.1.0.240308001\Include\WinPixEventRuntime\;$(SolutionDir)MiniEngine\;$(ProjectDir)src;$(SolutionDir)\Libs\dxc_2025_02_20\inc\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ShowIncludes>false</ShowIncludes>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>d3d12.lib;dxgi.lib;dxguid.lib;$(OutDir)..\Core-$(Platform)-$(Configuration)\Core.lib;$(OutDir)..\Model-$(Platform)-$(Configuration)\Model.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>dxcompiler.lib;dxil.lib;d3d12.lib;dxgi.lib;dxguid.lib;$(OutDir)..\Core-$(Platform)-$(Configuration)\Core.lib;$(OutDir)..\Model-$(Platform)-$(Configuration)\Model.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(SolutionDir)Libs\dxc_2025_02_20\lib\x64\;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -135,7 +136,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <AdditionalIncludeDirectories>$(SolutionDir)Packages\WinPixEventRuntime.1.0.240308001\Include\WinPixEventRuntime\;$(SolutionDir)MiniEngine\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)Packages\WinPixEventRuntime.1.0.240308001\Include\WinPixEventRuntime\;$(SolutionDir)MiniEngine\;$(ProjectDir)src;$(SolutionDir)\Libs\dxc_2025_02_20\inc\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ShowIncludes>false</ShowIncludes>
     </ClCompile>
     <Link>
@@ -143,7 +144,8 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>d3d12.lib;dxgi.lib;$(OutDir)..\Core-$(Platform)-$(Configuration)\Core.lib;$(OutDir)..\Model-$(Platform)-$(Configuration)\Model.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>dxcompiler.lib;dxil.lib;d3d12.lib;dxgi.lib;$(OutDir)..\Core-$(Platform)-$(Configuration)\Core.lib;$(OutDir)..\Model-$(Platform)-$(Configuration)\Model.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(SolutionDir)Libs\dxc_2025_02_20\lib\x64\;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -155,6 +157,7 @@
     <ClInclude Include="src\DXSampleHelper.h" />
     <ClInclude Include="src\RayTracingHlslCompat.h" />
     <ClInclude Include="src\rcpch.h" />
+    <ClInclude Include="src\ShaderCompilation\ShaderCompilationManager.h" />
     <ClInclude Include="src\StepTimer.h" />
     <ClInclude Include="src\Win32Application.h" />
   </ItemGroup>
@@ -167,6 +170,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">rcpch.h</PrecompiledHeaderFile>
     </ClCompile>
+    <ClCompile Include="src\ShaderCompilation\ShaderCompilationManager.cpp" />
     <ClCompile Include="src\Win32Application.cpp" />
   </ItemGroup>
   <ItemGroup>

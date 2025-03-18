@@ -40,6 +40,9 @@ namespace DX
             UINT adapterIDoverride = UINT_MAX);
         ~DeviceResources();
 
+        // Added by Jonathan Dell'Ova to override underlying command queue pointer and back buffer render targets.
+        void OverrideCommandQueue(ID3D12CommandQueue* commandQueue);
+
         void InitializeDXGIAdapter();
         void SetAdapterOverride(UINT adapterID) { m_adapterIDoverride = adapterID; }
         void CreateDeviceResources();
