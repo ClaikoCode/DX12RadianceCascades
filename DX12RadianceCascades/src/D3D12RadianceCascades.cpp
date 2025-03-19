@@ -118,7 +118,7 @@ void D3D12RadianceCascades::InitDeviceResources()
 	m_deviceResources->SetWindow(Win32Application::GetHwnd(), m_width, m_height);
 	m_deviceResources->InitializeDXGIAdapter();
 
-	ThrowIfFalse(IsDirectXRaytracingSupported(m_deviceResources->GetAdapter()), ERR_STR(L"Raytracing is not supported on your current hardware / drivers."));
+	ThrowIfFalse(IsDirectXRaytracingSupported(m_deviceResources->GetAdapter()), L"Raytracing is not supported on your current hardware / drivers.");
 
 	m_deviceResources->CreateDeviceResources();
 	

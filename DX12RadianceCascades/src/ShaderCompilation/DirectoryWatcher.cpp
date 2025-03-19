@@ -20,7 +20,7 @@ void DirectoryWatcher::PollingLoop()
 
 			if (previousWriteTime.count() < currentWriteTime.count())
 			{
-				DBG_OUT(L"File updated!");
+				LOG_DEBUG(L"File '{}' was updated. Triggering callback.", file.path().filename().wstring());
 				m_callback(file.path().filename().string());
 				previousWriteTime = currentWriteTime;
 			}
@@ -47,7 +47,8 @@ void DirectoryWatcher::InitializeInternalFileMapping()
 {
 	if (m_watchDirectory.empty())
 	{
-		ERR_OUT(L"No watch directory set, cannot initilize file mappings.");
+		LOG_ERROR(L"No watch directory set. Cannot initilize file mappings.");
+		return;
 	}
 
 	// TODO: Find a way to include filters if needed.
