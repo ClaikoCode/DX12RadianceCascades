@@ -117,6 +117,7 @@
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <AdditionalIncludeDirectories>$(SolutionDir)Packages\WinPixEventRuntime.1.0.240308001\Include\WinPixEventRuntime\;$(SolutionDir)MiniEngine\;$(ProjectDir)src;$(SolutionDir)\Libs\dxc_2025_02_20\inc\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ShowIncludes>false</ShowIncludes>
+      <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -138,6 +139,7 @@
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <AdditionalIncludeDirectories>$(SolutionDir)Packages\WinPixEventRuntime.1.0.240308001\Include\WinPixEventRuntime\;$(SolutionDir)MiniEngine\;$(ProjectDir)src;$(SolutionDir)\Libs\dxc_2025_02_20\inc\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ShowIncludes>false</ShowIncludes>
+      <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -157,6 +159,7 @@
     <ClInclude Include="src\DXSampleHelper.h" />
     <ClInclude Include="src\RayTracingHlslCompat.h" />
     <ClInclude Include="src\rcpch.h" />
+    <ClInclude Include="src\DirectoryWatcher.h" />
     <ClInclude Include="src\ShaderCompilation\ShaderCompilationManager.h" />
     <ClInclude Include="src\StepTimer.h" />
     <ClInclude Include="src\Win32Application.h" />
@@ -170,6 +173,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">rcpch.h</PrecompiledHeaderFile>
     </ClCompile>
+    <ClCompile Include="src\ShaderCompilation\DirectoryWatcher.cpp" />
     <ClCompile Include="src\ShaderCompilation\ShaderCompilationManager.cpp" />
     <ClCompile Include="src\Win32Application.cpp" />
   </ItemGroup>
@@ -180,6 +184,14 @@
     <ProjectReference Include="..\MiniEngine\Model\Model.vcxproj">
       <Project>{5d3aeefb-8789-48e5-9bd9-09c667052d09}</Project>
     </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <FxCompile Include="src\shaders\VertexShader.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Vertex</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Vertex</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Vertex</ShaderType>
+    </FxCompile>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

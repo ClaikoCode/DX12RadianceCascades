@@ -6,12 +6,8 @@
 #include "Core\GpuTimeManager.h"
 
 #include "DirectXRaytracingHelper.h"
+#include "ShaderCompilation\ShaderCompilationManager.h"
 #include "D3D12RadianceCascades.h"
-#include "d3dcompiler.h"
-
-#define OUT_STR(message) message L"\n\n"
-#define ERR_STR(message) L"ERROR: " OUT_STR(message)
-#define DBG_STR(message) L"DEBUG: " OUT_STR(message)
 
 D3D12RadianceCascades::D3D12RadianceCascades(UINT width, UINT height, std::wstring name)
 	: DXSample(width, height, name)
@@ -52,6 +48,10 @@ void D3D12RadianceCascades::OnInit()
 		m_renderTargets[i].CreateFromSwapChain(bbName, bbResource.Detach());
 		m_renderTargets[i].SetClearColor(c_BackBufferClearColor);
 	}
+
+	auto& shaderCompManager = ShaderCompilationManager::Get();
+	shaderCompManager.RegisterShader(Shader::ShaderIDTest, L"VertexShaderTest.hlsl", Shader::ShaderTypeVS);
+	shaderCompManager.CompileShader(Shader::ShaderIDTest);
 }
 
 void D3D12RadianceCascades::OnUpdate()
