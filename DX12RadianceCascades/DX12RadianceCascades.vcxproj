@@ -157,6 +157,7 @@
     <ClInclude Include="src\DirectXRaytracingHelper.h" />
     <ClInclude Include="src\DXSample.h" />
     <ClInclude Include="src\DXSampleHelper.h" />
+    <ClInclude Include="src\Logger.h" />
     <ClInclude Include="src\RayTracingHlslCompat.h" />
     <ClInclude Include="src\rcpch.h" />
     <ClInclude Include="src\DirectoryWatcher.h" />

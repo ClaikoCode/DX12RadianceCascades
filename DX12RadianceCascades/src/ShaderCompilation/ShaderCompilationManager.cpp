@@ -1,7 +1,6 @@
 #include "rcpch.h"
 
 #include <locale> // For wstring convert
-
 #include "ShaderCompilationManager.h"
 
 using namespace Microsoft::WRL;
@@ -87,7 +86,7 @@ namespace
 			}
 		}
 
-		OutputDebugString(errorStringW.c_str());
+		LOG_ERROR(L"Compilation failed:\n\n{}", errorStringW);
 	}
 }
 
@@ -133,7 +132,7 @@ std::wstring ShaderModelArg(Shader::ShaderModel shaderModel, Shader::ShaderType 
 		shaderTypeStr += L"cs";
 		break;
 	default:
-		OutputDebugString(ERR_STR(L"Unknown shader type."));
+		LOG_ERROR(L"Unknown shader type: {}", (uint32_t)shaderType);
 		break;
 	}
 	
@@ -165,7 +164,7 @@ void AddEntryPointArg(ShaderCompilationArgs& compArgs, const std::wstring& entry
 
 void AddDebugInfoArg(ShaderCompilationArgs& compArgs)
 {
-	AddCompArg(compArgs, L"-Zi");
+	AddCompArg(compArgs, DXC_ARG_DEBUG);
 }
 
 void AddOptimizationLevel(ShaderCompilationArgs& compArgs, uint16_t level)
@@ -244,7 +243,7 @@ Shader::ShaderData* ShaderCompilationManager::GetShaderData(UUID64 shaderID)
 	auto it = m_shaderDataMap.find(shaderID);
 	if (it == m_shaderDataMap.end())
 	{
-		ERR_OUT(L"No shader was registered with given UUID64: %llu.");
+		LOG_WARNING(L"No shader was registered with given UUID64: {}", shaderID);
 	}
 	else
 	{
@@ -261,7 +260,7 @@ std::set<UUID64>* ShaderCompilationManager::GetShaderDependencies(const std::wst
 	auto it = m_shaderDependencyMap.find(shaderFilename);
 	if (it == m_shaderDependencyMap.end())
 	{
-		DBG_OUT("No dependencies registered for this shader.");
+		//LOG_WARNING(L"No dependencies has been registered for the shader '{}'.", shaderFilename);
 	}
 	else
 	{
@@ -311,25 +310,29 @@ ComPtr<IDxcBlob> ShaderCompilationManager::CompileShaderPackageToBlob(const Shad
 {
 	ShaderCompilationArgs args = BuildArgsFromShaderPackage(shaderCompPackage);
 
-	ComPtr<IDxcBlobEncoding> source = nullptr;
-	const std::wstring shaderPath = Shader::BuildShaderPath(shaderCompPackage.shaderFilename);
-	ThrowIfFailed(m_library->CreateBlobFromFile(shaderPath.c_str(), nullptr, source.GetAddressOf()));
-	DxcBuffer dxcBuffer = BlobEncodingToBuffer(source);
+	DxcBuffer dxcBuffer = {};
+	{
+		ComPtr<IDxcBlobEncoding> source = nullptr;
+		const std::wstring shaderPath = Shader::BuildShaderPath(shaderCompPackage.shaderFilename);
+		ThrowIfFailed(m_library->CreateBlobFromFile(shaderPath.c_str(), nullptr, source.GetAddressOf()));
+		dxcBuffer = BlobEncodingToBuffer(source);
+	}
 	
 	ComPtr<IDxcIncludeHandler> includeHandler = nullptr;
 	ThrowIfFailed(m_library->CreateIncludeHandler(includeHandler.GetAddressOf()));
 
 	ComPtr<IDxcOperationResult> compResult = nullptr;
-	std::vector<WCHAR*> argPtrs = ConvertArgsToInputArgs(args);
-	ThrowIfFailed(m_compiler->Compile(
-		&dxcBuffer, 
-		(LPCWSTR*)argPtrs.data(), 
-		(UINT32)argPtrs.size(), 
-		includeHandler.Get(), 
-		IID_PPV_ARGS(compResult.GetAddressOf())
-	));
-
-
+	{
+		std::vector<WCHAR*> argPtrs = ConvertArgsToInputArgs(args);
+		ThrowIfFailed(m_compiler->Compile(
+			&dxcBuffer,
+			(LPCWSTR*)argPtrs.data(),
+			(UINT32)argPtrs.size(),
+			includeHandler.Get(),
+			IID_PPV_ARGS(compResult.GetAddressOf())
+		));
+	}
+	
 	HRESULT status;
 	compResult->GetStatus(&status);
 	if (FAILED(status))
@@ -365,13 +368,13 @@ void ShaderCompilationManager::RegisterShader(UUID64 shaderID, const Shader::Sha
 {
 	if (compPackage.shaderFilename.empty())
 	{
-		ERR_OUT(L"Cannot register shader without a path.");
+		LOG_ERROR(L"Cannot register shader '{}' without a path.", shaderID);
 		return;
 	}
 
 	if (shaderID == Shader::ShaderIDNone)
 	{
-		ERR_OUT(L"Invalid shader ID.");
+		LOG_ERROR(L"Invalid shader ID of '{}'.", shaderID);
 		return;
 	}
 
