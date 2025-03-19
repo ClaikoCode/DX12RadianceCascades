@@ -11,8 +11,6 @@ constexpr D3D_FEATURE_LEVEL c_DefaultFeatureLevel = D3D_FEATURE_LEVEL_12_0;
 constexpr uint32_t c_BackBufferCount = 2u;
 static const Color c_BackBufferClearColor = Color(1.0f, 0.0f, 1.0f, 1.0f);
 
-
-
 class D3D12RadianceCascades : public DXSample
 {
 public:

@@ -71,6 +71,13 @@ namespace Shader
     
     std::wstring BuildShaderPath(const std::wstring& shaderFolder, const std::wstring& shaderName);
     std::wstring BuildShaderPath(const std::wstring& shaderFile);
+
+    // Special struct to make sure that source ptr lifetime is kept for lifetime of the DxcBuffer.
+    struct ComDxcBuffer
+    {
+        ComPtr<IDxcBlobEncoding> sourcePtr = nullptr;
+        DxcBuffer dxcBuffer;
+    };
 }
 
 class ShaderCompilationManager
@@ -84,9 +91,10 @@ public:
     void CompileDependencies(UUID64 shaderID);
     Microsoft::WRL::ComPtr<IDxcBlob> CompileShaderPackageToBlob(const Shader::ShaderCompilationPackage& shaderCompPackage);
 
-    void RegisterShader(UUID64 shaderID, const std::wstring shaderFilename, Shader::ShaderType shaderType);
-    void RegisterShader(UUID64 shaderID, const Shader::ShaderCompilationPackage& compPackage);
+    void RegisterShader(UUID64 shaderID, const std::wstring shaderFilename, Shader::ShaderType shaderType, bool compile = false);
+    void RegisterShader(UUID64 shaderID, const Shader::ShaderCompilationPackage& compPackage, bool compile);
     
+    void GetCompiledShaderData(Shader::ShaderID shaderID, void** binaryOut, size_t* binarySizeOut);
 
 private:
 
@@ -95,6 +103,7 @@ private:
 
     Shader::ShaderData* GetShaderData(UUID64 shaderID);
     std::set<UUID64>* GetShaderDependencies(const std::wstring& shaderFilename);
+
 
 private:
     Microsoft::WRL::ComPtr<IDxcLibrary> m_library;

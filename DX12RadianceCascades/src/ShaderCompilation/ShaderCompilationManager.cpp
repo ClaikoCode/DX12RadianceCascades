@@ -208,18 +208,22 @@ std::vector<WCHAR*> ConvertArgsToInputArgs(const ShaderCompilationArgs& compArgs
 	return argPtrs;
 }
 
-DxcBuffer BlobEncodingToBuffer(ComPtr<IDxcBlobEncoding> source)
+Shader::ComDxcBuffer BlobEncodingToBuffer(ComPtr<IDxcBlobEncoding> source)
 {
-	DxcBuffer dxcBuffer;
-	
+	Shader::ComDxcBuffer comDxcBuffer = {};
+	comDxcBuffer.sourcePtr = source;
+	DxcBuffer& dxcBuffer = comDxcBuffer.dxcBuffer;
 
-	dxcBuffer.Ptr = source->GetBufferPointer();
-	BOOL known;
-	UINT32 encoding;
-	dxcBuffer.Encoding = source->GetEncoding(&known, &encoding);
-	dxcBuffer.Size = source->GetBufferSize();
+	{
+		dxcBuffer.Ptr = source->GetBufferPointer();
+		BOOL known;
+		UINT32 encoding;
+		ThrowIfFailed(source->GetEncoding(&known, &encoding), L"Could not get encoding.");
+		dxcBuffer.Encoding = encoding;
+		dxcBuffer.Size = source->GetBufferSize();
+	}
 
-	return dxcBuffer;
+	return comDxcBuffer;
 }
 
 ShaderCompilationManager::ShaderCompilationManager() :
@@ -310,12 +314,12 @@ ComPtr<IDxcBlob> ShaderCompilationManager::CompileShaderPackageToBlob(const Shad
 {
 	ShaderCompilationArgs args = BuildArgsFromShaderPackage(shaderCompPackage);
 
-	DxcBuffer dxcBuffer = {};
+	Shader::ComDxcBuffer comDxcBuffer = {};
 	{
 		ComPtr<IDxcBlobEncoding> source = nullptr;
 		const std::wstring shaderPath = Shader::BuildShaderPath(shaderCompPackage.shaderFilename);
 		ThrowIfFailed(m_library->CreateBlobFromFile(shaderPath.c_str(), nullptr, source.GetAddressOf()));
-		dxcBuffer = BlobEncodingToBuffer(source);
+		comDxcBuffer = BlobEncodingToBuffer(source);
 	}
 	
 	ComPtr<IDxcIncludeHandler> includeHandler = nullptr;
@@ -325,7 +329,7 @@ ComPtr<IDxcBlob> ShaderCompilationManager::CompileShaderPackageToBlob(const Shad
 	{
 		std::vector<WCHAR*> argPtrs = ConvertArgsToInputArgs(args);
 		ThrowIfFailed(m_compiler->Compile(
-			&dxcBuffer,
+			&comDxcBuffer.dxcBuffer,
 			(LPCWSTR*)argPtrs.data(),
 			(UINT32)argPtrs.size(),
 			includeHandler.Get(),
@@ -355,16 +359,16 @@ ComPtr<IDxcBlob> ShaderCompilationManager::CompileShaderPackageToBlob(const Shad
 	return shaderBlob;
 }
 
-void ShaderCompilationManager::RegisterShader(UUID64 shaderID, const std::wstring shaderFilename, Shader::ShaderType shaderType)
+void ShaderCompilationManager::RegisterShader(UUID64 shaderID, const std::wstring shaderFilename, Shader::ShaderType shaderType, bool compile /*= false*/)
 {
 	Shader::ShaderCompilationPackage compPackage = {};
 	compPackage.shaderFilename = shaderFilename;
 	compPackage.shaderType = shaderType;
 
-	RegisterShader(shaderID, compPackage);
+	RegisterShader(shaderID, compPackage, compile);
 }
 
-void ShaderCompilationManager::RegisterShader(UUID64 shaderID, const Shader::ShaderCompilationPackage& compPackage)
+void ShaderCompilationManager::RegisterShader(UUID64 shaderID, const Shader::ShaderCompilationPackage& compPackage, bool compile)
 {
 	if (compPackage.shaderFilename.empty())
 	{
@@ -378,11 +382,38 @@ void ShaderCompilationManager::RegisterShader(UUID64 shaderID, const Shader::Sha
 		return;
 	}
 
-	Shader::ShaderData shaderData = {};
-	shaderData.shaderCompPackage = compPackage;
-	m_shaderDataMap[shaderID] = std::move(shaderData);
+	{
+		Shader::ShaderData shaderData = {};
+		shaderData.shaderCompPackage = compPackage;
+		m_shaderDataMap[shaderID] = std::move(shaderData);
+	}
 
-	m_shaderDependencyMap[compPackage.shaderFilename].insert(shaderID);
+	{
+		const std::wstring& shaderFilename = compPackage.shaderFilename;
+		m_shaderDependencyMap[shaderFilename].insert(shaderID);
+	}
+	
+	if (compile)
+	{
+		CompileShader(shaderID);
+	}
+}
+
+void ShaderCompilationManager::GetCompiledShaderData(Shader::ShaderID shaderID, void** binaryOut, size_t* binarySizeOut)
+{
+	if (binaryOut == nullptr || binarySizeOut == nullptr)
+	{
+		LOG_ERROR(L"Cannot write shader data info to nullptrs.");
+		return;
+	}
+
+	Shader::ShaderData* shaderData = GetShaderData(shaderID);
+	if (shaderData)
+	{
+		*binaryOut = shaderData->shaderBlob->GetBufferPointer();
+		*binarySizeOut = shaderData->shaderBlob->GetBufferSize();
+	}
+
 }
 
 

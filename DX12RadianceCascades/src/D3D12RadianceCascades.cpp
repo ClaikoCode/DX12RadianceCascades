@@ -39,19 +39,17 @@ void D3D12RadianceCascades::OnInit()
 	m_sceneColorBuffer.Create(L"Scene Color Buffer", m_width, m_height, 1, DXGI_FORMAT_R8G8_UINT);
 	m_sceneDepthBuffer.Create(L"Scene Depth Buffer", m_width, m_height, DXGI_FORMAT_D32_FLOAT);
 
-	for (uint32_t i = 0; i < c_BackBufferCount; i++)
-	{
-		ComPtr<ID3D12Resource> bbResource = nullptr;
-		GetSwapchain()->GetBuffer(i, IID_PPV_ARGS(bbResource.GetAddressOf()));
-		
-		std::wstring bbName = std::wstring(L"Back Buffer ") + std::to_wstring(i);
-		m_renderTargets[i].CreateFromSwapChain(bbName, bbResource.Detach());
-		m_renderTargets[i].SetClearColor(c_BackBufferClearColor);
-	}
+	CreateWindowDependentResources();
 
 	auto& shaderCompManager = ShaderCompilationManager::Get();
-	shaderCompManager.RegisterShader(Shader::ShaderIDTest, L"VertexShaderTest.hlsl", Shader::ShaderTypeVS);
-	shaderCompManager.CompileShader(Shader::ShaderIDTest);
+	shaderCompManager.RegisterShader(Shader::ShaderIDTest, L"VertexShaderTest.hlsl", Shader::ShaderTypeVS, true);
+
+	GraphicsPSO testPipeline(L"TestPSO");
+	void* binaryPtr = nullptr;
+	size_t binarySize = 0;
+	shaderCompManager.GetCompiledShaderData(Shader::ShaderIDTest, &binaryPtr, &binarySize);
+
+	testPipeline.SetVertexShader(binaryPtr, binarySize);
 }
 
 void D3D12RadianceCascades::OnUpdate()
@@ -68,13 +66,18 @@ void D3D12RadianceCascades::OnRender()
 
 void D3D12RadianceCascades::OnSizeChanged(UINT width, UINT height, bool minimized)
 {
-	if (!m_deviceResources->WindowSizeChanged(width, height, minimized))
+	// Free swapchain buffers.
+	for (uint32_t i = 0; i < c_BackBufferCount; i++)
 	{
-		return; 
+		m_renderTargets[i].Destroy();
 	}
 
-	DXSample::UpdateForSizeChange(width, height);
+	// Return value is ignore as this needs to run every time either way. 
+	// This is because of the weird double graphics APIs this project is using.
+	m_deviceResources->WindowSizeChanged(width, height, minimized);
 
+	Graphics::g_CommandManager.IdleGPU();
+	DXSample::UpdateForSizeChange(width, height);
 	CreateWindowDependentResources();
 }
 
@@ -134,6 +137,15 @@ void D3D12RadianceCascades::InitDeviceResources()
 
 void D3D12RadianceCascades::CreateWindowDependentResources()
 {
+	for (uint32_t i = 0; i < c_BackBufferCount; i++)
+	{
+		ComPtr<ID3D12Resource> bbResource = nullptr;
+		GetSwapchain()->GetBuffer(i, IID_PPV_ARGS(bbResource.GetAddressOf()));
+
+		std::wstring bbName = std::wstring(L"Back Buffer ") + std::to_wstring(i);
+		m_renderTargets[i].CreateFromSwapChain(bbName, bbResource.Detach());
+		m_renderTargets[i].SetClearColor(c_BackBufferClearColor);
+	}
 }
 
 ColorBuffer& D3D12RadianceCascades::GetCurrentBackBuffer()

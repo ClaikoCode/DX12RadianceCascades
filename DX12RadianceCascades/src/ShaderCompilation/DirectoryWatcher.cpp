@@ -7,7 +7,7 @@ void DirectoryWatcher::PollingLoop()
 {
 	while (m_isWatching)
 	{
-		for (auto& file : fs::recursive_directory_iterator(m_watchDirectory))
+		for (const auto& file : fs::recursive_directory_iterator(m_watchDirectory))
 		{
 			if (FilterFileByExtension(file))
 			{
@@ -28,8 +28,6 @@ void DirectoryWatcher::PollingLoop()
 
 		std::this_thread::sleep_for(m_pollingDelay);
 	}
-	
-
 }
 
 bool DirectoryWatcher::FilterFileByExtension(const std::filesystem::directory_entry& dirEntry)
@@ -52,7 +50,7 @@ void DirectoryWatcher::InitializeInternalFileMapping()
 	}
 
 	// TODO: Find a way to include filters if needed.
-	for (auto& file : fs::recursive_directory_iterator(m_watchDirectory))
+	for (const auto& file : fs::recursive_directory_iterator(m_watchDirectory))
 	{
 		const std::string filePath = file.path().string();
 		m_fileModificationTime[filePath] = file.last_write_time().time_since_epoch();
