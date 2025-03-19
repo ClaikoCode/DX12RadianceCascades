@@ -33,6 +33,9 @@
 #include <memory>
 #include <unordered_map>
 #include <vector>
+#include <array>
+#include <set>
+#include <chrono>
 #include <assert.h>
 
 #include <dxgi1_6.h>
@@ -50,6 +53,13 @@
 #define D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN   ((D3D12_GPU_VIRTUAL_ADDRESS)-1)
 #define MY_IID_PPV_ARGS                     IID_PPV_ARGS
 
+#define OUT_STR(message) message L"\n"
+#define ERR_STR(message) L"ERROR: " OUT_STR(message)
+#define DBG_STR(message) L"DEBUG: " OUT_STR(message)
+#define ERR_OUT(message) OutputDebugString(ERR_STR(message));
+#define DBG_OUT(message) OutputDebugString(DBG_STR(message));
+
+typedef uint64_t UUID64;
 
 #include "DXSampleHelper.h"
 #include "DeviceResources.h"

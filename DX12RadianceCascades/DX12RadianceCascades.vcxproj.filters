@@ -48,6 +48,9 @@
     <ClInclude Include="src\ShaderCompilation\ShaderCompilationManager.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="src\DirectoryWatcher.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\Main.cpp">
@@ -71,5 +74,11 @@
     <ClCompile Include="src\ShaderCompilation\ShaderCompilationManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\ShaderCompilation\DirectoryWatcher.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <FxCompile Include="src\shaders\VertexShader.hlsl" />
   </ItemGroup>
 </Project>

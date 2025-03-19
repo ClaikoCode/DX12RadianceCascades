@@ -1,7 +1,15 @@
 #pragma once
 
+#include "DirectoryWatcher.h"
+
 namespace Shader
 {
+    enum ShaderID : UUID64
+    {
+        ShaderIDNone = 0u,
+        ShaderIDTest
+    };
+
     // ID for a type of shader from the rendering pipeline.
     enum ShaderType : uint32_t
     {
@@ -28,23 +36,75 @@ namespace Shader
     {
         ShaderModel5_0 = 0,
         ShaderModel6_1,
+        ShaderModel6_3,
+
+        ShaderModelCount // Keep last!
+    };
+
+    static const std::array<std::wstring, ShaderModelCount> c_ShaderModelArg = {
+        L"5_0",
+        L"6_1",
+        L"6_3"
     };
 
     // Holds all information necessary for dynamically compiling a shader.
     struct ShaderCompilationPackage
     {
-        // Name for the shader (excluding path).
-        const wchar_t* shaderFilename = nullptr;
-        const char* entryPoint = "main";
+        // Not path.
+        std::wstring shaderFilename = L"";
+        std::wstring entryPoint = L"main";
 
         ShaderType shaderType = ShaderTypeNone;
-        ShaderModel shaderModel = ShaderModel6_1;
+        ShaderModel shaderModel = ShaderModel6_3;
 
         // Holds macro defines inserted into the shader.
         // NOTE: Null terminator for these will be added automatically.
-        std::vector<D3D_SHADER_MACRO> defines = {};
+        std::vector<DxcDefine> defines = {};
     };
 
-    // Shader name should not contain the .hlsl file extension.
-    std::wstring BuildShaderPath(const wchar_t* shaderFolder, const wchar_t* shaderName);
+    struct ShaderData
+    {
+        ShaderCompilationPackage shaderCompPackage;
+        Microsoft::WRL::ComPtr<IDxcBlob> shaderBlob = nullptr;
+    };
+
+    
+    std::wstring BuildShaderPath(const std::wstring& shaderFolder, const std::wstring& shaderName);
+    std::wstring BuildShaderPath(const std::wstring& shaderFile);
 }
+
+class ShaderCompilationManager
+{
+public:
+
+    static ShaderCompilationManager& Get();
+    void CompileShader(UUID64 shaderID);
+    void CompileDependencies(const std::wstring& shaderFilename);
+    void CompileDependencies(const std::string& shaderFilename);
+    void CompileDependencies(UUID64 shaderID);
+    Microsoft::WRL::ComPtr<IDxcBlob> CompileShaderPackageToBlob(const Shader::ShaderCompilationPackage& shaderCompPackage);
+
+    void RegisterShader(UUID64 shaderID, const std::wstring shaderFilename, Shader::ShaderType shaderType);
+    void RegisterShader(UUID64 shaderID, const Shader::ShaderCompilationPackage& compPackage);
+    
+
+private:
+
+    ShaderCompilationManager(); // Private constructor
+    ~ShaderCompilationManager() {}; // Private destructor
+
+    Shader::ShaderData* GetShaderData(UUID64 shaderID);
+    std::set<UUID64>* GetShaderDependencies(const std::wstring& shaderFilename);
+
+private:
+    Microsoft::WRL::ComPtr<IDxcLibrary> m_library;
+    Microsoft::WRL::ComPtr<IDxcCompiler3> m_compiler;
+
+    // Maps unique shader ids to shader compilation objects.
+    std::unordered_map<UUID64, Shader::ShaderData> m_shaderDataMap;
+
+    // Maps shader filename (not path) to shader compilation objects that are dependent on it.
+    std::unordered_map<std::wstring, std::set<UUID64>> m_shaderDependencyMap;
+
+    DirectoryWatcher m_shaderDirWatcher;
+};

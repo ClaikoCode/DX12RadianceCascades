@@ -164,7 +164,7 @@ inline UINT CalculateConstantBufferByteSize(UINT byteSize)
 }
 
 #ifdef D3D_COMPILE_STANDARD_FILE_INCLUDE
-inline Microsoft::WRL::ComPtr<ID3DBlob> CompileShader(
+inline Microsoft::WRL::ComPtr<ID3DBlob> CompileShaderPackageToBlob(
     const std::wstring& filename,
     const D3D_SHADER_MACRO* defines,
     const std::string& entrypoint,
