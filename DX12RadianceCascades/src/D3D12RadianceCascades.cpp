@@ -1,7 +1,6 @@
 #include "rcpch.h"
 
-#include "Core\CommandListManager.h" // Included as the global variable was not accessible otherwise due to not having the definition.
-#include "Core\CommandContext.h"
+#include "Core\CommandListManager.h" // Included as the global variable in namsepace Graphics:: was not accessible otherwise due to not having the definition.
 #include "Core\GraphicsCore.h"
 #include "Core\GpuTimeManager.h"
 
@@ -36,13 +35,20 @@ void D3D12RadianceCascades::OnInit()
 {
 	InitDeviceResources();
 
-	m_sceneColorBuffer.Create(L"Scene Color Buffer", m_width, m_height, 1, DXGI_FORMAT_R8G8_UINT);
+	m_sceneColorBuffer.Create(L"Scene Color Buffer", m_width, m_height, 1, DXGI_FORMAT_R8G8B8A8_UNORM);
 	m_sceneDepthBuffer.Create(L"Scene Depth Buffer", m_width, m_height, DXGI_FORMAT_D32_FLOAT);
 
 	CreateWindowDependentResources();
 
 	auto& shaderCompManager = ShaderCompilationManager::Get();
 	shaderCompManager.RegisterShader(Shader::ShaderIDTest, L"VertexShaderTest.hlsl", Shader::ShaderTypeVS, true);
+
+	RootSignature rootSigTest = {};
+	rootSigTest.Reset(1, 0);
+	rootSigTest[0].InitAsConstantBuffer(0);
+
+
+	RootParameter rootParam;
 
 	GraphicsPSO testPipeline(L"TestPSO");
 	void* binaryPtr = nullptr;
@@ -105,7 +111,7 @@ void D3D12RadianceCascades::Present()
 
 	gfxContext.TransitionResource(GetCurrentBackBuffer(), D3D12_RESOURCE_STATE_PRESENT);
 
-	gfxContext.Finish();
+	gfxContext.Finish(true);
 	m_deviceResources->Present();
 }
 
@@ -132,6 +138,7 @@ void D3D12RadianceCascades::InitDeviceResources()
 
 	// Override the command queue so that creation of swapchain is tied to Graphics:: global managers.
 	m_deviceResources->OverrideCommandQueue(Graphics::g_CommandManager.GetQueue().GetCommandQueue());
+
 	m_deviceResources->CreateWindowSizeDependentResources();
 }
 
