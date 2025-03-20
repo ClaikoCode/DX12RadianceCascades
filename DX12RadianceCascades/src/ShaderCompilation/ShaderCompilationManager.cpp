@@ -243,8 +243,8 @@ ShaderCompilationManager::ShaderCompilationManager() :
 		[this](const std::string& fileName) { CompileDependencies(fileName); }
 	)
 {
-	ThrowIfFailed(DxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(m_library.GetAddressOf())));
-	ThrowIfFailed(DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(m_compiler.GetAddressOf())));
+	ThrowIfFailed(DxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(m_library.GetAddressOf())), L"Could not create library instance");
+	ThrowIfFailed(DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(m_compiler.GetAddressOf())), L"Could not create compiler instance");
 
 	m_shaderDirWatcher.AddExtensionFilter(".hlsl");
 	m_shaderDirWatcher.Start();
