@@ -471,6 +471,18 @@
     <FxCompile>
       <HeaderFileOutput Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(SolutionDir)Bin\$(ProjectName)-$(Platform)-$(Configuration)\CompiledShaders\%(Filename).h</HeaderFileOutput>
     </FxCompile>
+    <Lib>
+      <AdditionalDependencies Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">DirectXTex.lib;DirectXMesh.lib;</AdditionalDependencies>
+      <AdditionalLibraryDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(SolutionDir)Packages\directxmesh_desktop_win10.2024.10.29.1\native\lib\$(Platform)\$(Configuration)\;$(SolutionDir)Packages\directxtex_desktop_win10.2024.10.29.1\native\lib\$(Platform)\$(Configuration)\;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Lib>
+    <Lib>
+      <AdditionalDependencies Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">DirectXTex.lib;DirectXMesh.lib;</AdditionalDependencies>
+      <AdditionalLibraryDirectories Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">$(SolutionDir)Packages\directxmesh_desktop_win10.2024.10.29.1\native\lib\$(Platform)\$(Configuration)\;$(SolutionDir)Packages\directxtex_desktop_win10.2024.10.29.1\native\lib\$(Platform)\$(Configuration)\;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Lib>
+    <Lib>
+      <AdditionalDependencies Condition="'$(Configuration)|$(Platform)'=='Release|x64'">DirectXTex.lib;DirectXMesh.lib;</AdditionalDependencies>
+      <AdditionalLibraryDirectories Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(SolutionDir)Packages\directxmesh_desktop_win10.2024.10.29.1\native\lib\$(Platform)\$(Configuration)\;$(SolutionDir)Packages\directxtex_desktop_win10.2024.10.29.1\native\lib\$(Platform)\$(Configuration)\;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Lib>
   </ItemDefinitionGroup>
   <ImportGroup Label="ExtensionTargets">
     <Import Project="..\..\Packages\WinPixEventRuntime.1.0.240308001\build\WinPixEventRuntime.targets" Condition="Exists('..\..\Packages\WinPixEventRuntime.1.0.240308001\build\WinPixEventRuntime.targets')" />
