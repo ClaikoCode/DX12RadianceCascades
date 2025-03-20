@@ -66,6 +66,7 @@ namespace Shader
     {
         ShaderCompilationPackage shaderCompPackage;
         Microsoft::WRL::ComPtr<IDxcBlob> shaderBlob = nullptr;
+
     };
 
     
