@@ -55,7 +55,15 @@
 
 typedef uint64_t UUID64;
 
-#include "DXSampleHelper.h"
-#include "DeviceResources.h"
 #include "Logger.h"
+
+// Ineficient but has to do for now.
+static inline void ThrowIfFailed(HRESULT hr, std::wstring message = L"")
+{
+	if (FAILED(hr))
+	{
+		LOG_ERROR(L"Failed HR check: {} | Error message: {}", hr, message);
+		throw std::runtime_error("HR RUNTIME ERROR");
+	}
+}
 

@@ -10,7 +10,7 @@
 
 int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int nCmdShow) 
 {
-    Logging::Initialize(true, L"runtime_logs.txt");
+    Logging::Initialize(false, L"runtime_logs.txt");
 
     MotionBlur::Enable = false;
     TemporalEffects::EnableTAA = false;

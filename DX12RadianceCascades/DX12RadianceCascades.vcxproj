@@ -151,12 +151,8 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="src\D3D12RadianceCascades.h" />
     <ClInclude Include="src\d3dx12.h" />
-    <ClInclude Include="src\DeviceResources.h" />
     <ClInclude Include="src\DirectXRaytracingHelper.h" />
-    <ClInclude Include="src\DXSample.h" />
-    <ClInclude Include="src\DXSampleHelper.h" />
     <ClInclude Include="src\Logger.h" />
     <ClInclude Include="src\RadianceCascades.h" />
     <ClInclude Include="src\RayTracingHlslCompat.h" />
@@ -164,12 +160,8 @@
     <ClInclude Include="src\DirectoryWatcher.h" />
     <ClInclude Include="src\ShaderCompilation\ShaderCompilationManager.h" />
     <ClInclude Include="src\StepTimer.h" />
-    <ClInclude Include="src\Win32Application.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="src\D3D12RadianceCascades.cpp" />
-    <ClCompile Include="src\DeviceResources.cpp" />
-    <ClCompile Include="src\DXSample.cpp" />
     <ClCompile Include="src\Main.cpp" />
     <ClCompile Include="src\RadianceCascades.cpp" />
     <ClCompile Include="src\rcpch.cpp">
@@ -178,7 +170,6 @@
     </ClCompile>
     <ClCompile Include="src\ShaderCompilation\DirectoryWatcher.cpp" />
     <ClCompile Include="src\ShaderCompilation\ShaderCompilationManager.cpp" />
-    <ClCompile Include="src\Win32Application.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\MiniEngine\Core\Core.vcxproj">

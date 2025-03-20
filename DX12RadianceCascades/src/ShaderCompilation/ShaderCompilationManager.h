@@ -76,7 +76,7 @@ namespace Shader
     // Special struct to make sure that source ptr lifetime is kept for lifetime of the DxcBuffer.
     struct ComDxcBuffer
     {
-        ComPtr<IDxcBlobEncoding> sourcePtr = nullptr;
+        Microsoft::WRL::ComPtr<IDxcBlobEncoding> sourcePtr = nullptr;
         DxcBuffer dxcBuffer;
     };
 }
