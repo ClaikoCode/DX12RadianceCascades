@@ -1,11 +1,18 @@
 #include "rcpch.h"
 
+// Core includes
 #include "Core\CommandListManager.h" // Included as the global variable in namsepace Graphics:: was not accessible otherwise due to not having the definition.
 #include "Core\GraphicsCore.h"
 #include "Core\GpuTimeManager.h"
 
-#include "DirectXRaytracingHelper.h"
+// Model includes
+#include "Model\ModelLoader.h"
+#include "Model\Renderer.h"
+
+// Extra
 #include "ShaderCompilation\ShaderCompilationManager.h"
+#include "DirectXRaytracingHelper.h"
+
 #include "D3D12RadianceCascades.h"
 
 D3D12RadianceCascades::D3D12RadianceCascades(UINT width, UINT height, std::wstring name)
@@ -35,6 +42,7 @@ void D3D12RadianceCascades::OnInit()
 {
 	InitDeviceResources();
 
+
 	m_sceneColorBuffer.Create(L"Scene Color Buffer", m_width, m_height, 1, DXGI_FORMAT_R8G8B8A8_UNORM);
 	m_sceneDepthBuffer.Create(L"Scene Depth Buffer", m_width, m_height, DXGI_FORMAT_D32_FLOAT);
 
@@ -43,19 +51,9 @@ void D3D12RadianceCascades::OnInit()
 	auto& shaderCompManager = ShaderCompilationManager::Get();
 	shaderCompManager.RegisterShader(Shader::ShaderIDTest, L"VertexShaderTest.hlsl", Shader::ShaderTypeVS, true);
 
-	RootSignature rootSigTest = {};
-	rootSigTest.Reset(1, 0);
-	rootSigTest[0].InitAsConstantBuffer(0);
-
-
-	RootParameter rootParam;
-
-	GraphicsPSO testPipeline(L"TestPSO");
-	void* binaryPtr = nullptr;
-	size_t binarySize = 0;
-	shaderCompManager.GetCompiledShaderData(Shader::ShaderIDTest, &binaryPtr, &binarySize);
-
-	testPipeline.SetVertexShader(binaryPtr, binarySize);
+	
+	std::wstring sponzaPath = L"assets\\Sponza\\sponza.h3d";
+	std::shared_ptr<Model> modelPtr = Renderer::LoadModel(sponzaPath, false);
 }
 
 void D3D12RadianceCascades::OnUpdate()
@@ -135,11 +133,13 @@ void D3D12RadianceCascades::InitDeviceResources()
 	Graphics::g_Device = m_deviceResources->GetD3DDevice();
 	Graphics::g_CommandManager.Create(m_deviceResources->GetD3DDevice());
 	GpuTimeManager::Initialize();
+	Renderer::Initialize();
 
 	// Override the command queue so that creation of swapchain is tied to Graphics:: global managers.
 	m_deviceResources->OverrideCommandQueue(Graphics::g_CommandManager.GetQueue().GetCommandQueue());
-
 	m_deviceResources->CreateWindowSizeDependentResources();
+
+	
 }
 
 void D3D12RadianceCascades::CreateWindowDependentResources()

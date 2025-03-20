@@ -158,6 +158,7 @@
     <ClInclude Include="src\DXSample.h" />
     <ClInclude Include="src\DXSampleHelper.h" />
     <ClInclude Include="src\Logger.h" />
+    <ClInclude Include="src\RadianceCascades.h" />
     <ClInclude Include="src\RayTracingHlslCompat.h" />
     <ClInclude Include="src\rcpch.h" />
     <ClInclude Include="src\DirectoryWatcher.h" />
@@ -170,6 +171,7 @@
     <ClCompile Include="src\DeviceResources.cpp" />
     <ClCompile Include="src\DXSample.cpp" />
     <ClCompile Include="src\Main.cpp" />
+    <ClCompile Include="src\RadianceCascades.cpp" />
     <ClCompile Include="src\rcpch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">rcpch.h</PrecompiledHeaderFile>

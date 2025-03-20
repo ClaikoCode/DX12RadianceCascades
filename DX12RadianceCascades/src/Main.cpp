@@ -1,10 +1,24 @@
 #include "rcpch.h"
-#include "D3D12RadianceCascades.h"
 
-int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int nCmdShow)
+#include "Core\PostEffects.h"
+#include "Core\MotionBlur.h"
+#include "Core\TemporalEffects.h"
+#include "Core\FXAA.h"
+#include "Core\SSAO.h"
+
+#include "RadianceCascades.h"
+
+int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int nCmdShow) 
 {
-	Logging::Initialize(true, L"runtime_logs.txt");
+    Logging::Initialize(true, L"runtime_logs.txt");
 
-	D3D12RadianceCascades radianceCascadesSample(1280, 720, L"D3D12 Radiance Cascades - Master Thesis Project");
-	return Win32Application::Run(&radianceCascadesSample, hInstance, nCmdShow);
-}
+    MotionBlur::Enable = false;
+    TemporalEffects::EnableTAA = false;
+    FXAA::Enable = false;
+    PostEffects::EnableHDR = true;
+    PostEffects::EnableAdaptation = false;
+    SSAO::Enable = false;
+
+    RadianceCascades radianceCascades = RadianceCascades();
+    return GameCore::RunApplication(radianceCascades, L"RadianceCascades", hInstance, nCmdShow);
+};
