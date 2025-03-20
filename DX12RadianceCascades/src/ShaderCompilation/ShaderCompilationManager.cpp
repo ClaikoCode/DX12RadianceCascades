@@ -86,7 +86,17 @@ namespace
 			}
 		}
 
-		LOG_ERROR(L"Compilation failed:\n\n{}", errorStringW);
+		if (!errorStringW.empty())
+		{
+			errorStringW.pop_back(); // Remove null terminator.
+		}
+			
+		std::wstring separator = L"-----------------";
+		std::wstring header = separator + L" START OF COMPILATION ERROR " + separator;
+		std::wstring footer = separator + L" END OF COMPILATION ERROR " + separator;
+
+		std::wstring errorOut = header + L"\n" + errorStringW + L"\n" + footer;
+		LOG_ERROR(L"Compilation failed:\n\n{}", errorOut);
 	}
 }
 
@@ -145,29 +155,29 @@ void AddCompArg(ShaderCompilationArgs& compArgs, const std::wstring& arg)
 	compArgs.push_back(arg);
 }
 
-void AddFilenameArg(ShaderCompilationArgs& compArgs, const std::wstring& filename)
+void AddArgFilename(ShaderCompilationArgs& compArgs, const std::wstring& filename)
 {
 	AddCompArg(compArgs, filename);
 }
 
-void AddShaderModelArg(ShaderCompilationArgs& compArgs, Shader::ShaderModel shaderModel, Shader::ShaderType shaderType)
+void AddArgShaderModel(ShaderCompilationArgs& compArgs, Shader::ShaderModel shaderModel, Shader::ShaderType shaderType)
 {
 	AddCompArg(compArgs, L"-T");
 	AddCompArg(compArgs, ShaderModelArg(shaderModel, shaderType));
 }
 
-void AddEntryPointArg(ShaderCompilationArgs& compArgs, const std::wstring& entryPoint)
+void AddArgEntryPoint(ShaderCompilationArgs& compArgs, const std::wstring& entryPoint)
 {
 	AddCompArg(compArgs, L"-E");
 	AddCompArg(compArgs, entryPoint);
 }
 
-void AddDebugInfoArg(ShaderCompilationArgs& compArgs)
+void AddArgDebugInfo(ShaderCompilationArgs& compArgs)
 {
 	AddCompArg(compArgs, DXC_ARG_DEBUG);
 }
 
-void AddOptimizationLevel(ShaderCompilationArgs& compArgs, uint16_t level)
+void AddArgOptimizationLevel(ShaderCompilationArgs& compArgs, uint16_t level)
 {
 	if (level > 3)
 	{
@@ -181,15 +191,15 @@ ShaderCompilationArgs BuildArgsFromShaderPackage(const Shader::ShaderCompilation
 {
 	ShaderCompilationArgs args = {};
 
-	AddFilenameArg(args, compPackage.shaderFilename);
-	AddEntryPointArg(args, compPackage.entryPoint);
-	AddShaderModelArg(args, compPackage.shaderModel, compPackage.shaderType);
+	AddArgFilename(args, compPackage.shaderFilename);
+	AddArgEntryPoint(args, compPackage.entryPoint);
+	AddArgShaderModel(args, compPackage.shaderModel, compPackage.shaderType);
 
 #if defined(_DEBUG)
-	AddDebugInfoArg(args);
-	AddOptimizationLevel(args, 0);
+	AddArgDebugInfo(args);
+	AddArgOptimizationLevel(args, 0);
 #else
-	AddOptimizationLevel(args, 3);
+	AddArgOptimizationLevel(args, 3);
 #endif
 	
 	return args;
@@ -332,7 +342,7 @@ ComPtr<IDxcBlob> ShaderCompilationManager::CompileShaderPackageToBlob(const Shad
 			&comDxcBuffer.dxcBuffer,
 			(LPCWSTR*)argPtrs.data(),
 			(UINT32)argPtrs.size(),
-			includeHandler.Get(),
+			nullptr,
 			IID_PPV_ARGS(compResult.GetAddressOf())
 		));
 	}
@@ -408,11 +418,17 @@ void ShaderCompilationManager::GetCompiledShaderData(Shader::ShaderID shaderID, 
 	}
 
 	Shader::ShaderData* shaderData = GetShaderData(shaderID);
-	if (shaderData)
+	if (shaderData && shaderData->shaderBlob)
 	{
 		*binaryOut = shaderData->shaderBlob->GetBufferPointer();
 		*binarySizeOut = shaderData->shaderBlob->GetBufferSize();
 	}
+#if defined(_DEBUG)
+	else
+	{
+		LOG_ERROR(L"No shader data was found.");
+	}
+#endif
 
 }
 
