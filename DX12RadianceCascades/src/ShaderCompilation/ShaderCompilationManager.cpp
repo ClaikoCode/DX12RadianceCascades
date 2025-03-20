@@ -332,9 +332,6 @@ ComPtr<IDxcBlob> ShaderCompilationManager::CompileShaderPackageToBlob(const Shad
 		comDxcBuffer = BlobEncodingToBuffer(source);
 	}
 	
-	ComPtr<IDxcIncludeHandler> includeHandler = nullptr;
-	ThrowIfFailed(m_library->CreateIncludeHandler(includeHandler.GetAddressOf()));
-
 	ComPtr<IDxcOperationResult> compResult = nullptr;
 	{
 		std::vector<WCHAR*> argPtrs = ConvertArgsToInputArgs(args);
