@@ -9,6 +9,9 @@ static const std::wstring c_ShaderFolder = L"shaders\\";
 
 typedef std::vector<std::wstring> ShaderCompilationArgs;
 
+static std::mutex s_shaderCompMutex;
+#define MUTEX_LOCK() std::lock_guard<std::mutex> guard(s_shaderCompMutex)
+
 namespace Utils
 {
 	// These conversion functions were written by AI, not by me.
@@ -106,7 +109,7 @@ namespace
 		std::wstring footer = separator + L" END OF COMPILATION ERROR " + separator;
 
 		std::wstring errorOut = header + L"\n" + errorStringW + L"\n" + footer;
-		LOG_ERROR(L"Compilation failed:\n\n{}", errorOut);
+		LOG_ERROR(L"Shader compilation failed:\n\n{}", errorOut);
 	}
 
 	void AddToIncludeManager(ComPtr<IDxcIncludeHandler> includeHandler, const std::wstring& filename)
@@ -122,7 +125,7 @@ namespace
 		}
 		else
 		{
-			LOG_DEBUG(L"Successfully added '{}' to shader includes", filePath);
+			LOG_DEBUG(L"Added '{}' to shader includes.", filePath);
 		}
 #endif
 	}
@@ -310,7 +313,10 @@ void ShaderCompilationManager::CompileShader(UUID64 shaderID)
 	Shader::ShaderData* shaderData = GetShaderData(shaderID);
 	if (shaderData)
 	{
-		shaderData->shaderBlob = CompileShaderPackageToBlob(shaderData->shaderCompPackage);
+		if (CompileShaderPackageToBlob(shaderData->shaderCompPackage, shaderData->shaderBlob.GetAddressOf()))
+		{
+			AddRecentCompilation(shaderID);
+		}
 	}	
 }
 
@@ -323,7 +329,6 @@ void ShaderCompilationManager::CompileDependencies(const std::wstring& shaderFil
 		for (UUID64 dependency : *dependencies)
 		{
 			CompileShader(dependency);
-			m_recentCompilations.insert(dependency);
 		}
 	}
 }
@@ -342,7 +347,7 @@ void ShaderCompilationManager::CompileDependencies(UUID64 shaderID)
 	}
 }
 
-ComPtr<IDxcBlob> ShaderCompilationManager::CompileShaderPackageToBlob(const Shader::ShaderCompilationPackage& shaderCompPackage)
+bool ShaderCompilationManager::CompileShaderPackageToBlob(Shader::ShaderCompilationPackage& shaderCompPackage, IDxcBlob** outBlob)
 {
 	ShaderCompilationArgs args = BuildArgsFromShaderPackage(shaderCompPackage);
 
@@ -377,19 +382,20 @@ ComPtr<IDxcBlob> ShaderCompilationManager::CompileShaderPackageToBlob(const Shad
 		{
 			::HandleCompilationError(error);
 		}
+
+		return false;
 	}
 
-	ComPtr<IDxcBlob> shaderBlob = nullptr;
 	if(SUCCEEDED(status))
 	{
-		compResult->GetResult(shaderBlob.GetAddressOf());
+		compResult->GetResult(outBlob);
 
 #if defined(_DEBUG)
-		LOG_DEBUG(L"Sucessfully compiled shader '{}'.", ::BuildShaderPath(shaderCompPackage.shaderFilename));
+		LOG_DEBUG(L"Sucessfully compiled '{}'.", ::BuildShaderPath(shaderCompPackage.shaderFilename));
 #endif
 	}
 
-	return shaderBlob;
+	return true;
 }
 
 void ShaderCompilationManager::RegisterShader(UUID64 shaderID, const std::wstring shaderFilename, Shader::ShaderType shaderType, bool compile /*= false*/)
@@ -432,7 +438,7 @@ void ShaderCompilationManager::RegisterShader(UUID64 shaderID, const Shader::Sha
 	}
 }
 
-void ShaderCompilationManager::GetCompiledShaderData(UUID64 shaderID, void** binaryOut, size_t* binarySizeOut)
+void ShaderCompilationManager::GetShaderDataBinary(UUID64 shaderID, void** binaryOut, size_t* binarySizeOut)
 {
 	if (binaryOut == nullptr || binarySizeOut == nullptr)
 	{
@@ -455,22 +461,38 @@ void ShaderCompilationManager::GetCompiledShaderData(UUID64 shaderID, void** bin
 
 }
 
+Shader::ShaderType ShaderCompilationManager::GetShaderType(UUID64 shaderID)
+{
+	Shader::ShaderData* shaderData = GetShaderData(shaderID);
+	if (shaderData)
+	{
+		return shaderData->shaderCompPackage.shaderType;
+	}
+}
+
+void ShaderCompilationManager::AddRecentCompilation(UUID64 shaderID)
+{
+	MUTEX_LOCK();
+	m_recentCompilations.insert(shaderID);
+}
+
 const std::set<UUID64>& ShaderCompilationManager::GetRecentCompilations()
 {
+	MUTEX_LOCK();
 	return m_recentCompilations;
 }
 
 bool ShaderCompilationManager::HasRecentCompilations()
 {
+	MUTEX_LOCK();
 	return !m_recentCompilations.empty();
 }
 
 void ShaderCompilationManager::ClearRecentCompilations()
 {
+	MUTEX_LOCK();
 	m_recentCompilations.clear();
 }
-
-
 
 ShaderCompilationManager& ShaderCompilationManager::Get()
 {

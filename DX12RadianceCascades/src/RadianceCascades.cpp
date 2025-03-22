@@ -26,8 +26,7 @@ void RadianceCascades::Startup()
 
 	InitializeScene();
 	InitializeShaders();
-
-	
+	InitializePSOs();
 }
 
 void RadianceCascades::Cleanup()
@@ -46,6 +45,7 @@ void RadianceCascades::Update(float deltaT)
 	m_camera.Update();
 
 	UpdateViewportAndScissor();
+	UpdatePSOs();
 }
 
 void RadianceCascades::RenderScene()
@@ -78,89 +78,15 @@ void RadianceCascades::InitializeShaders()
 	shaderCompManager.RegisterShader(ShaderIDTest, L"VertexShaderTest.hlsl", Shader::ShaderTypeVS, true);
 	shaderCompManager.RegisterShader(ShaderIDSceneRenderPS, L"SceneRenderPS.hlsl", Shader::ShaderTypePS, true);
 	shaderCompManager.RegisterShader(ShaderIDSceneRenderVS, L"SceneRenderVS.hlsl", Shader::ShaderTypeVS, true);
+}
 
-#if 0
-	const Model& model = m_sceneModelInstance.GetModel();
-	const uint8_t* meshPtr = model.m_MeshData.get();
-	const Mesh& mesh = *(const Mesh*)(meshPtr);
+void RadianceCascades::InitializePSOs()
+{
+	m_shaderPSOMap[ShaderIDSceneRenderPS].insert(9);
+	m_shaderPSOMap[ShaderIDSceneRenderPS].insert(11);
 
-	uint16_t psoFlags = mesh.psoFlags; // Grab the PSO flags for the first mesh.
-	std::vector<D3D12_INPUT_ELEMENT_DESC> vertexLayout;
-	if (psoFlags & PSOFlags::kHasPosition)
-		vertexLayout.push_back({ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT,    0, D3D12_APPEND_ALIGNED_ELEMENT });
-	if (psoFlags & PSOFlags::kHasNormal)
-		vertexLayout.push_back({ "NORMAL",   0, DXGI_FORMAT_R10G10B10A2_UNORM,  0, D3D12_APPEND_ALIGNED_ELEMENT });
-	if (psoFlags & PSOFlags::kHasTangent)
-		vertexLayout.push_back({ "TANGENT",  0, DXGI_FORMAT_R10G10B10A2_UNORM,  0, D3D12_APPEND_ALIGNED_ELEMENT });
-	if (psoFlags & PSOFlags::kHasUV0)
-		vertexLayout.push_back({ "TEXCOORD", 0, DXGI_FORMAT_R16G16_FLOAT,       0, D3D12_APPEND_ALIGNED_ELEMENT });
-	else
-		vertexLayout.push_back({ "TEXCOORD", 0, DXGI_FORMAT_R16G16_FLOAT,       1, D3D12_APPEND_ALIGNED_ELEMENT });
-	if (psoFlags & PSOFlags::kHasUV1)
-		vertexLayout.push_back({ "TEXCOORD", 1, DXGI_FORMAT_R16G16_FLOAT,       0, D3D12_APPEND_ALIGNED_ELEMENT });
-	if (psoFlags & PSOFlags::kHasSkin)
-	{
-		vertexLayout.push_back({ "BLENDINDICES", 0, DXGI_FORMAT_R16G16B16A16_UINT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 });
-		vertexLayout.push_back({ "BLENDWEIGHT", 0, DXGI_FORMAT_R16G16B16A16_UNORM, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 });
-	}
-
-	SamplerDesc defaultSamplerDesc = {};
-	defaultSamplerDesc.MaxAnisotropy = 8;
-	RootSignature& rootSig = m_rootSig;
-	rootSig.Reset(Renderer::kNumRootBindings, 1);
-	rootSig.InitStaticSampler(10, defaultSamplerDesc, D3D12_SHADER_VISIBILITY_PIXEL);
-	rootSig[Renderer::kMeshConstants].InitAsConstantBuffer(0, D3D12_SHADER_VISIBILITY_VERTEX);
-	rootSig[Renderer::kMaterialConstants].InitAsConstantBuffer(0, D3D12_SHADER_VISIBILITY_PIXEL);
-	rootSig[Renderer::kMaterialSRVs].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 0, 10, D3D12_SHADER_VISIBILITY_PIXEL);
-	rootSig[Renderer::kMaterialSamplers].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER, 0, 10, D3D12_SHADER_VISIBILITY_PIXEL);
-	rootSig[Renderer::kCommonSRVs].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 10, 10, D3D12_SHADER_VISIBILITY_PIXEL);
-	rootSig[Renderer::kCommonCBV].InitAsConstantBuffer(1);
-	rootSig[Renderer::kSkinMatrices].InitAsBufferSRV(20, D3D12_SHADER_VISIBILITY_VERTEX);
-	rootSig.Finalize(L"TestRootSig", D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
-
-	std::array<DXGI_FORMAT, 2> rtvFormats = {};
-	rtvFormats[0] = Graphics::g_SceneColorBuffer.GetFormat();
-	rtvFormats[1] = Graphics::g_SceneNormalBuffer.GetFormat();
-	DXGI_FORMAT depthFormat = Graphics::g_SceneDepthBuffer.GetFormat();
-
-	GraphicsPSO pso(L"TestPSO");
-	pso.SetRootSignature(rootSig);
-	pso.SetInputLayout((UINT)vertexLayout.size(), vertexLayout.data());
-	pso.SetRasterizerState(Graphics::RasterizerDefault);
-	pso.SetBlendState(Graphics::BlendDisable);
-	pso.SetDepthStencilState(Graphics::DepthStateReadWrite);
-	pso.SetPrimitiveTopologyType(D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE);
-	pso.SetRenderTargetFormats((UINT)rtvFormats.size(), rtvFormats.data(), depthFormat);
-
-	void* binary = nullptr;
-	size_t binarySize = 0;
-	
-	shaderCompManager.GetCompiledShaderData(ShaderIDSceneRenderVS, &binary, &binarySize);
-	pso.SetVertexShader(binary, binarySize);
-	
-	shaderCompManager.GetCompiledShaderData(ShaderIDSceneRenderPS, &binary, &binarySize);
-	pso.SetPixelShader(binary, binarySize);
-	
-	pso.Finalize();
-#else
-
-	GraphicsPSO pso = Renderer::sm_PSOs[9];
-	
-	void* binary = nullptr;
-	size_t binarySize = 0;
-
-	shaderCompManager.GetCompiledShaderData(ShaderIDSceneRenderVS, &binary, &binarySize);
-	pso.SetVertexShader(binary, binarySize);
-
-	shaderCompManager.GetCompiledShaderData(ShaderIDSceneRenderPS, &binary, &binarySize);
-	pso.SetPixelShader(binary, binarySize);
-
-	pso.Finalize();
-
-#endif
-
-	Renderer::sm_PSOs[9] = pso;
-	Renderer::sm_PSOs[11] = pso;
+	m_shaderPSOMap[ShaderIDSceneRenderVS].insert(9);
+	m_shaderPSOMap[ShaderIDSceneRenderVS].insert(11);
 }
 
 void RadianceCascades::RenderSceneImpl(Camera& camera, D3D12_VIEWPORT viewPort, D3D12_RECT scissor)
@@ -238,9 +164,66 @@ void RadianceCascades::UpdateViewportAndScissor()
 	m_mainViewport.TopLeftX = 0.0f;
 	m_mainViewport.TopLeftY = 0.0f;
 
-
 	m_mainScissor.left = 0;
 	m_mainScissor.top = 0;
 	m_mainScissor.right = (LONG)width;
 	m_mainScissor.bottom = (LONG)height;
+}
+
+void RadianceCascades::UpdatePSOs()
+{
+	auto& shaderCompManager = ShaderCompilationManager::Get();
+
+	if (shaderCompManager.HasRecentCompilations())
+	{
+		auto compSet = shaderCompManager.GetRecentCompilations();
+
+		std::set<uint16_t> changedPSOs = {};
+
+		for (UUID64 shaderID : compSet)
+		{
+			Shader::ShaderType shaderType = shaderCompManager.GetShaderType(shaderID);
+
+			if (shaderType != Shader::ShaderTypePS && shaderType != Shader::ShaderTypeVS)
+			{
+				LOG_ERROR(L"Invalid shader type: {}", (uint32_t)shaderType);
+				continue;
+			}
+
+			void* binary = nullptr;
+			size_t binarySize = 0;
+			shaderCompManager.GetShaderDataBinary(shaderID, &binary, &binarySize);
+			
+			if (binary)
+			{
+				const std::set<uint16_t>& psoIds = m_shaderPSOMap[shaderID];
+
+				if (!psoIds.empty())
+				{
+					for (uint16_t psoId : psoIds)
+					{
+						GraphicsPSO& pso = Renderer::sm_PSOs[psoId];
+
+						if (shaderType == Shader::ShaderTypePS)
+						{
+							pso.SetPixelShader(binary, binarySize);
+						}
+						else if (shaderType == Shader::ShaderTypeVS)
+						{
+							pso.SetVertexShader(binary, binarySize);
+						}
+
+						changedPSOs.insert(psoId);
+					}
+				}
+			}
+		}
+
+		for (uint16_t changedPSOId : changedPSOs)
+		{
+			Renderer::sm_PSOs[changedPSOId].Finalize();
+		}
+
+		shaderCompManager.ClearRecentCompilations();
+	}
 }

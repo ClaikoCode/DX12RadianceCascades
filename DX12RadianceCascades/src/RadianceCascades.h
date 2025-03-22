@@ -32,9 +32,13 @@ private:
 
 	void InitializeScene();
 	void InitializeShaders();
+	void InitializePSOs();
 
 	void RenderSceneImpl(Camera& camera, D3D12_VIEWPORT viewPort, D3D12_RECT scissor);
 	void UpdateViewportAndScissor();
+	void UpdatePSOs();
+
+	
 
 private:
 
@@ -45,4 +49,6 @@ private:
 
 	D3D12_VIEWPORT m_mainViewport;
 	D3D12_RECT m_mainScissor;
+
+	std::unordered_map<UUID64, std::set<uint16_t>> m_shaderPSOMap;
 };
