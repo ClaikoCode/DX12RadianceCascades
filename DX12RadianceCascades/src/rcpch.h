@@ -54,6 +54,7 @@
 #define MY_IID_PPV_ARGS                     IID_PPV_ARGS
 
 typedef uint64_t UUID64;
+constexpr UUID64 NULL_ID = UINT64_MAX;
 
 #include "Logger.h"
 

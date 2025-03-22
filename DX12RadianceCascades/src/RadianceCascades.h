@@ -5,6 +5,15 @@
 #include "Core\CameraController.h"
 #include "Model\Model.h"
 
+enum ShaderID : UUID64
+{
+	ShaderIDTest = 0,
+	ShaderIDSceneRenderPS,
+	ShaderIDSceneRenderVS,
+
+	ShaderIDNone = NULL_ID
+};
+
 class RadianceCascades : public GameCore::IGameApp
 {
 public:
@@ -24,10 +33,16 @@ private:
 	void InitializeScene();
 	void InitializeShaders();
 
+	void RenderSceneImpl(Camera& camera, D3D12_VIEWPORT viewPort, D3D12_RECT scissor);
+	void UpdateViewportAndScissor();
+
 private:
 
 	Camera m_camera;
 	std::unique_ptr<CameraController> m_cameraController;
 
 	ModelInstance m_sceneModelInstance;
+
+	D3D12_VIEWPORT m_mainViewport;
+	D3D12_RECT m_mainScissor;
 };
