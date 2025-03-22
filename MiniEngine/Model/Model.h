@@ -162,6 +162,8 @@ public:
     void UpdateAnimations(float deltaTime);
     void LoopAllAnimations(void);
 
+    const Model& GetModel() { return *m_Model; }
+
 private:
     std::shared_ptr<const Model> m_Model;
     UploadBuffer m_MeshConstantsCPU;

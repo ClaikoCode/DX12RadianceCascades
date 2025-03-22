@@ -44,7 +44,7 @@ void Model::Render(
     for (uint32_t i = 0; i < m_NumMeshes; ++i)
     {
         const Mesh& mesh = *(const Mesh*)pMesh;
-
+        
         const AffineTransform& sphereXform = sphereTransforms[mesh.meshCBV];
         Scalar scaleXSqr = LengthSquare((Vector3)sphereXform.GetX());
         Scalar scaleYSqr = LengthSquare((Vector3)sphereXform.GetY());

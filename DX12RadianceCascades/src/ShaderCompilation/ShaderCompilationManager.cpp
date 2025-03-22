@@ -58,6 +58,16 @@ namespace Utils
 
 namespace
 {
+	std::wstring BuildShaderPath(const std::wstring& shaderFolder, const std::wstring& shaderName)
+	{
+		return shaderFolder + shaderName;
+	}
+
+	std::wstring BuildShaderPath(const std::wstring& shaderFile)
+	{
+		return BuildShaderPath(c_ShaderFolder, shaderFile);
+	}
+
 	void HandleCompilationError(ComPtr<IDxcBlobEncoding> errorBlob)
 	{
 		std::wstring errorStringW = L"";
@@ -98,20 +108,23 @@ namespace
 		std::wstring errorOut = header + L"\n" + errorStringW + L"\n" + footer;
 		LOG_ERROR(L"Compilation failed:\n\n{}", errorOut);
 	}
-}
 
-
-
-namespace Shader
-{
-	std::wstring BuildShaderPath(const std::wstring& shaderFolder, const std::wstring& shaderName)
+	void AddToIncludeManager(ComPtr<IDxcIncludeHandler> includeHandler, const std::wstring& filename)
 	{
-		return shaderFolder + shaderName;
-	}
+		ComPtr<IDxcBlob> includeBlob = nullptr;
+		std::wstring filePath = BuildShaderPath(filename);
+		ThrowIfFailed(includeHandler->LoadSource(filePath.c_str(), includeBlob.GetAddressOf()));
 
-	std::wstring BuildShaderPath(const std::wstring& shaderFile)
-	{
-		return BuildShaderPath(c_ShaderFolder, shaderFile);
+#if defined(_DEBUG)
+		if (includeBlob == nullptr)
+		{
+			LOG_ERROR(L"Failed to load '{}' for shader includes.", filePath);
+		}
+		else
+		{
+			LOG_DEBUG(L"Successfully added '{}' to shader includes", filePath);
+		}
+#endif
 	}
 }
 
@@ -245,9 +258,17 @@ ShaderCompilationManager::ShaderCompilationManager() :
 {
 	ThrowIfFailed(DxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(m_library.GetAddressOf())), L"Could not create library instance");
 	ThrowIfFailed(DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(m_compiler.GetAddressOf())), L"Could not create compiler instance");
+	ThrowIfFailed(m_library->CreateIncludeHandler(m_includeHandler.GetAddressOf()), L"Could not create include handler");
 
 	m_shaderDirWatcher.AddExtensionFilter(".hlsl");
 	m_shaderDirWatcher.Start();
+
+	InitializeShaderIncludes();
+}
+
+void ShaderCompilationManager::InitializeShaderIncludes()
+{
+	::AddToIncludeManager(m_includeHandler, L"Common.hlsli");
 }
 
 Shader::ShaderData* ShaderCompilationManager::GetShaderData(UUID64 shaderID)
@@ -274,7 +295,7 @@ std::set<UUID64>* ShaderCompilationManager::GetShaderDependencies(const std::wst
 	auto it = m_shaderDependencyMap.find(shaderFilename);
 	if (it == m_shaderDependencyMap.end())
 	{
-		//LOG_WARNING(L"No dependencies has been registered for the shader '{}'.", shaderFilename);
+		LOG_WARNING(L"No dependencies has been registered for the shader '{}'.", shaderFilename);
 	}
 	else
 	{
@@ -302,6 +323,7 @@ void ShaderCompilationManager::CompileDependencies(const std::wstring& shaderFil
 		for (UUID64 dependency : *dependencies)
 		{
 			CompileShader(dependency);
+			m_recentCompilations.insert(dependency);
 		}
 	}
 }
@@ -327,7 +349,7 @@ ComPtr<IDxcBlob> ShaderCompilationManager::CompileShaderPackageToBlob(const Shad
 	Shader::ComDxcBuffer comDxcBuffer = {};
 	{
 		ComPtr<IDxcBlobEncoding> source = nullptr;
-		const std::wstring shaderPath = Shader::BuildShaderPath(shaderCompPackage.shaderFilename);
+		const std::wstring shaderPath = ::BuildShaderPath(shaderCompPackage.shaderFilename);
 		ThrowIfFailed(m_library->CreateBlobFromFile(shaderPath.c_str(), nullptr, source.GetAddressOf()));
 		comDxcBuffer = BlobEncodingToBuffer(source);
 	}
@@ -339,7 +361,7 @@ ComPtr<IDxcBlob> ShaderCompilationManager::CompileShaderPackageToBlob(const Shad
 			&comDxcBuffer.dxcBuffer,
 			(LPCWSTR*)argPtrs.data(),
 			(UINT32)argPtrs.size(),
-			nullptr,
+			m_includeHandler.Get(),
 			IID_PPV_ARGS(compResult.GetAddressOf())
 		));
 	}
@@ -361,6 +383,10 @@ ComPtr<IDxcBlob> ShaderCompilationManager::CompileShaderPackageToBlob(const Shad
 	if(SUCCEEDED(status))
 	{
 		compResult->GetResult(shaderBlob.GetAddressOf());
+
+#if defined(_DEBUG)
+		LOG_DEBUG(L"Sucessfully compiled shader '{}'.", ::BuildShaderPath(shaderCompPackage.shaderFilename));
+#endif
 	}
 
 	return shaderBlob;
@@ -383,7 +409,7 @@ void ShaderCompilationManager::RegisterShader(UUID64 shaderID, const Shader::Sha
 		return;
 	}
 
-	if (shaderID == Shader::ShaderIDNone)
+	if (shaderID == NULL_ID)
 	{
 		LOG_ERROR(L"Invalid shader ID of '{}'.", shaderID);
 		return;
@@ -406,7 +432,7 @@ void ShaderCompilationManager::RegisterShader(UUID64 shaderID, const Shader::Sha
 	}
 }
 
-void ShaderCompilationManager::GetCompiledShaderData(Shader::ShaderID shaderID, void** binaryOut, size_t* binarySizeOut)
+void ShaderCompilationManager::GetCompiledShaderData(UUID64 shaderID, void** binaryOut, size_t* binarySizeOut)
 {
 	if (binaryOut == nullptr || binarySizeOut == nullptr)
 	{
@@ -427,6 +453,21 @@ void ShaderCompilationManager::GetCompiledShaderData(Shader::ShaderID shaderID, 
 	}
 #endif
 
+}
+
+const std::set<UUID64>& ShaderCompilationManager::GetRecentCompilations()
+{
+	return m_recentCompilations;
+}
+
+bool ShaderCompilationManager::HasRecentCompilations()
+{
+	return !m_recentCompilations.empty();
+}
+
+void ShaderCompilationManager::ClearRecentCompilations()
+{
+	m_recentCompilations.clear();
 }
 
 

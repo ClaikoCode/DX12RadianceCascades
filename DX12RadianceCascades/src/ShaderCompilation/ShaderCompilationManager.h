@@ -4,12 +4,6 @@
 
 namespace Shader
 {
-    enum ShaderID : UUID64
-    {
-        ShaderIDNone = 0u,
-        ShaderIDTest
-    };
-
     // ID for a type of shader from the rendering pipeline.
     enum ShaderType : uint32_t
     {
@@ -95,26 +89,34 @@ public:
     void RegisterShader(UUID64 shaderID, const std::wstring shaderFilename, Shader::ShaderType shaderType, bool compile = false);
     void RegisterShader(UUID64 shaderID, const Shader::ShaderCompilationPackage& compPackage, bool compile);
     
-    void GetCompiledShaderData(Shader::ShaderID shaderID, void** binaryOut, size_t* binarySizeOut);
+    void GetCompiledShaderData(UUID64 shaderID, void** binaryOut, size_t* binarySizeOut);
+
+    const std::set<UUID64>& GetRecentCompilations();
+    bool HasRecentCompilations();
+    void ClearRecentCompilations();
 
 private:
 
     ShaderCompilationManager(); // Private constructor
     ~ShaderCompilationManager() {}; // Private destructor
 
+    void InitializeShaderIncludes();
+
     Shader::ShaderData* GetShaderData(UUID64 shaderID);
     std::set<UUID64>* GetShaderDependencies(const std::wstring& shaderFilename);
-
 
 private:
     Microsoft::WRL::ComPtr<IDxcLibrary> m_library;
     Microsoft::WRL::ComPtr<IDxcCompiler3> m_compiler;
+    Microsoft::WRL::ComPtr<IDxcIncludeHandler> m_includeHandler;
 
     // Maps unique shader ids to shader compilation objects.
     std::unordered_map<UUID64, Shader::ShaderData> m_shaderDataMap;
 
     // Maps shader filename (not path) to shader compilation objects that are dependent on it.
     std::unordered_map<std::wstring, std::set<UUID64>> m_shaderDependencyMap;
+
+    std::set<UUID64> m_recentCompilations;
 
     DirectoryWatcher m_shaderDirWatcher;
 };
