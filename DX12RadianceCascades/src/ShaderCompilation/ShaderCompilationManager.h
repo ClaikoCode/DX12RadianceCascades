@@ -60,7 +60,6 @@ namespace Shader
     {
         ShaderCompilationPackage shaderCompPackage;
         Microsoft::WRL::ComPtr<IDxcBlob> shaderBlob = nullptr;
-
     };
 
     
@@ -84,13 +83,16 @@ public:
     void CompileDependencies(const std::wstring& shaderFilename);
     void CompileDependencies(const std::string& shaderFilename);
     void CompileDependencies(UUID64 shaderID);
-    Microsoft::WRL::ComPtr<IDxcBlob> CompileShaderPackageToBlob(const Shader::ShaderCompilationPackage& shaderCompPackage);
+    // Returns true if compilation was successful.
+    bool CompileShaderPackageToBlob(Shader::ShaderCompilationPackage& shaderCompPackage, IDxcBlob** outBlob);
 
     void RegisterShader(UUID64 shaderID, const std::wstring shaderFilename, Shader::ShaderType shaderType, bool compile = false);
     void RegisterShader(UUID64 shaderID, const Shader::ShaderCompilationPackage& compPackage, bool compile);
     
-    void GetCompiledShaderData(UUID64 shaderID, void** binaryOut, size_t* binarySizeOut);
+    void GetShaderDataBinary(UUID64 shaderID, void** binaryOut, size_t* binarySizeOut);
+    Shader::ShaderType GetShaderType(UUID64 shaderID);
 
+    void AddRecentCompilation(UUID64 shaderID);
     const std::set<UUID64>& GetRecentCompilations();
     bool HasRecentCompilations();
     void ClearRecentCompilations();
@@ -116,6 +118,7 @@ private:
     // Maps shader filename (not path) to shader compilation objects that are dependent on it.
     std::unordered_map<std::wstring, std::set<UUID64>> m_shaderDependencyMap;
 
+    // New IDs are added every time compilation of a shader is successful. Needs to be cleared manually.
     std::set<UUID64> m_recentCompilations;
 
     DirectoryWatcher m_shaderDirWatcher;
