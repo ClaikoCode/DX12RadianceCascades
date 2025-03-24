@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core\GameCore.h"
+#include "Core\ColorBuffer.h"
 #include "Core\Camera.h"
 #include "Core\CameraController.h"
 #include "Model\Model.h"
@@ -26,6 +27,15 @@ enum PSOID : uint32_t
 
 class RadianceCascades : public GameCore::IGameApp
 {
+private:
+
+	enum RootParam : uint32_t
+	{
+		RootParamCSTestConstant = 0,
+		RootParamCSTestTargetUAV = 1,
+		RootParamCSTestSceneColorSRV = 2,
+	};
+
 public:
 	RadianceCascades();
 	~RadianceCascades();
@@ -69,5 +79,5 @@ private:
 	ComputePSO m_psoTest = ComputePSO(L"Compute Test PSO");
 	RootSignature m_rootSigTest;
 
-
+	ColorBuffer m_flatlandScene = ColorBuffer({ 1.0f, 0.0f, 0.0f, 1.0f });
 };

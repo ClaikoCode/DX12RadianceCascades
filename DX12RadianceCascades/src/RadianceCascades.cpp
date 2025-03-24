@@ -13,8 +13,21 @@
 constexpr size_t MAX_INSTANCES = 256;
 static const std::set<Shader::ShaderType> s_ValidShaderTypes = { Shader::ShaderTypeCS, Shader::ShaderTypeVS, Shader::ShaderTypePS };
 
+namespace
+{
+	uint32_t GetSceneColorWidth()
+	{
+		return Graphics::g_SceneColorBuffer.GetWidth();
+	}
+
+	uint32_t GetSceneColorHeight()
+	{
+		return Graphics::g_SceneColorBuffer.GetHeight();
+	}
+}
+
 RadianceCascades::RadianceCascades()
-	: m_mainSceneIndex(UINT32_MAX), m_mainViewport({}), m_mainScissor({})
+	: m_mainSceneIndex(UINT32_MAX), m_mainViewport({}), m_mainScissor({}), m_usedPSOs({})
 {
 	m_sceneModels.reserve(MAX_INSTANCES);
 }
@@ -31,15 +44,27 @@ void RadianceCascades::Startup()
 	InitializeScene();
 	InitializeShaders();
 	InitializePSOs();
+
+
+	{
+		m_flatlandScene.Create(L"Flatland Scene", ::GetSceneColorWidth(), ::GetSceneColorHeight(), 1, DXGI_FORMAT_R11G11B10_FLOAT);
+	}
 }
 
 void RadianceCascades::Cleanup()
 {
-	// Destroys all models in the scene by freeing their underlying pointers.
-	for (ModelInstance& modelInstance : m_sceneModels)
+	Graphics::g_CommandManager.IdleGPU();
+
 	{
-		modelInstance = nullptr;
+		// Destroys all models in the scene by freeing their underlying pointers.
+		for (ModelInstance& modelInstance : m_sceneModels)
+		{
+			modelInstance = nullptr;
+		}
+
+		m_flatlandScene.Destroy();
 	}
+	
 
 	Renderer::Shutdown();
 }
@@ -109,7 +134,7 @@ void RadianceCascades::InitializeShaders()
 
 void RadianceCascades::InitializePSOs()
 {
-	
+	// Pointers to used PSOs
 	{
 		// Outside PSO registers. These were found to be the PSOs that are used by opaque objects.
 		m_usedPSOs[PSOIDFirstOutsidePSO] = &Renderer::sm_PSOs[9];
@@ -119,6 +144,7 @@ void RadianceCascades::InitializePSOs()
 		m_usedPSOs[PSOIDComputeTestPSO] = &m_psoTest;
 	}
 
+	// Bind shader ids to specific PSOs for recompilation purposes.
 	{
 		m_shaderPSODependencyMap[ShaderIDSceneRenderPS].insert(PSOIDFirstOutsidePSO);
 		m_shaderPSODependencyMap[ShaderIDSceneRenderPS].insert(PSOIDSecondOutsidePSO);
@@ -138,9 +164,10 @@ void RadianceCascades::InitializePSOs()
 		computePSO.SetComputeShader(binary, binarySize);
 
 		RootSignature& rootSig = m_rootSigTest;
-		rootSig.Reset(2, 0);
-		rootSig[0].InitAsConstants(0, 1);
-		rootSig[1].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 1);
+		rootSig.Reset(3, 0);
+		rootSig[RootParamCSTestConstant].InitAsConstants(0, 2);
+		rootSig[RootParamCSTestTargetUAV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 1);
+		rootSig[RootParamCSTestSceneColorSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 0, 1);
 
 		rootSig.Finalize(L"Compute Test Rootsig");
 
@@ -214,17 +241,28 @@ void RadianceCascades::RenderSceneImpl(Camera& camera, D3D12_VIEWPORT viewPort, 
 void RadianceCascades::RunCompute()
 {
 	ColorBuffer& target = Graphics::g_SceneColorBuffer;
+	uint32_t targetWidth = target.GetWidth();
+	uint32_t targetHeight = target.GetHeight();
 
 	ComputeContext& cmptContext = ComputeContext::Begin(L"Run Compute");
 
-	cmptContext.SetRootSignature(m_rootSigTest);
-	cmptContext.SetPipelineState(m_psoTest);
+	{
+		cmptContext.TransitionResource(m_flatlandScene, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
+		cmptContext.ClearUAV(m_flatlandScene);
+		cmptContext.TransitionResource(m_flatlandScene, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, true);
 
-	cmptContext.SetConstants(0, 10.0f);
-
-	cmptContext.TransitionResource(target, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
-	cmptContext.SetDynamicDescriptor(1, 0, target.GetUAV());
-	cmptContext.Dispatch2D(target.GetWidth(), target.GetHeight());
+		cmptContext.TransitionResource(target, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
+	}
+	
+	{
+		cmptContext.SetRootSignature(m_rootSigTest);
+		cmptContext.SetPipelineState(m_psoTest);
+		cmptContext.SetConstants(RootParamCSTestConstant, targetWidth, targetHeight);
+		cmptContext.SetDynamicDescriptor(RootParamCSTestTargetUAV, 0, target.GetUAV());
+		cmptContext.SetDynamicDescriptor(RootParamCSTestSceneColorSRV, 0, m_flatlandScene.GetSRV());
+	}
+	
+	cmptContext.Dispatch2D(targetWidth, targetHeight);
 
 	cmptContext.Finish();
 }
