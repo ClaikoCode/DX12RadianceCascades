@@ -118,27 +118,27 @@ namespace Logging
 
         // Formatted log methods
         template<typename... Args>
-        void Error(std::wstring_view format, Args... args)
+        void Error(const std::source_location& location, std::wstring_view format, Args... args)
         {
-            LogFormatted(LogLevel::Error, format, args...);
+            LogFormatted(location, LogLevel::Error, format, args...);
         }
 
         template<typename... Args>
-        void Warning(std::wstring_view format, Args... args)
+        void Warning(const std::source_location& location, std::wstring_view format, Args... args)
         {
-            LogFormatted(LogLevel::Warning, format, args...);
+            LogFormatted(location, LogLevel::Warning, format, args...);
         }
 
         template<typename... Args>
-        void Info(std::wstring_view format, Args... args)
+        void Info(const std::source_location& location, std::wstring_view format, Args... args)
         {
-            LogFormatted(LogLevel::Info, format, args...);
+            LogFormatted(location, LogLevel::Info, format, args...);
         }
 
         template<typename... Args>
-        void Debug(std::wstring_view format, Args... args)
+        void Debug(const std::source_location& location, std::wstring_view format, Args... args)
         {
-            LogFormatted(LogLevel::Debug, format, args...);
+            LogFormatted(location, LogLevel::Debug, format, args...);
         }
 
     private:
@@ -202,7 +202,7 @@ namespace Logging
         }
 
         template<typename... Args>
-        void LogFormatted(LogLevel level, std::wstring_view format, Args... args)
+        void LogFormatted(const std::source_location& location, LogLevel level, std::wstring_view format, Args... args)
         {
             if (!m_initialized || level > m_currentLevel)
                 return;
@@ -211,7 +211,7 @@ namespace Logging
             {
                 // Create copies of arguments to ensure they remain valid
                 std::wstring formattedMessage = std::vformat(format, std::make_wformat_args(args...));
-                LogDirect(level, formattedMessage, std::source_location::current());
+                LogDirect(level, formattedMessage, location);
             }
             catch (const std::exception& e)
             {
@@ -287,27 +287,27 @@ namespace Logging
 
     // Convenience functions for formatted messages
     template<typename... Args>
-    inline void Error(std::wstring_view format, Args... args)
+    inline void Error(const std::source_location& source, std::wstring_view format, Args... args)
     {
-        Logger::Get().Error(format, args...);
+        Logger::Get().Error(source, format, args...);
     }
 
     template<typename... Args>
-    inline void Warning(std::wstring_view format, Args... args)
+    inline void Warning(const std::source_location& source, std::wstring_view format, Args... args)
     {
-        Logger::Get().Warning(format, args...);
+        Logger::Get().Warning(source, format, args...);
     }
 
     template<typename... Args>
-    inline void Info(std::wstring_view format, Args... args)
+    inline void Info(const std::source_location& source, std::wstring_view format, Args... args)
     {
-        Logger::Get().Info(format, args...);
+        Logger::Get().Info(source, format, args...);
     }
 
     template<typename... Args>
-    inline void Debug(std::wstring_view format, Args... args)
+    inline void Debug(const std::source_location& source, std::wstring_view format, Args... args)
     {
-        Logger::Get().Debug(format, args...);
+        Logger::Get().Debug(source, format, args...);
     }
 
     // Initialize the logging system
@@ -330,10 +330,10 @@ namespace Logging
 }
 
 // Macros for easier usage
-#define LOG_ERROR(format, ...)    Logging::Error(format, ##__VA_ARGS__)
-#define LOG_WARNING(format, ...)  Logging::Warning(format, ##__VA_ARGS__)
-#define LOG_INFO(format, ...)     Logging::Info(format, ##__VA_ARGS__)
-#define LOG_DEBUG(format, ...)    Logging::Debug(format, ##__VA_ARGS__)
+#define LOG_ERROR(format, ...)    Logging::Error(std::source_location::current(), format, ##__VA_ARGS__)
+#define LOG_WARNING(format, ...)  Logging::Warning(std::source_location::current(), format, ##__VA_ARGS__)
+#define LOG_INFO(format, ...)     Logging::Info(std::source_location::current(), format, ##__VA_ARGS__)
+#define LOG_DEBUG(format, ...)    Logging::Debug(std::source_location::current(), format, ##__VA_ARGS__)
 
 // Direct message macros
 #define LOG_ERROR_DIRECT(message)   Logging::ErrorDirect(message)
