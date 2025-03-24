@@ -468,6 +468,8 @@ Shader::ShaderType ShaderCompilationManager::GetShaderType(UUID64 shaderID)
 	{
 		return shaderData->shaderCompPackage.shaderType;
 	}
+
+	return Shader::ShaderTypeNone;
 }
 
 void ShaderCompilationManager::AddRecentCompilation(UUID64 shaderID)

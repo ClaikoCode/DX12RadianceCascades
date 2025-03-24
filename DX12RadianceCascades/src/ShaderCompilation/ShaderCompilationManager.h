@@ -62,10 +62,6 @@ namespace Shader
         Microsoft::WRL::ComPtr<IDxcBlob> shaderBlob = nullptr;
     };
 
-    
-    std::wstring BuildShaderPath(const std::wstring& shaderFolder, const std::wstring& shaderName);
-    std::wstring BuildShaderPath(const std::wstring& shaderFile);
-
     // Special struct to make sure that source ptr lifetime is kept for lifetime of the DxcBuffer.
     struct ComDxcBuffer
     {
