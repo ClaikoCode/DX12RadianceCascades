@@ -156,9 +156,6 @@ void RadianceCascades::RenderSceneImpl(Camera& camera, D3D12_VIEWPORT viewPort, 
 	gfxContext.TransitionResource(sceneColorBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET, true);
 	gfxContext.ClearColor(sceneColorBuffer);
 
-	gfxContext.TransitionResource(Graphics::g_SSAOFullScreen, D3D12_RESOURCE_STATE_RENDER_TARGET, true);
-	gfxContext.ClearColor(Graphics::g_SSAOFullScreen);
-
 	{
 		gfxContext.TransitionResource(sceneDepthBuffer, D3D12_RESOURCE_STATE_DEPTH_WRITE, true);
 		gfxContext.ClearDepth(sceneDepthBuffer);
@@ -167,7 +164,6 @@ void RadianceCascades::RenderSceneImpl(Camera& camera, D3D12_VIEWPORT viewPort, 
 	}
 	
 	{
-		gfxContext.TransitionResource(Graphics::g_SSAOFullScreen, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, true);
 		gfxContext.TransitionResource(sceneDepthBuffer, D3D12_RESOURCE_STATE_DEPTH_READ, true);
 
 		gfxContext.SetRenderTarget(sceneColorBuffer.GetRTV(), sceneDepthBuffer.GetDSV());
