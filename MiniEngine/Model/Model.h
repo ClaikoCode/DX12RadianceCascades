@@ -164,6 +164,9 @@ public:
 
     const Model& GetModel() { return *m_Model; }
 
+    // Added by JD.
+    Math::UniformTransform& GetTransform() { return m_Locator; }
+
 private:
     std::shared_ptr<const Model> m_Model;
     UploadBuffer m_MeshConstantsCPU;

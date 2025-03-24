@@ -10,9 +10,12 @@
 
 #include "RadianceCascades.h"
 
+constexpr size_t MAX_INSTANCES = 256;
+
 RadianceCascades::RadianceCascades()
+	: m_mainSceneIndex(UINT32_MAX), m_mainViewport({}), m_mainScissor({})
 {
-	
+	m_sceneModels.reserve(MAX_INSTANCES);
 }
 
 RadianceCascades::~RadianceCascades()
@@ -31,14 +34,26 @@ void RadianceCascades::Startup()
 
 void RadianceCascades::Cleanup()
 {
-	m_sceneModelInstance = nullptr; // Destroys the scene.
+	// Destroys all models in the scene by freeing their underlying pointers.
+	for (ModelInstance& modelInstance : m_sceneModels)
+	{
+		modelInstance = nullptr;
+	}
+
 	Renderer::Shutdown();
 }
 
 void RadianceCascades::Update(float deltaT)
 {
 	GraphicsContext& gfxContext = GraphicsContext::Begin(L"Scene Update");
-	m_sceneModelInstance.Update(gfxContext, deltaT);
+
+	{	
+		for (ModelInstance& modelInstance : m_sceneModels)
+		{
+			modelInstance.Update(gfxContext, deltaT);
+		}
+	}
+	
 	gfxContext.Finish();
 
 	m_cameraController->Update(deltaT);
@@ -57,25 +72,34 @@ void RadianceCascades::InitializeScene()
 {
 	// Setup scene.
 	{
-		m_sceneModelInstance = Renderer::LoadModel(L"assets\\Sponza\\PBR\\sponza2.gltf", false);
-		m_sceneModelInstance.Resize(100.0f * m_sceneModelInstance.GetRadius());
+		ModelInstance& modelInstance = AddModelInstance(Renderer::LoadModel(L"assets\\Sponza\\PBR\\sponza2.gltf", false));
+		m_mainSceneIndex = m_sceneModels.size() - 1;
+		modelInstance.Resize(100.0f * modelInstance.GetRadius());
+	}
 
-		OrientedBox obb = m_sceneModelInstance.GetBoundingBox();
+	{
+		std::shared_ptr<Model> modelRef = Renderer::LoadModel(L"assets\\Testing\\SphereTest.gltf", false);
+		ModelInstance& modelInstance = AddModelInstance(modelRef);
+		modelInstance.Resize(10.0f);
+		modelInstance.GetTransform().SetTranslation(m_sceneModels[m_mainSceneIndex].GetCenter());
+	}
+
+	// Setup camera
+	{
+		OrientedBox obb = m_sceneModels[m_mainSceneIndex].GetBoundingBox();
 		float modelRadius = Length(obb.GetDimensions()) * 0.5f;
 		const Vector3 eye = obb.GetCenter() + Vector3(modelRadius * 0.5f, 0.0f, 0.0f);
 		m_camera.SetEyeAtUp(eye, Vector3(kZero), Vector3(kYUnitVector));
 		m_camera.SetZRange(0.5f, 10000.0f);
-	}
 
-	m_cameraController.reset(new FlyingFPSCamera(m_camera, Vector3(kYUnitVector)));
-	
+		m_cameraController.reset(new FlyingFPSCamera(m_camera, Vector3(kYUnitVector)));
+	}
 }
 
 void RadianceCascades::InitializeShaders()
 {
 	auto& shaderCompManager = ShaderCompilationManager::Get();
 
-	shaderCompManager.RegisterShader(ShaderIDTest, L"VertexShaderTest.hlsl", Shader::ShaderTypeVS, true);
 	shaderCompManager.RegisterShader(ShaderIDSceneRenderPS, L"SceneRenderPS.hlsl", Shader::ShaderTypePS, true);
 	shaderCompManager.RegisterShader(ShaderIDSceneRenderVS, L"SceneRenderVS.hlsl", Shader::ShaderTypeVS, true);
 }
@@ -119,7 +143,10 @@ void RadianceCascades::RenderSceneImpl(Camera& camera, D3D12_VIEWPORT viewPort, 
 
 	// Add models
 	{
-		m_sceneModelInstance.Render(meshSorter);
+		for (ModelInstance& modelInstance : m_sceneModels)
+		{
+			modelInstance.Render(meshSorter);
+		}
 
 		meshSorter.Sort();
 	}
@@ -226,4 +253,12 @@ void RadianceCascades::UpdatePSOs()
 
 		shaderCompManager.ClearRecentCompilations();
 	}
+}
+
+ModelInstance& RadianceCascades::AddModelInstance(std::shared_ptr<Model> modelPtr)
+{
+	ASSERT(m_sceneModels.size() < MAX_INSTANCES);
+
+	m_sceneModels.push_back(ModelInstance(modelPtr));
+	return m_sceneModels.back();
 }
