@@ -10,8 +10,18 @@ enum ShaderID : UUID64
 	ShaderIDInvalid = 0,
 	ShaderIDSceneRenderPS,
 	ShaderIDSceneRenderVS,
+	ShaderIDTestCS,
 
 	ShaderIDNone = NULL_ID
+};
+
+enum PSOID : uint32_t
+{
+	PSOIDFirstOutsidePSO = 0,
+	PSOIDSecondOutsidePSO,
+	PSOIDComputeTestPSO,
+
+	PSOIDCount
 };
 
 class RadianceCascades : public GameCore::IGameApp
@@ -35,8 +45,9 @@ private:
 	void InitializePSOs();
 
 	void RenderSceneImpl(Camera& camera, D3D12_VIEWPORT viewPort, D3D12_RECT scissor);
+	void RunCompute();
 	void UpdateViewportAndScissor();
-	void UpdatePSOs();
+	void UpdateGraphicsPSOs();
 
 	ModelInstance& AddModelInstance(std::shared_ptr<Model> modelPtr);
 
@@ -51,5 +62,12 @@ private:
 	D3D12_VIEWPORT m_mainViewport;
 	D3D12_RECT m_mainScissor;
 
-	std::unordered_map<UUID64, std::set<uint16_t>> m_shaderPSOMap;
+	// Tells what PSOs are dependent on what shaders.
+	std::unordered_map<UUID64, std::set<uint16_t>> m_shaderPSODependencyMap;
+	std::array<PSO*, PSOIDCount> m_usedPSOs;
+	
+	ComputePSO m_psoTest = ComputePSO(L"Compute Test PSO");
+	RootSignature m_rootSigTest;
+
+
 };

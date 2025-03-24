@@ -11,6 +11,7 @@
 #include "RadianceCascades.h"
 
 constexpr size_t MAX_INSTANCES = 256;
+static const std::set<Shader::ShaderType> s_ValidShaderTypes = { Shader::ShaderTypeCS, Shader::ShaderTypeVS, Shader::ShaderTypePS };
 
 RadianceCascades::RadianceCascades()
 	: m_mainSceneIndex(UINT32_MAX), m_mainViewport({}), m_mainScissor({})
@@ -60,12 +61,13 @@ void RadianceCascades::Update(float deltaT)
 	m_camera.Update();
 
 	UpdateViewportAndScissor();
-	UpdatePSOs();
+	UpdateGraphicsPSOs();
 }
 
 void RadianceCascades::RenderScene()
 {
 	RenderSceneImpl(m_camera, m_mainViewport, m_mainScissor);
+	RunCompute();
 }
 
 void RadianceCascades::InitializeScene()
@@ -73,7 +75,7 @@ void RadianceCascades::InitializeScene()
 	// Setup scene.
 	{
 		ModelInstance& modelInstance = AddModelInstance(Renderer::LoadModel(L"assets\\Sponza\\PBR\\sponza2.gltf", false));
-		m_mainSceneIndex = m_sceneModels.size() - 1;
+		m_mainSceneIndex = (uint32_t)m_sceneModels.size() - 1;
 		modelInstance.Resize(100.0f * modelInstance.GetRadius());
 	}
 
@@ -102,15 +104,49 @@ void RadianceCascades::InitializeShaders()
 
 	shaderCompManager.RegisterShader(ShaderIDSceneRenderPS, L"SceneRenderPS.hlsl", Shader::ShaderTypePS, true);
 	shaderCompManager.RegisterShader(ShaderIDSceneRenderVS, L"SceneRenderVS.hlsl", Shader::ShaderTypeVS, true);
+	shaderCompManager.RegisterShader(ShaderIDTestCS, L"TestCS.hlsl", Shader::ShaderTypeCS, true);
 }
 
 void RadianceCascades::InitializePSOs()
 {
-	m_shaderPSOMap[ShaderIDSceneRenderPS].insert(9);
-	m_shaderPSOMap[ShaderIDSceneRenderPS].insert(11);
+	
+	{
+		// Outside PSO registers. These were found to be the PSOs that are used by opaque objects.
+		m_usedPSOs[PSOIDFirstOutsidePSO] = &Renderer::sm_PSOs[9];
+		m_usedPSOs[PSOIDSecondOutsidePSO] = &Renderer::sm_PSOs[11];
 
-	m_shaderPSOMap[ShaderIDSceneRenderVS].insert(9);
-	m_shaderPSOMap[ShaderIDSceneRenderVS].insert(11);
+		// Internal PSO registers.
+		m_usedPSOs[PSOIDComputeTestPSO] = &m_psoTest;
+	}
+
+	{
+		m_shaderPSODependencyMap[ShaderIDSceneRenderPS].insert(PSOIDFirstOutsidePSO);
+		m_shaderPSODependencyMap[ShaderIDSceneRenderPS].insert(PSOIDSecondOutsidePSO);
+
+		m_shaderPSODependencyMap[ShaderIDSceneRenderVS].insert(PSOIDFirstOutsidePSO);
+		m_shaderPSODependencyMap[ShaderIDSceneRenderVS].insert(PSOIDSecondOutsidePSO);
+
+		m_shaderPSODependencyMap[ShaderIDTestCS].insert(PSOIDComputeTestPSO);
+	}
+	
+	{
+		ComputePSO& computePSO = m_psoTest;
+
+		void* binary = nullptr;
+		size_t binarySize = 0;
+		ShaderCompilationManager::Get().GetShaderDataBinary(ShaderIDTestCS, &binary, &binarySize);
+		computePSO.SetComputeShader(binary, binarySize);
+
+		RootSignature& rootSig = m_rootSigTest;
+		rootSig.Reset(2, 0);
+		rootSig[0].InitAsConstants(0, 1);
+		rootSig[1].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 1);
+
+		rootSig.Finalize(L"Compute Test Rootsig");
+
+		computePSO.SetRootSignature(rootSig);
+		computePSO.Finalize();
+	}
 }
 
 void RadianceCascades::RenderSceneImpl(Camera& camera, D3D12_VIEWPORT viewPort, D3D12_RECT scissor)
@@ -175,6 +211,24 @@ void RadianceCascades::RenderSceneImpl(Camera& camera, D3D12_VIEWPORT viewPort, 
 	}
 }
 
+void RadianceCascades::RunCompute()
+{
+	ColorBuffer& target = Graphics::g_SceneColorBuffer;
+
+	ComputeContext& cmptContext = ComputeContext::Begin(L"Run Compute");
+
+	cmptContext.SetRootSignature(m_rootSigTest);
+	cmptContext.SetPipelineState(m_psoTest);
+
+	cmptContext.SetConstants(0, 10.0f);
+
+	cmptContext.TransitionResource(target, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
+	cmptContext.SetDynamicDescriptor(1, 0, target.GetUAV());
+	cmptContext.Dispatch2D(target.GetWidth(), target.GetHeight());
+
+	cmptContext.Finish();
+}
+
 void RadianceCascades::UpdateViewportAndScissor()
 {
 	float width = (float)Graphics::g_SceneColorBuffer.GetWidth();
@@ -193,23 +247,24 @@ void RadianceCascades::UpdateViewportAndScissor()
 	m_mainScissor.bottom = (LONG)height;
 }
 
-void RadianceCascades::UpdatePSOs()
+void RadianceCascades::UpdateGraphicsPSOs()
 {
 	auto& shaderCompManager = ShaderCompilationManager::Get();
 
 	if (shaderCompManager.HasRecentCompilations())
 	{
-		auto compSet = shaderCompManager.GetRecentCompilations();
+		// Wait for all work to be done before changing PSOs.
+		Graphics::g_CommandManager.IdleGPU();
 
-		std::set<uint16_t> changedPSOs = {};
+		auto compSet = shaderCompManager.GetRecentCompilations();
 
 		for (UUID64 shaderID : compSet)
 		{
 			Shader::ShaderType shaderType = shaderCompManager.GetShaderType(shaderID);
 
-			if (shaderType != Shader::ShaderTypePS && shaderType != Shader::ShaderTypeVS)
+			if (s_ValidShaderTypes.find(shaderType) == s_ValidShaderTypes.end())
 			{
-				LOG_ERROR(L"Invalid shader type: {}", (uint32_t)shaderType);
+				LOG_INFO(L"Invalid shader type: {}. Skipping.", (uint32_t)shaderType);
 				continue;
 			}
 
@@ -219,32 +274,38 @@ void RadianceCascades::UpdatePSOs()
 			
 			if (binary)
 			{
-				const std::set<uint16_t>& psoIds = m_shaderPSOMap[shaderID];
+				const std::set<uint16_t>& psoIds = m_shaderPSODependencyMap[shaderID];
 
 				if (!psoIds.empty())
 				{
 					for (uint16_t psoId : psoIds)
 					{
-						GraphicsPSO& pso = Renderer::sm_PSOs[psoId];
-
-						if (shaderType == Shader::ShaderTypePS)
+						if (shaderType == Shader::ShaderTypeCS)
 						{
-							pso.SetPixelShader(binary, binarySize);
-						}
-						else if (shaderType == Shader::ShaderTypeVS)
-						{
-							pso.SetVertexShader(binary, binarySize);
-						}
+							ComputePSO& pso = *(reinterpret_cast<ComputePSO*>(m_usedPSOs[psoId]));
 
-						changedPSOs.insert(psoId);
+							pso.SetComputeShader(binary, binarySize);
+
+							pso.Finalize();
+						}
+						else
+						{
+							GraphicsPSO& pso = *(reinterpret_cast<GraphicsPSO*>(m_usedPSOs[psoId]));
+
+							if (shaderType == Shader::ShaderTypePS)
+							{
+								pso.SetPixelShader(binary, binarySize);
+							}
+							else if (shaderType == Shader::ShaderTypeVS)
+							{
+								pso.SetVertexShader(binary, binarySize);
+							}
+
+							pso.Finalize();
+						}
 					}
 				}
 			}
-		}
-
-		for (uint16_t changedPSOId : changedPSOs)
-		{
-			Renderer::sm_PSOs[changedPSOId].Finalize();
 		}
 
 		shaderCompManager.ClearRecentCompilations();
