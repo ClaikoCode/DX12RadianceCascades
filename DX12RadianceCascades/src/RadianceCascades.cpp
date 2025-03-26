@@ -13,6 +13,21 @@
 constexpr size_t MAX_INSTANCES = 256;
 static const std::set<Shader::ShaderType> s_ValidShaderTypes = { Shader::ShaderTypeCS, Shader::ShaderTypeVS, Shader::ShaderTypePS };
 
+namespace Math
+{
+	// Gives back the log of b with base of a.
+	float LogAB(float a, float b)
+	{
+		return Math::Log(b) / Math::Log(a);
+	}
+
+	// Calculates: a + ar^2 + ar^3 + ... + ar^(n - 1)
+	float GeometricSeriesSum(float a, float r, float n)
+	{
+		return a * (1.0f - Math::Pow(r, n)) / (1.0f - r);
+	}
+}
+
 namespace
 {
 	uint32_t GetSceneColorWidth()
@@ -27,7 +42,7 @@ namespace
 }
 
 RadianceCascades::RadianceCascades()
-	: m_mainSceneIndex(UINT32_MAX), m_mainViewport({}), m_mainScissor({}), m_usedPSOs({})
+	: m_mainSceneModelInstanceIndex(UINT32_MAX), m_mainViewport({}), m_mainScissor({}), m_usedPSOs({})
 {
 	m_sceneModels.reserve(MAX_INSTANCES);
 }
@@ -44,11 +59,7 @@ void RadianceCascades::Startup()
 	InitializeScene();
 	InitializeShaders();
 	InitializePSOs();
-
-
-	{
-		m_flatlandScene.Create(L"Flatland Scene", ::GetSceneColorWidth(), ::GetSceneColorHeight(), 1, DXGI_FORMAT_R11G11B10_FLOAT);
-	}
+	InitializeRCResources();
 }
 
 void RadianceCascades::Cleanup()
@@ -64,7 +75,8 @@ void RadianceCascades::Cleanup()
 
 		m_flatlandScene.Destroy();
 	}
-	
+
+	m_rcManager.Shutdown();
 
 	Renderer::Shutdown();
 }
@@ -100,7 +112,7 @@ void RadianceCascades::InitializeScene()
 	// Setup scene.
 	{
 		ModelInstance& modelInstance = AddModelInstance(Renderer::LoadModel(L"assets\\Sponza\\PBR\\sponza2.gltf", false));
-		m_mainSceneIndex = (uint32_t)m_sceneModels.size() - 1;
+		m_mainSceneModelInstanceIndex = (uint32_t)m_sceneModels.size() - 1;
 		modelInstance.Resize(100.0f * modelInstance.GetRadius());
 	}
 
@@ -108,12 +120,12 @@ void RadianceCascades::InitializeScene()
 		std::shared_ptr<Model> modelRef = Renderer::LoadModel(L"assets\\Testing\\SphereTest.gltf", false);
 		ModelInstance& modelInstance = AddModelInstance(modelRef);
 		modelInstance.Resize(10.0f);
-		modelInstance.GetTransform().SetTranslation(m_sceneModels[m_mainSceneIndex].GetCenter());
+		modelInstance.GetTransform().SetTranslation(m_sceneModels[m_mainSceneModelInstanceIndex].GetCenter());
 	}
 
 	// Setup camera
 	{
-		OrientedBox obb = m_sceneModels[m_mainSceneIndex].GetBoundingBox();
+		OrientedBox obb = m_sceneModels[m_mainSceneModelInstanceIndex].GetBoundingBox();
 		float modelRadius = Length(obb.GetDimensions()) * 0.5f;
 		const Vector3 eye = obb.GetCenter() + Vector3(modelRadius * 0.5f, 0.0f, 0.0f);
 		m_camera.SetEyeAtUp(eye, Vector3(kZero), Vector3(kYUnitVector));
@@ -129,51 +141,58 @@ void RadianceCascades::InitializeShaders()
 
 	shaderCompManager.RegisterShader(ShaderIDSceneRenderPS, L"SceneRenderPS.hlsl", Shader::ShaderTypePS, true);
 	shaderCompManager.RegisterShader(ShaderIDSceneRenderVS, L"SceneRenderVS.hlsl", Shader::ShaderTypeVS, true);
-	shaderCompManager.RegisterShader(ShaderIDTestCS, L"TestCS.hlsl", Shader::ShaderTypeCS, true);
+	shaderCompManager.RegisterShader(ShaderIDRCGatherCS, L"RCGatherCS.hlsl", Shader::ShaderTypeCS, true);
 }
 
 void RadianceCascades::InitializePSOs()
 {
 	// Pointers to used PSOs
 	{
-		// Outside PSO registers. These were found to be the PSOs that are used by opaque objects.
-		m_usedPSOs[PSOIDFirstOutsidePSO] = &Renderer::sm_PSOs[9];
-		m_usedPSOs[PSOIDSecondOutsidePSO] = &Renderer::sm_PSOs[11];
-
-		// Internal PSO registers.
-		m_usedPSOs[PSOIDComputeTestPSO] = &m_psoTest;
+		RegisterPSO(PSOIDFirstExternalPSO, &Renderer::sm_PSOs[9]);
+		RegisterPSO(PSOIDSecondExternalPSO, &Renderer::sm_PSOs[11]);
+		RegisterPSO(PSOIDComputeRCGatherPSO, &m_computeGatherPSO);
 	}
 
 	// Bind shader ids to specific PSOs for recompilation purposes.
 	{
-		m_shaderPSODependencyMap[ShaderIDSceneRenderPS].insert(PSOIDFirstOutsidePSO);
-		m_shaderPSODependencyMap[ShaderIDSceneRenderPS].insert(PSOIDSecondOutsidePSO);
+		// External PSO dependencies. These were found to be the PSOs that are used by opaque objects.
+		std::vector<uint32_t> externalPSOs = { PSOIDFirstExternalPSO, PSOIDSecondExternalPSO };
+		AddShaderDependency(ShaderIDSceneRenderPS, externalPSOs);
+		AddShaderDependency(ShaderIDSceneRenderVS, externalPSOs);
 
-		m_shaderPSODependencyMap[ShaderIDSceneRenderVS].insert(PSOIDFirstOutsidePSO);
-		m_shaderPSODependencyMap[ShaderIDSceneRenderVS].insert(PSOIDSecondOutsidePSO);
-
-		m_shaderPSODependencyMap[ShaderIDTestCS].insert(PSOIDComputeTestPSO);
+		// Internal PSO dependencies.
+		AddShaderDependency(ShaderIDTestCS, { PSOIDComputeTestPSO });
+		AddShaderDependency(ShaderIDRCGatherCS, { PSOIDComputeRCGatherPSO });
 	}
-	
+
 	{
-		ComputePSO& computePSO = m_psoTest;
+		ComputePSO& pso = m_computeGatherPSO;
 
 		void* binary = nullptr;
 		size_t binarySize = 0;
-		ShaderCompilationManager::Get().GetShaderDataBinary(ShaderIDTestCS, &binary, &binarySize);
-		computePSO.SetComputeShader(binary, binarySize);
+		ShaderCompilationManager::Get().GetShaderDataBinary(ShaderIDRCGatherCS, &binary, &binarySize);
+		pso.SetComputeShader(binary, binarySize);
 
-		RootSignature& rootSig = m_rootSigTest;
-		rootSig.Reset(3, 0);
-		rootSig[RootParamCSTestConstant].InitAsConstants(0, 2);
-		rootSig[RootParamCSTestTargetUAV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 1);
-		rootSig[RootParamCSTestSceneColorSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 0, 1);
+		RootSignature& rootSig = m_computeGatherRootSig;
+		rootSig.Reset(RootEntryRCGatherCount, 0);
+		rootSig[RootEntryRCGatherGlobals].InitAsConstantBuffer(0);
+		rootSig[RootEntryRCGatherCascadeInfo].InitAsConstantBuffer(1);
+		rootSig[RootEntryRCGatherCascadeUAV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 1);
+		rootSig[RootEntryRCGatherSceneSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 0, 1);
+		rootSig[RootEntryRCGatherSceneSampler].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER, 0, 1);
+		rootSig.Finalize(L"Compute RC Gather");
 
-		rootSig.Finalize(L"Compute Test Rootsig");
-
-		computePSO.SetRootSignature(rootSig);
-		computePSO.Finalize();
+		pso.SetRootSignature(rootSig);
+		pso.Finalize();
 	}
+}
+
+void RadianceCascades::InitializeRCResources()
+{
+	m_flatlandScene.Create(L"Flatland Scene", ::GetSceneColorWidth(), ::GetSceneColorHeight(), 1, DXGI_FORMAT_R11G11B10_FLOAT);
+
+	float diag = Math::Length({ (float)::GetSceneColorWidth(), (float)::GetSceneColorHeight(), 0.0f });
+	m_rcManager.Init(50.0f, diag);
 }
 
 void RadianceCascades::RenderSceneImpl(Camera& camera, D3D12_VIEWPORT viewPort, D3D12_RECT scissor)
@@ -240,31 +259,39 @@ void RadianceCascades::RenderSceneImpl(Camera& camera, D3D12_VIEWPORT viewPort, 
 
 void RadianceCascades::RunCompute()
 {
-	ColorBuffer& target = Graphics::g_SceneColorBuffer;
-	uint32_t targetWidth = target.GetWidth();
-	uint32_t targetHeight = target.GetHeight();
+	RCGlobals rcGlobals = m_rcManager.FillRCGlobalsData();
 
-	ComputeContext& cmptContext = ComputeContext::Begin(L"Run Compute");
+	ComputeContext& cmptContext = ComputeContext::Begin(L"RC Gather Compute");
 
+	cmptContext.SetRootSignature(m_computeGatherRootSig);
+	cmptContext.SetPipelineState(m_computeGatherPSO);
+
+	cmptContext.SetDynamicConstantBufferView(RootEntryRCGatherGlobals, sizeof(rcGlobals), &rcGlobals);
+
+	cmptContext.TransitionResource(Graphics::g_SceneColorBuffer, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+	cmptContext.SetDynamicDescriptor(RootEntryRCGatherCascadeUAV, 0, Graphics::g_SceneColorBuffer.GetUAV());
+
+	cmptContext.TransitionResource(m_flatlandScene, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+	cmptContext.ClearUAV(m_flatlandScene);
+	cmptContext.TransitionResource(m_flatlandScene, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+	cmptContext.SetDynamicDescriptor(RootEntryRCGatherSceneSRV, 0, m_flatlandScene.GetSRV());
+
+	for (uint32_t i = 0; i < m_rcManager.GetCascadeCount(); i++)
 	{
-		cmptContext.TransitionResource(m_flatlandScene, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
-		cmptContext.ClearUAV(m_flatlandScene);
-		cmptContext.TransitionResource(m_flatlandScene, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, true);
+		ColorBuffer& target = m_rcManager.GetCascadeInterval(i);
 
-		cmptContext.TransitionResource(target, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
-	}
-	
-	{
-		cmptContext.SetRootSignature(m_rootSigTest);
-		cmptContext.SetPipelineState(m_psoTest);
-		cmptContext.SetConstants(RootParamCSTestConstant, targetWidth, targetHeight);
-		cmptContext.SetDynamicDescriptor(RootParamCSTestTargetUAV, 0, target.GetUAV());
-		cmptContext.SetDynamicDescriptor(RootParamCSTestSceneColorSRV, 0, m_flatlandScene.GetSRV());
-	}
-	
-	cmptContext.Dispatch2D(targetWidth, targetHeight);
+		CascadeInfo cascadeInfo = {};
+		cascadeInfo.cascadeIndex = i;
+		cascadeInfo.probePixelSize = m_rcManager.GetProbePixelSize(i);
+		cmptContext.SetDynamicConstantBufferView(RootEntryRCGatherCascadeInfo, sizeof(cascadeInfo), &cascadeInfo);
 
-	cmptContext.Finish();
+		cmptContext.TransitionResource(target, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+		cmptContext.ClearUAV(target);
+
+		cmptContext.Dispatch2D(target.GetWidth(), target.GetHeight(), 16, 16);
+	}
+
+	cmptContext.Finish(true);
 }
 
 void RadianceCascades::UpdateViewportAndScissor()
@@ -312,34 +339,39 @@ void RadianceCascades::UpdateGraphicsPSOs()
 			
 			if (binary)
 			{
-				const std::set<uint16_t>& psoIds = m_shaderPSODependencyMap[shaderID];
+				const auto& psoIds = m_shaderPSODependencyMap[shaderID];
 
 				if (!psoIds.empty())
 				{
-					for (uint16_t psoId : psoIds)
+					for (PSOIDType psoId : psoIds)
 					{
 						if (shaderType == Shader::ShaderTypeCS)
 						{
 							ComputePSO& pso = *(reinterpret_cast<ComputePSO*>(m_usedPSOs[psoId]));
 
-							pso.SetComputeShader(binary, binarySize);
-
-							pso.Finalize();
+							if (pso.GetPipelineStateObject() != nullptr)
+							{
+								pso.SetComputeShader(binary, binarySize);
+								pso.Finalize();
+							}
 						}
 						else
 						{
 							GraphicsPSO& pso = *(reinterpret_cast<GraphicsPSO*>(m_usedPSOs[psoId]));
 
-							if (shaderType == Shader::ShaderTypePS)
+							if (pso.GetPipelineStateObject() != nullptr)
 							{
-								pso.SetPixelShader(binary, binarySize);
-							}
-							else if (shaderType == Shader::ShaderTypeVS)
-							{
-								pso.SetVertexShader(binary, binarySize);
-							}
+								if (shaderType == Shader::ShaderTypePS)
+								{
+									pso.SetPixelShader(binary, binarySize);
+								}
+								else if (shaderType == Shader::ShaderTypeVS)
+								{
+									pso.SetVertexShader(binary, binarySize);
+								}
 
-							pso.Finalize();
+								pso.Finalize();
+							}
 						}
 					}
 				}
@@ -356,4 +388,99 @@ ModelInstance& RadianceCascades::AddModelInstance(std::shared_ptr<Model> modelPt
 
 	m_sceneModels.push_back(ModelInstance(modelPtr));
 	return m_sceneModels.back();
+}
+
+void RadianceCascades::AddShaderDependency(ShaderID shaderID, std::vector<uint32_t> psoIDs)
+{
+	for (uint32_t psoID : psoIDs)
+	{
+		m_shaderPSODependencyMap[shaderID].insert(psoID);
+	}
+}
+
+void RadianceCascades::RegisterPSO(PSOID psoID, PSO* psoPtr)
+{
+	m_usedPSOs[psoID] = psoPtr;
+}
+
+RadianceCascadesManager::~RadianceCascadesManager()
+{
+	Shutdown();
+}
+
+void RadianceCascadesManager::Init(float _rayLength0, float _maxRayLength)
+{
+	const uint16_t rayScalingFactor = scalingFactor.rayScalingFactor;
+	const uint16_t probeScalingFactor = scalingFactor.probeScalingFactor;
+	const float rayScalingFactorFloat = (float)rayScalingFactor;
+	const float probeScalingFactorFloat = (float)probeScalingFactor;
+
+	// This is calculated by solving for factorCount in the following equation: rayLength0 * scalingFactor^(factorCount) = maxLength;
+	// It calculates how many times the factor has to be applied to an initial ray length until the max length has been reached.
+	float factorCount = Math::Ceiling(Math::LogAB(rayScalingFactorFloat, _maxRayLength / _rayLength0));
+	float finalCascadeInvervalStart = Math::GeometricSeriesSum(_rayLength0, rayScalingFactorFloat, factorCount);
+	uint32_t cascadeCount = (uint32_t)Math::Ceiling(Math::LogAB(rayScalingFactorFloat, finalCascadeInvervalStart)) - 1;
+
+	const uint32_t probeCountPerDim0 = (uint32_t)Math::Pow(probeScalingFactorFloat, (float)cascadeCount);
+	
+	if (m_cascadeIntervals.size() < cascadeCount)
+	{
+		m_cascadeIntervals.resize((size_t)cascadeCount);
+	}
+
+	uint32_t probeCount = probeCountPerDim0 * probeCountPerDim0;
+	uint32_t raysPerProbe = s_RaysPerProbe0; 
+	for (uint32_t i = 0; i < (uint32_t)cascadeCount; i++)
+	{
+		std::wstring cascadeName = std::wstring(L"Cascade Interval ") + std::to_wstring(i);
+	
+		uint32_t probePixelLength = (uint32_t)Math::Sqrt((float)(probeCount * raysPerProbe));
+		m_cascadeIntervals[i].Create(cascadeName, probePixelLength, probePixelLength, 1, DXGI_FORMAT_R16G16B16A16_FLOAT);
+
+		probeCount /= (uint32_t)Math::Pow(probeScalingFactorFloat, 2.0f);
+		raysPerProbe *= rayScalingFactor;
+	}
+
+	// Set internal variables.
+	rayLength0 = _rayLength0;
+	probeDim0 = probeCountPerDim0;
+}
+
+void RadianceCascadesManager::Shutdown()
+{
+	for (ColorBuffer& cascadeInterval : m_cascadeIntervals)
+	{
+		cascadeInterval.Destroy();
+	}
+}
+
+ColorBuffer& RadianceCascadesManager::GetCascadeInterval(uint32_t cascadeIndex)
+{
+	return m_cascadeIntervals[cascadeIndex];
+}
+
+uint32_t RadianceCascadesManager::GetCascadeCount()
+{
+	return (uint32_t)m_cascadeIntervals.size();
+}
+
+RCGlobals RadianceCascadesManager::FillRCGlobalsData()
+{
+	RCGlobals rcGlobals = {};
+	rcGlobals.probeDim0 = probeDim0;
+	rcGlobals.rayLength0 = rayLength0;
+	rcGlobals.probeScalingFactor = scalingFactor.probeScalingFactor;
+	rcGlobals.rayScalingFactor = scalingFactor.rayScalingFactor;
+
+	return rcGlobals;
+}
+
+uint32_t RadianceCascadesManager::GetProbePixelSize(uint32_t cascadeIndex)
+{
+	return GetCascadeInterval(cascadeIndex).GetWidth() / GetProbeCount(cascadeIndex);
+}
+
+uint32_t RadianceCascadesManager::GetProbeCount(uint32_t cascadeIndex)
+{
+	return (uint32_t)(probeDim0 / Math::Pow(scalingFactor.probeScalingFactor, (float)cascadeIndex));
 }
