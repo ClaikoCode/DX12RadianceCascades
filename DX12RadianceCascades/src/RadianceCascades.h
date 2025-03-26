@@ -14,6 +14,7 @@ enum ShaderID : UUID64
 	ShaderIDSceneRenderVS,
 	ShaderIDTestCS,
 	ShaderIDRCGatherCS,
+	ShaderIDFlatlandSceneCS,
 
 	ShaderIDNone = NULL_ID
 };
@@ -25,6 +26,7 @@ enum PSOID : PSOIDType
 	PSOIDSecondExternalPSO,
 	PSOIDComputeTestPSO,
 	PSOIDComputeRCGatherPSO,
+	PSOIDComputeFlatlandScenePSO,
 
 	PSOIDCount
 };
@@ -42,6 +44,8 @@ __declspec(align(16)) struct RCGlobals
 	uint32_t rayScalingFactor;
 	uint32_t probeDim0;
 	float rayLength0;
+	uint32_t scenePixelWidth;
+	uint32_t scenePixelHeight;
 };
 
 class RadianceCascadesManager
@@ -58,7 +62,7 @@ public:
 	ColorBuffer& GetCascadeInterval(uint32_t cascadeIndex);
 	uint32_t GetCascadeCount();
 
-	RCGlobals FillRCGlobalsData();
+	RCGlobals FillRCGlobalsData(uint32_t scenePixelWidth, uint32_t scenePixelHeight);
 
 	uint32_t GetProbePixelSize(uint32_t cascadeIndex); // Per dim.
 	uint32_t GetProbeCount(uint32_t cascadeIndex); // Per dim.
@@ -88,7 +92,11 @@ private:
 		RootEntryRCGatherCascadeUAV,
 		RootEntryRCGatherSceneSRV,
 		RootEntryRCGatherSceneSampler,
-		RootEntryRCGatherCount
+		RootEntryRCGatherCount,
+
+		RootEntryFlatlandSceneInfo = 0,
+		RootEntryFlatlandSceneUAV,
+		RootEntryFlatlandCount
 	};
 
 public:
@@ -111,7 +119,8 @@ private:
 	void InitializeRCResources();
 
 	void RenderSceneImpl(Camera& camera, D3D12_VIEWPORT viewPort, D3D12_RECT scissor);
-	void RunCompute();
+	void RunComputeFlatlandScene();
+	void RunComputeRCGather();
 	void UpdateViewportAndScissor();
 	void UpdateGraphicsPSOs();
 
@@ -134,10 +143,13 @@ private:
 	std::unordered_map<UUID64, std::set<PSOIDType>> m_shaderPSODependencyMap;
 	std::array<PSO*, PSOIDCount> m_usedPSOs;
 
-	ComputePSO m_computeGatherPSO = ComputePSO(L"Compute RC Gather");
+	ComputePSO m_rcGatherPSO = ComputePSO(L"Compute RC Gather");
 	RootSignature m_computeGatherRootSig;
 
-	ColorBuffer m_flatlandScene = ColorBuffer({ 1.0f, 0.0f, 0.0f, 0.0f });
+	ComputePSO m_flatlandScenePSO = ComputePSO(L"Compute Flatland Scene");
+	RootSignature m_computeFlatlandSceneRootSig;
+
+	ColorBuffer m_flatlandScene = ColorBuffer({ 0.0f, 0.0f, 0.0f, 100000.0f });
 
 	RadianceCascadesManager m_rcManager;
 };

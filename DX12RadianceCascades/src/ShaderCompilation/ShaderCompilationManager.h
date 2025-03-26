@@ -86,6 +86,7 @@ public:
     void RegisterShader(UUID64 shaderID, const Shader::ShaderCompilationPackage& compPackage, bool compile);
     
     void GetShaderDataBinary(UUID64 shaderID, void** binaryOut, size_t* binarySizeOut);
+    D3D12_SHADER_BYTECODE GetShaderByteCode(UUID64 shaderID);
     Shader::ShaderType GetShaderType(UUID64 shaderID);
 
     void AddRecentCompilation(UUID64 shaderID);
