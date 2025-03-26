@@ -193,6 +193,11 @@ void AddArgDebugInfo(ShaderCompilationArgs& compArgs)
 	AddCompArg(compArgs, DXC_ARG_DEBUG);
 }
 
+void AddArgEmbedDebug(ShaderCompilationArgs& compArgs)
+{
+	AddCompArg(compArgs, L"-Qembed_debug");
+}
+
 void AddArgOptimizationLevel(ShaderCompilationArgs& compArgs, uint16_t level)
 {
 	if (level > 3)
@@ -213,6 +218,7 @@ ShaderCompilationArgs BuildArgsFromShaderPackage(const Shader::ShaderCompilation
 
 #if defined(_DEBUG)
 	AddArgDebugInfo(args);
+	AddArgEmbedDebug(args); // Important for Nsight Graphics to get the most info possible without separate PDBs.
 	AddArgOptimizationLevel(args, 0);
 #else
 	AddArgOptimizationLevel(args, 3);
@@ -459,6 +465,20 @@ void ShaderCompilationManager::GetShaderDataBinary(UUID64 shaderID, void** binar
 	}
 #endif
 
+}
+
+D3D12_SHADER_BYTECODE ShaderCompilationManager::GetShaderByteCode(UUID64 shaderID)
+{
+	void* binary = nullptr;
+	size_t binarySize = 0;
+
+	GetShaderDataBinary(shaderID, &binary, &binarySize);
+
+	D3D12_SHADER_BYTECODE byteCode = {};
+	byteCode.pShaderBytecode = binary;
+	byteCode.BytecodeLength = binarySize;
+
+	return byteCode;
 }
 
 Shader::ShaderType ShaderCompilationManager::GetShaderType(UUID64 shaderID)
