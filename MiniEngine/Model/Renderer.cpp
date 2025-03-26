@@ -666,7 +666,6 @@ void MeshSorter::RenderMeshes(
                 ASSERT(object.skeleton != nullptr, "Unspecified joint matrix array");
                 context.SetDynamicSRV(kSkinMatrices, sizeof(Joint) * mesh.numJoints, object.skeleton + mesh.startJoint);
             }
-            const GraphicsPSO& pso = sm_PSOs[key.psoIdx];
             context.SetPipelineState(sm_PSOs[key.psoIdx]);
 
             if (m_CurrentPass == kZPass)
