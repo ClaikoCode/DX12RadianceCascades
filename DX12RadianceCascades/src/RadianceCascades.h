@@ -12,9 +12,11 @@ enum ShaderID : UUID64
 	ShaderIDInvalid = 0,
 	ShaderIDSceneRenderPS,
 	ShaderIDSceneRenderVS,
-	ShaderIDTestCS,
 	ShaderIDRCGatherCS,
 	ShaderIDFlatlandSceneCS,
+	ShaderIDFullScreenQuadVS,
+	ShaderIDFullScreenCopyPS,
+	ShaderIDFullScreenCopyCS,
 
 	ShaderIDNone = NULL_ID
 };
@@ -27,6 +29,7 @@ enum PSOID : PSOIDType
 	PSOIDComputeTestPSO,
 	PSOIDComputeRCGatherPSO,
 	PSOIDComputeFlatlandScenePSO,
+	PSOIDFullScreenCopyComputePSO,
 
 	PSOIDCount
 };
@@ -44,6 +47,7 @@ __declspec(align(16)) struct RCGlobals
 	uint32_t rayScalingFactor;
 	uint32_t probeDim0;
 	float rayLength0;
+	float probeSpacing0;
 	uint32_t scenePixelWidth;
 	uint32_t scenePixelHeight;
 };
@@ -66,6 +70,7 @@ public:
 
 	uint32_t GetProbePixelSize(uint32_t cascadeIndex); // Per dim.
 	uint32_t GetProbeCount(uint32_t cascadeIndex); // Per dim.
+	float GetProbeSpacing(uint32_t cascadeIndex);
 
 public:
 	struct ScalingFactor
@@ -91,12 +96,20 @@ private:
 		RootEntryRCGatherCascadeInfo,
 		RootEntryRCGatherCascadeUAV,
 		RootEntryRCGatherSceneSRV,
-		RootEntryRCGatherSceneSampler,
 		RootEntryRCGatherCount,
 
 		RootEntryFlatlandSceneInfo = 0,
 		RootEntryFlatlandSceneUAV,
-		RootEntryFlatlandCount
+		RootEntryFlatlandCount,
+
+		RootEntryFullScreenCopySource = 0,
+		RootEntryFullScreenCopyCount,
+
+		RootEntryFullScreenCopyComputeSource = 0,
+		RootEntryFullScreenCopyComputeDest,
+		RootEntryFullScreenCopyComputeDestInfo,
+		RootEntryFullScreenCopyComputeCount,
+
 	};
 
 public:
@@ -124,6 +137,10 @@ private:
 	void UpdateViewportAndScissor();
 	void UpdateGraphicsPSOs();
 
+	// Will run a compute shader that samples the source and writes to dest.
+	void FullScreenCopyCompute(PixelBuffer& source, D3D12_CPU_DESCRIPTOR_HANDLE sourceSRV, ColorBuffer& dest);
+	void FullScreenCopyCompute(ColorBuffer& source, ColorBuffer& dest);
+
 	ModelInstance& AddModelInstance(std::shared_ptr<Model> modelPtr);
 	void AddShaderDependency(ShaderID shaderID, std::vector<PSOIDType> psoIDs);
 	void RegisterPSO(PSOID psoID, PSO* psoPtr);
@@ -148,6 +165,9 @@ private:
 
 	ComputePSO m_flatlandScenePSO = ComputePSO(L"Compute Flatland Scene");
 	RootSignature m_computeFlatlandSceneRootSig;
+
+	ComputePSO m_fullScreenCopyComputePSO = ComputePSO(L"Full Screen Copy Compute");
+	RootSignature m_fullScreenCopyComputeRootSig;
 
 	ColorBuffer m_flatlandScene = ColorBuffer({ 0.0f, 0.0f, 0.0f, 100000.0f });
 

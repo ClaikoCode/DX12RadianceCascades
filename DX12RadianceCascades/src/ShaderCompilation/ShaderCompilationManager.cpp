@@ -404,6 +404,21 @@ bool ShaderCompilationManager::CompileShaderPackageToBlob(Shader::ShaderCompilat
 	return true;
 }
 
+void ShaderCompilationManager::RegisterComputeShader(UUID64 shaderID, const std::wstring shaderFilename, bool compile)
+{
+	RegisterShader(shaderID, shaderFilename, Shader::ShaderTypeCS, compile);
+}
+
+void ShaderCompilationManager::RegisterVertexShader(UUID64 shaderID, const std::wstring shaderFilename, bool compile)
+{
+	RegisterShader(shaderID, shaderFilename, Shader::ShaderTypeVS, compile);
+}
+
+void ShaderCompilationManager::RegisterPixelShader(UUID64 shaderID, const std::wstring shaderFilename, bool compile)
+{
+	RegisterShader(shaderID, shaderFilename, Shader::ShaderTypePS, compile);
+}
+
 void ShaderCompilationManager::RegisterShader(UUID64 shaderID, const std::wstring shaderFilename, Shader::ShaderType shaderType, bool compile /*= false*/)
 {
 	Shader::ShaderCompilationPackage compPackage = {};

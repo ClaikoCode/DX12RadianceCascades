@@ -82,6 +82,9 @@ public:
     // Returns true if compilation was successful.
     bool CompileShaderPackageToBlob(Shader::ShaderCompilationPackage& shaderCompPackage, IDxcBlob** outBlob);
 
+    void RegisterComputeShader(UUID64 shaderID, const std::wstring shaderFilename, bool compile = false);
+    void RegisterVertexShader(UUID64 shaderID, const std::wstring shaderFilename, bool compile = false);
+    void RegisterPixelShader(UUID64 shaderID, const std::wstring shaderFilename, bool compile = false);
     void RegisterShader(UUID64 shaderID, const std::wstring shaderFilename, Shader::ShaderType shaderType, bool compile = false);
     void RegisterShader(UUID64 shaderID, const Shader::ShaderCompilationPackage& compPackage, bool compile);
     
