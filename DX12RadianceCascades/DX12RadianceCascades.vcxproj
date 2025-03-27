@@ -125,6 +125,12 @@
       <AdditionalDependencies>dxcompiler.lib;dxil.lib;d3d12.lib;dxgi.lib;dxguid.lib;$(OutDir)..\Core-$(Platform)-$(Configuration)\Core.lib;$(OutDir)..\Model-$(Platform)-$(Configuration)\Model.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(SolutionDir)Libs\dxc_2025_02_20\lib\x64\;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
+    <PostBuildEvent>
+      <Command>XCOPY "$(SolutionDir)Assets\" "$(SolutionDir)Run\" /E /Y
+XCOPY "$(SolutionDir)Libs\dxc_2025_02_20\bin\$(Platform)\*.dll" "$(SolutionDir)Run\" /E /Y
+
+</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -149,6 +155,12 @@
       <AdditionalDependencies>dxcompiler.lib;dxil.lib;d3d12.lib;dxgi.lib;$(OutDir)..\Core-$(Platform)-$(Configuration)\Core.lib;$(OutDir)..\Model-$(Platform)-$(Configuration)\Model.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(SolutionDir)Libs\dxc_2025_02_20\lib\x64\;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
+    <PostBuildEvent>
+      <Command>XCOPY "$(SolutionDir)Assets\" "$(SolutionDir)Run\" /E /Y
+XCOPY "$(SolutionDir)Libs\dxc_2025_02_20\bin\$(Platform)\*.dll" "$(SolutionDir)Run\" /E /Y
+
+</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="src\d3dx12.h" />

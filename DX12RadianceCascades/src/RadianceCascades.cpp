@@ -14,6 +14,7 @@
 constexpr size_t MAX_INSTANCES = 256;
 static const std::set<Shader::ShaderType> s_ValidShaderTypes = { Shader::ShaderTypeCS, Shader::ShaderTypeVS, Shader::ShaderTypePS };
 static const DXGI_FORMAT s_flatlandSceneFormat = DXGI_FORMAT_R16G16B16A16_FLOAT;
+static const std::wstring sBackupModelPath = L"models\\Testing\\SphereTest.gltf";
 
 #define CASCADE_INDEX_VIS 0
 #define SAMPLE_LEN_0 5.0f
@@ -128,13 +129,13 @@ void RadianceCascades::InitializeScene()
 {
 	// Setup scene.
 	{
-		ModelInstance& modelInstance = AddModelInstance(Renderer::LoadModel(L"assets\\Sponza\\PBR\\sponza2.gltf", false));
+		ModelInstance& modelInstance = AddModelInstance(Renderer::LoadModel(L"models\\Sponza\\PBR\\sponza2.gltf", false));
 		m_mainSceneModelInstanceIndex = (uint32_t)m_sceneModels.size() - 1;
 		modelInstance.Resize(100.0f * modelInstance.GetRadius());
 	}
 
 	{
-		std::shared_ptr<Model> modelRef = Renderer::LoadModel(L"assets\\Testing\\SphereTest.gltf", false);
+		std::shared_ptr<Model> modelRef = Renderer::LoadModel(L"models\\Testing\\SphereTest.gltf", false);
 		ModelInstance& modelInstance = AddModelInstance(modelRef);
 		modelInstance.Resize(10.0f);
 		modelInstance.GetTransform().SetTranslation(m_sceneModels[m_mainSceneModelInstanceIndex].GetCenter());
@@ -498,6 +499,12 @@ ModelInstance& RadianceCascades::AddModelInstance(std::shared_ptr<Model> modelPt
 {
 	ASSERT(m_sceneModels.size() < MAX_INSTANCES);
 
+	if (modelPtr == nullptr)
+	{
+		modelPtr = Renderer::LoadModel(sBackupModelPath, false);
+		LOG_ERROR(L"Model was invalid. Using backup model instead. If Sponza model is missing, download a Sponza PBR gltf model online.");
+	}
+	
 	m_sceneModels.push_back(ModelInstance(modelPtr));
 	return m_sceneModels.back();
 }
