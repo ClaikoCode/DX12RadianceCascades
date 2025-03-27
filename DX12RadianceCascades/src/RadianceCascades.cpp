@@ -5,6 +5,7 @@
 
 #include "Core\BufferManager.h"
 #include "Core\CommandContext.h"
+#include "Core\GameInput.h"
 
 #include "ShaderCompilation\ShaderCompilationManager.h"
 
@@ -12,6 +13,10 @@
 
 constexpr size_t MAX_INSTANCES = 256;
 static const std::set<Shader::ShaderType> s_ValidShaderTypes = { Shader::ShaderTypeCS, Shader::ShaderTypeVS, Shader::ShaderTypePS };
+static const DXGI_FORMAT s_flatlandSceneFormat = DXGI_FORMAT_R16G16B16A16_FLOAT;
+
+#define CASCADE_INDEX_VIS 0
+#define SAMPLE_LEN_0 5.0f
 
 namespace Math
 {
@@ -106,6 +111,17 @@ void RadianceCascades::RenderScene()
 	RenderSceneImpl(m_camera, m_mainViewport, m_mainScissor);
 	RunComputeFlatlandScene();
 	RunComputeRCGather();
+
+	static uint32_t currentCascadeIndex = 0;
+	for (int i = 0; i < m_rcManager.GetCascadeCount(); i++)
+	{
+		if (GameInput::IsFirstPressed((GameInput::DigitalInput)(i + 1)))
+		{
+			currentCascadeIndex = i;
+		}
+	}
+	FullScreenCopyCompute(m_rcManager.GetCascadeInterval(currentCascadeIndex), Graphics::g_SceneColorBuffer);
+	//FullScreenCopyCompute(m_flatlandScene, Graphics::g_SceneColorBuffer);
 }
 
 void RadianceCascades::InitializeScene()
@@ -141,14 +157,17 @@ void RadianceCascades::InitializeShaders()
 	auto& shaderCompManager = ShaderCompilationManager::Get();
 
 	// Pixel Shaders
-	shaderCompManager.RegisterShader(ShaderIDSceneRenderPS, L"SceneRenderPS.hlsl", Shader::ShaderTypePS, true);
+	shaderCompManager.RegisterPixelShader(ShaderIDSceneRenderPS,		L"SceneRenderPS.hlsl",		true);
+	shaderCompManager.RegisterPixelShader(ShaderIDFullScreenCopyPS,		L"DirectWritePS.hlsl",		true);
 
 	// Vertex Shaders
-	shaderCompManager.RegisterShader(ShaderIDSceneRenderVS, L"SceneRenderVS.hlsl", Shader::ShaderTypeVS, true);
+	shaderCompManager.RegisterVertexShader(ShaderIDSceneRenderVS,		L"SceneRenderVS.hlsl",		true);
+	shaderCompManager.RegisterVertexShader(ShaderIDFullScreenQuadVS,	L"FullScreenQuadVS.hlsl",	true);
 
 	// Compute Shaders
-	shaderCompManager.RegisterShader(ShaderIDRCGatherCS, L"RCGatherCS.hlsl", Shader::ShaderTypeCS, true);
-	shaderCompManager.RegisterShader(ShaderIDFlatlandSceneCS, L"FlatlandSceneCS.hlsl", Shader::ShaderTypeCS, true);
+	shaderCompManager.RegisterComputeShader(ShaderIDRCGatherCS,			L"RCGatherCS.hlsl",			true);
+	shaderCompManager.RegisterComputeShader(ShaderIDFlatlandSceneCS,	L"FlatlandSceneCS.hlsl",	true);
+	shaderCompManager.RegisterComputeShader(ShaderIDFullScreenCopyCS,	L"DirectCopyCS.hlsl",		true);
 }
 
 void RadianceCascades::InitializePSOs()
@@ -161,6 +180,7 @@ void RadianceCascades::InitializePSOs()
 		RegisterPSO(PSOIDSecondExternalPSO, &Renderer::sm_PSOs[11]);
 		RegisterPSO(PSOIDComputeRCGatherPSO, &m_rcGatherPSO);
 		RegisterPSO(PSOIDComputeFlatlandScenePSO, &m_flatlandScenePSO);
+		RegisterPSO(PSOIDFullScreenCopyComputePSO, &m_fullScreenCopyComputePSO);
 	}
 
 	// Bind shader ids to specific PSOs for recompilation purposes.
@@ -171,9 +191,9 @@ void RadianceCascades::InitializePSOs()
 		AddShaderDependency(ShaderIDSceneRenderVS, externalPSOs);
 
 		// Internal PSO dependencies.
-		AddShaderDependency(ShaderIDTestCS, { PSOIDComputeTestPSO });
 		AddShaderDependency(ShaderIDRCGatherCS, { PSOIDComputeRCGatherPSO });
 		AddShaderDependency(ShaderIDFlatlandSceneCS, { PSOIDComputeFlatlandScenePSO });
+		AddShaderDependency(ShaderIDFullScreenCopyCS, { PSOIDFullScreenCopyComputePSO });
 	}
 
 	{
@@ -181,13 +201,39 @@ void RadianceCascades::InitializePSOs()
 		pso.SetComputeShader(compManager.GetShaderByteCode(ShaderIDRCGatherCS));
 
 		RootSignature& rootSig = m_computeGatherRootSig;
-		rootSig.Reset(RootEntryRCGatherCount, 0);
+		rootSig.Reset(RootEntryRCGatherCount, 1);
 		rootSig[RootEntryRCGatherGlobals].InitAsConstantBuffer(0);
 		rootSig[RootEntryRCGatherCascadeInfo].InitAsConstantBuffer(1);
 		rootSig[RootEntryRCGatherCascadeUAV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 1);
 		rootSig[RootEntryRCGatherSceneSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 0, 1);
-		rootSig[RootEntryRCGatherSceneSampler].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER, 0, 1);
+
+		{
+			SamplerDesc defaultSampler;
+			rootSig.InitStaticSampler(0, defaultSampler);
+		}
+
 		rootSig.Finalize(L"Compute RC Gather");
+
+		pso.SetRootSignature(rootSig);
+		pso.Finalize();
+	}
+
+	{
+		ComputePSO& pso = m_fullScreenCopyComputePSO;
+		pso.SetComputeShader(compManager.GetShaderByteCode(ShaderIDFullScreenCopyCS));
+
+		RootSignature& rootSig = m_fullScreenCopyComputeRootSig;
+		rootSig.Reset(RootEntryFullScreenCopyComputeCount, 1);
+		rootSig[RootEntryFullScreenCopyComputeSource].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 0, 1);
+		rootSig[RootEntryFullScreenCopyComputeDest].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 1);
+		rootSig[RootEntryFullScreenCopyComputeDestInfo].InitAsConstants(0, 2);
+
+		{
+			SamplerDesc sampler = Graphics::SamplerPointClampDesc;
+			rootSig.InitStaticSampler(0, sampler);
+		}
+
+		rootSig.Finalize(L"Compute Full Screen Copy");
 
 		pso.SetRootSignature(rootSig);
 		pso.Finalize();
@@ -210,10 +256,10 @@ void RadianceCascades::InitializePSOs()
 
 void RadianceCascades::InitializeRCResources()
 {
-	m_flatlandScene.Create(L"Flatland Scene", ::GetSceneColorWidth(), ::GetSceneColorHeight(), 1, DXGI_FORMAT_R16G16B16A16_FLOAT);
+	m_flatlandScene.Create(L"Flatland Scene", ::GetSceneColorWidth(), ::GetSceneColorHeight(), 1, s_flatlandSceneFormat);
 
 	float diag = Math::Length({ (float)::GetSceneColorWidth(), (float)::GetSceneColorHeight(), 0.0f });
-	m_rcManager.Init(50.0f, diag);
+	m_rcManager.Init(SAMPLE_LEN_0, diag);
 }
 
 void RadianceCascades::RenderSceneImpl(Camera& camera, D3D12_VIEWPORT viewPort, D3D12_RECT scissor)
@@ -301,10 +347,8 @@ void RadianceCascades::RunComputeFlatlandScene()
 
 void RadianceCascades::RunComputeRCGather()
 {
-	ColorBuffer& tempTarget = Graphics::g_SceneColorBuffer;
-	RCGlobals rcGlobals = m_rcManager.FillRCGlobalsData(tempTarget.GetWidth(), tempTarget.GetHeight());
-
 	ColorBuffer& sceneBuffer = m_flatlandScene;
+	RCGlobals rcGlobals = m_rcManager.FillRCGlobalsData(sceneBuffer.GetWidth(), sceneBuffer.GetHeight());
 
 	ComputeContext& cmptContext = ComputeContext::Begin(L"RC Gather Compute");
 
@@ -312,9 +356,6 @@ void RadianceCascades::RunComputeRCGather()
 	cmptContext.SetPipelineState(m_rcGatherPSO);
 
 	cmptContext.SetDynamicConstantBufferView(RootEntryRCGatherGlobals, sizeof(rcGlobals), &rcGlobals);
-
-	cmptContext.TransitionResource(tempTarget, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-	cmptContext.SetDynamicDescriptor(RootEntryRCGatherCascadeUAV, 0, tempTarget.GetUAV());
 
 	cmptContext.TransitionResource(sceneBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 	cmptContext.SetDynamicDescriptor(RootEntryRCGatherSceneSRV, 0, sceneBuffer.GetSRV());
@@ -330,8 +371,7 @@ void RadianceCascades::RunComputeRCGather()
 
 		cmptContext.TransitionResource(target, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 		cmptContext.ClearUAV(target);
-
-		// TODO: Bind target.
+		cmptContext.SetDynamicDescriptor(RootEntryRCGatherCascadeUAV, 0, target.GetUAV());
 
 		cmptContext.Dispatch2D(target.GetWidth(), target.GetHeight(), 16, 16);
 	}
@@ -427,6 +467,33 @@ void RadianceCascades::UpdateGraphicsPSOs()
 	}
 }
 
+void RadianceCascades::FullScreenCopyCompute(PixelBuffer& source, D3D12_CPU_DESCRIPTOR_HANDLE sourceSRV, ColorBuffer& dest)
+{
+	uint32_t destWidth = dest.GetWidth();
+	uint32_t destHeight = dest.GetHeight();
+
+	ComputeContext& cmptContext = ComputeContext::Begin(L"Full Screen Copy Compute");
+
+	cmptContext.TransitionResource(dest, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+	cmptContext.InsertUAVBarrier(source);
+	cmptContext.TransitionResource(source, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+	cmptContext.SetPipelineState(m_fullScreenCopyComputePSO);
+	cmptContext.SetRootSignature(m_fullScreenCopyComputeRootSig);
+
+	cmptContext.SetConstants(RootEntryFullScreenCopyComputeDestInfo, destWidth, destHeight);
+	cmptContext.SetDynamicDescriptor(RootEntryFullScreenCopyComputeDest, 0, dest.GetUAV());
+	cmptContext.SetDynamicDescriptor(RootEntryFullScreenCopyComputeSource, 0, sourceSRV);
+
+	cmptContext.Dispatch2D(destWidth, destHeight);
+	cmptContext.Finish(true);
+}
+
+void RadianceCascades::FullScreenCopyCompute(ColorBuffer& source, ColorBuffer& dest)
+{
+	FullScreenCopyCompute(source, source.GetSRV(), dest);
+}
+
 ModelInstance& RadianceCascades::AddModelInstance(std::shared_ptr<Model> modelPtr)
 {
 	ASSERT(m_sceneModels.size() < MAX_INSTANCES);
@@ -514,6 +581,7 @@ RCGlobals RadianceCascadesManager::FillRCGlobalsData(uint32_t scenePixelWidth, u
 	RCGlobals rcGlobals = {};
 	rcGlobals.probeDim0 = probeDim0;
 	rcGlobals.rayLength0 = rayLength0;
+	rcGlobals.probeSpacing0 = GetProbeSpacing(0);
 	rcGlobals.probeScalingFactor = scalingFactor.probeScalingFactor;
 	rcGlobals.rayScalingFactor = scalingFactor.rayScalingFactor;
 	rcGlobals.scenePixelWidth = scenePixelWidth;
@@ -530,4 +598,10 @@ uint32_t RadianceCascadesManager::GetProbePixelSize(uint32_t cascadeIndex)
 uint32_t RadianceCascadesManager::GetProbeCount(uint32_t cascadeIndex)
 {
 	return (uint32_t)(probeDim0 / Math::Pow(scalingFactor.probeScalingFactor, (float)cascadeIndex));
+}
+
+float RadianceCascadesManager::GetProbeSpacing(uint32_t cascadeIndex)
+{
+	float probeSpacing0 = GetCascadeInterval(0).GetWidth() / (float)(GetProbeCount(0));
+	return probeSpacing0 * Math::Pow(scalingFactor.probeScalingFactor, (float)cascadeIndex);
 }
