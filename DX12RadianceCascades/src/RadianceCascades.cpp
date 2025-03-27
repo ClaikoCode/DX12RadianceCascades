@@ -113,16 +113,28 @@ void RadianceCascades::RenderScene()
 	RunComputeFlatlandScene();
 	RunComputeRCGather();
 
-	static uint32_t currentCascadeIndex = 0;
+	static int currentCascadeVisIndex = -1;
 	for (int i = 0; i < m_rcManager.GetCascadeCount(); i++)
 	{
 		if (GameInput::IsFirstPressed((GameInput::DigitalInput)(i + 1)))
 		{
-			currentCascadeIndex = i;
+			currentCascadeVisIndex = i;
 		}
 	}
-	FullScreenCopyCompute(m_rcManager.GetCascadeInterval(currentCascadeIndex), Graphics::g_SceneColorBuffer);
-	//FullScreenCopyCompute(m_flatlandScene, Graphics::g_SceneColorBuffer);
+	
+	if (GameInput::IsFirstPressed(GameInput::kKey_0))
+	{
+		currentCascadeVisIndex = -1;
+	}
+
+	if (currentCascadeVisIndex != -1)
+	{
+		FullScreenCopyCompute(m_rcManager.GetCascadeInterval(currentCascadeVisIndex), Graphics::g_SceneColorBuffer);
+	}
+	else
+	{
+		FullScreenCopyCompute(m_flatlandScene, Graphics::g_SceneColorBuffer);
+	}
 }
 
 void RadianceCascades::InitializeScene()
