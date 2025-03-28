@@ -1,6 +1,7 @@
 #pragma once
 
 #include "DirectoryWatcher.h"
+#include <unordered_set>
 
 namespace Shader
 {
@@ -54,6 +55,9 @@ namespace Shader
         // Holds macro defines inserted into the shader.
         // NOTE: Null terminator for these will be added automatically.
         std::vector<DxcDefine> defines = {};
+
+		// Files that are included in the shader. Is overwritten every compilation.
+		std::unordered_set<std::wstring> includeFiles = {};
     };
 
     struct ShaderData
@@ -102,20 +106,21 @@ private:
     ShaderCompilationManager(); // Private constructor
     ~ShaderCompilationManager() {}; // Private destructor
 
-    void InitializeShaderIncludes();
 
     Shader::ShaderData* GetShaderData(UUID64 shaderID);
+	void AddShaderDependency(const std::wstring& shaderFilename, UUID64 shaderID);
     std::set<UUID64>* GetShaderDependencies(const std::wstring& shaderFilename);
 
 private:
     Microsoft::WRL::ComPtr<IDxcLibrary> m_library;
     Microsoft::WRL::ComPtr<IDxcCompiler3> m_compiler;
-    Microsoft::WRL::ComPtr<IDxcIncludeHandler> m_includeHandler;
+    Microsoft::WRL::ComPtr<IDxcUtils> m_utils;
 
     // Maps unique shader ids to shader compilation objects.
     std::unordered_map<UUID64, Shader::ShaderData> m_shaderDataMap;
 
     // Maps shader filename (not path) to shader compilation objects that are dependent on it.
+    // (maybe)TODO: Add capability to use path so that files with the same filename but in different dirs can be used.
     std::unordered_map<std::wstring, std::set<UUID64>> m_shaderDependencyMap;
 
     // New IDs are added every time compilation of a shader is successful. Needs to be cleared manually.
