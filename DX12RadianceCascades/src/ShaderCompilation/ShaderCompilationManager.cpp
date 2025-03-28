@@ -6,6 +6,7 @@
 using namespace Microsoft::WRL;
 
 static const std::wstring c_ShaderFolder = L"shaders\\";
+static const std::wstring c_IncludeDir = c_ShaderFolder;
 
 typedef std::vector<std::wstring> ShaderCompilationArgs;
 
@@ -208,6 +209,12 @@ void AddArgOptimizationLevel(ShaderCompilationArgs& compArgs, uint16_t level)
 	AddCompArg(compArgs, std::wstring(L"-O") + std::to_wstring(level));
 }
 
+void AddArgIncludeDirectory(ShaderCompilationArgs& compArgs, const std::wstring& includeDir)
+{
+	AddCompArg(compArgs, L"-I");
+	AddCompArg(compArgs, includeDir);
+}
+
 ShaderCompilationArgs BuildArgsFromShaderPackage(const Shader::ShaderCompilationPackage& compPackage)
 {
 	ShaderCompilationArgs args = {};
@@ -215,10 +222,11 @@ ShaderCompilationArgs BuildArgsFromShaderPackage(const Shader::ShaderCompilation
 	AddArgFilename(args, compPackage.shaderFilename);
 	AddArgEntryPoint(args, compPackage.entryPoint);
 	AddArgShaderModel(args, compPackage.shaderModel, compPackage.shaderType);
-
+	AddArgIncludeDirectory(args, c_IncludeDir);
+	
 #if defined(_DEBUG)
 	AddArgDebugInfo(args);
-	AddArgEmbedDebug(args); // Important for Nsight Graphics to get the most info possible without separate PDBs.
+	AddArgEmbedDebug(args); // Important for graphics debugger to get the most info possible without separate PDBs.
 	AddArgOptimizationLevel(args, 0);
 #else
 	AddArgOptimizationLevel(args, 3);
@@ -278,6 +286,7 @@ ShaderCompilationManager::ShaderCompilationManager() :
 void ShaderCompilationManager::InitializeShaderIncludes()
 {
 	::AddToIncludeManager(m_includeHandler, L"Common.hlsli");
+	::AddToIncludeManager(m_includeHandler, L"RCCommon.hlsli");
 }
 
 Shader::ShaderData* ShaderCompilationManager::GetShaderData(UUID64 shaderID)

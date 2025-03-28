@@ -12,7 +12,7 @@
 //             Alex Nankervis
 // Modified by: Jonathan Dell'Ova
 
-#include "shaders\Common.hlsli"
+#include "Common.hlsli"
 
 
 cbuffer MeshConstants : register(b0)

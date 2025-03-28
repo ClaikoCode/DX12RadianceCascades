@@ -46,6 +46,7 @@ __declspec(align(16)) struct RCGlobals
 	uint32_t probeScalingFactor;
 	uint32_t rayScalingFactor;
 	uint32_t probeDim0;
+	uint32_t rayCount0;
 	float rayLength0;
 	float probeSpacing0;
 	uint32_t scenePixelWidth;
@@ -55,7 +56,7 @@ __declspec(align(16)) struct RCGlobals
 class RadianceCascadesManager
 {
 public:
-	static const uint32_t s_RaysPerProbe0 = 4u; // Always 4 rays per base probe.
+	static const uint32_t s_RaysPerProbe0 = 4u; // TODO: Move this to member variable.
 
 public:
 	RadianceCascadesManager() : probeDim0(0), rayLength0(0.0f) {};
