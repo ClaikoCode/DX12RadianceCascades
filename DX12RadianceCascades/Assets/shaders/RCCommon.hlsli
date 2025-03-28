@@ -16,9 +16,8 @@ struct CascadeInfo
     uint cascadeIndex;
 };
 
-#define RAYS_PER_PROBE(cascadeIndex, scalingFactor, rayCount0) rayCount0 * pow(scalingFactor, cascadeIndex)
-#define PROBES_PER_DIM(cascadeIndex, scalingFactor, probeDim0) probeDim0 / pow(scalingFactor, cascadeIndex)
-#define DIRECTION_SPACE_BIAS(dims) float3(1.0f / ((float)dims.x / dims.y), 1.0f, 1.0f) // TODO: Figure out why this is needed.
+#define RAYS_PER_PROBE(cascadeIndex, scalingFactor, rayCount0) (rayCount0 * pow(scalingFactor, cascadeIndex))
+#define PROBES_PER_DIM(cascadeIndex, scalingFactor, probeDim0) (probeDim0 / pow(scalingFactor, cascadeIndex))
 
 #define THIS_PROBES_PER_DIM(cascadeIndex) PROBES_PER_DIM(cascadeIndex, globals.probeScalingFactor, globals.probeDim0)
 #define THIS_RAYS_PER_PROBE(cascadeIndex) RAYS_PER_PROBE(cascadeIndex, globals.rayScalingFactor, globals.rayCount0)

@@ -38,7 +38,8 @@ float4 RayMarch(float2 origin, float2 direction, float range, float2 texelSize)
 void main(uint3 DTid : SV_DispatchThreadID)
 {
     uint2 pixelPos = DTid.xy;
-    float2 relative = float2(pixelPos) / CASCADE_SIDE_LENGTH(cascadeInfo.cascadeIndex);
+    float sideLen = CASCADE_SIDE_LENGTH(cascadeInfo.cascadeIndex);
+    float2 relative = float2(pixelPos) / sideLen;
 
     if (!OUT_OF_BOUNDS_RELATIVE(relative))
     {
