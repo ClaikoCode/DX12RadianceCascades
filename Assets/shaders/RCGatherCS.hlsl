@@ -1,18 +1,10 @@
+#include "Common.hlsli"
 #include "RCCommon.hlsli"
 
 RWTexture2D<float4> target : register(u0);
 Texture2D<float4> sceneColor : register(t0);
 
 SamplerState sceneSampler : register(s0);
-
-static const float MATH_PI = 3.1415926535897932384f;
-static const float MATH_TAU = MATH_PI * 2.0f;
-
-// Calculates: a + ar^2 + ar^3 + ... + ar^(n - 1)
-float GeometricSeriesSum(float a, float r, float n)
-{
-    return a * (1.0f - pow(r, n)) / (1.0f - r);
-}
 
 float4 RayMarch(float2 origin, float2 direction, float range, float2 texelSize)
 {

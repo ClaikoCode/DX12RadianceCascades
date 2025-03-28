@@ -1,6 +1,6 @@
 #pragma once
 
-struct Globals
+struct RCGlobals
 {
     uint probeScalingFactor; // Per dim.
     uint rayScalingFactor;
@@ -27,11 +27,15 @@ struct CascadeInfo
 
 #define IS_OUT_OF_BOUNDS_RELATIVE(relPos) (relPos.x >= 1.0f || relPos.x < 0.0f || relPos.y >= 1.0f || relPos.x < 0.0f)
 
-#define EPSILON 1.0e-10
-
 // Remember to use these for the visibility term. They are reversed to normal intuition.
 #define OPAQUE 0.0f // (hit)
 #define TRANSPARENT 1.0f // (miss)
 
-ConstantBuffer<Globals> globals : register(b0);
+ConstantBuffer<RCGlobals> globals : register(b0);
 ConstantBuffer<CascadeInfo> cascadeInfo : register(b1);
+
+// Calculates: a + ar^2 + ar^3 + ... + ar^(n - 1)
+float GeometricSeriesSum(float a, float r, float n)
+{
+    return a * (1.0f - pow(r, n)) / (1.0f - r);
+}
