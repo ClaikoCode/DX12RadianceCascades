@@ -14,34 +14,6 @@ float GeometricSeriesSum(float a, float r, float n)
     return a * (1.0f - pow(r, n)) / (1.0f - r);
 }
 
-float4 RayMarch(float2 origin, float2 direction, float range, float2 texelSize)
-{
-    int iterationCount = 0;
-    float distanceTraveled = 0.0f;
-    for (int i = 0; i < 100; i++)
-    {
-        float2 samplingPoint = origin + direction * min(distanceTraveled, range) * texelSize;
-        if (IS_OUT_OF_BOUNDS_RELATIVE(samplingPoint))
-        {
-            return float4(0.0f, 0.0f, 0.0f, TRANSPARENT);
-        }
-        
-        float4 sceneSample = sceneColor.SampleLevel(sceneSampler, samplingPoint, 0);
-        float3 sceneColor = sceneSample.rgb;
-        float sdfDistance = sceneSample.a;
-        
-        if (sdfDistance <= EPSILON)
-        {
-            return float4(sceneColor.rgb, OPAQUE);
-        }
-        
-        distanceTraveled += sdfDistance;
-        iterationCount++;
-    }
-    
-    return float4(0.0f, 0.0f, 0.0f, TRANSPARENT);
-}
-
 struct ProbeInfo
 {
     float rayCount;
@@ -76,14 +48,6 @@ void main(uint3 DTid : SV_DispatchThreadID)
         probeInfo.range += sign(cascadeInfo.cascadeIndex) * length(float2(d, d));
         probeInfo.texelSize = 1.0f / (probesPerDim * cascadeInfo.probePixelSize);
         
-        {
-            float2 probeOrigin = (float2(probeInfo.probeIndex) + 0.5f) * probeInfo.probeSpacing * probeInfo.texelSize;
-            float angle = MATH_TAU * (probeInfo.rayIndex + 0.5f) / probeInfo.rayCount;
-            float2 direction = float2(cos(angle), -sin(angle));
-            float2 rayOrigin = probeOrigin + (direction * probeInfo.startDistance * probeInfo.texelSize);
-
-            float4 retColor = RayMarch(rayOrigin, direction, probeInfo.range, probeInfo.texelSize);
-            target[pixelPos] = retColor;
-        }
+       
     }
 }

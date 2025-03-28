@@ -11,7 +11,7 @@
 // Author(s):	James Stanard
 // Modified by: Jonathan Dell'Ova
 
-#include "shaders\Common.hlsli"
+#include "Common.hlsli"
 
 Texture2D<float4> baseColorTexture : register(t0);
 Texture2D<float3> metallicRoughnessTexture : register(t1);

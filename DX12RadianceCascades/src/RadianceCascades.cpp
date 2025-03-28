@@ -599,6 +599,7 @@ RCGlobals RadianceCascadesManager::FillRCGlobalsData(uint32_t scenePixelWidth, u
 {
 	RCGlobals rcGlobals = {};
 	rcGlobals.probeDim0 = probeDim0;
+	rcGlobals.rayCount0 = s_RaysPerProbe0;
 	rcGlobals.rayLength0 = rayLength0;
 	rcGlobals.probeSpacing0 = GetProbeSpacing(0);
 	rcGlobals.probeScalingFactor = scalingFactor.probeScalingFactor;
