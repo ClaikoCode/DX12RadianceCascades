@@ -57,6 +57,7 @@ typedef uint64_t UUID64;
 constexpr UUID64 NULL_ID = UINT64_MAX;
 
 #include "Logger.h"
+#include "Utils.h"
 
 // Ineficient but has to do for now.
 static inline void ThrowIfFailed(HRESULT hr, std::wstring message = L"")
