@@ -1,11 +1,17 @@
 #include "rcpch.h"
 
 #include <locale> // For wstring convert
+
 #include "ShaderCompilationManager.h"
 
 using namespace Microsoft::WRL;
 
+#if defined(_DEBUG)
+static const std::wstring c_ShaderFolder = L"..\\DX12RadianceCascades\\Assets\\shaders\\";
+#else
 static const std::wstring c_ShaderFolder = L"shaders\\";
+#endif
+
 static const std::wstring c_IncludeDir = c_ShaderFolder;
 
 typedef std::vector<std::wstring> ShaderCompilationArgs;
@@ -131,6 +137,52 @@ namespace
 #endif
 	}
 }
+
+// Saves all the filenames of included files.
+class DependencyTrackingIncludeHandler : public IDxcIncludeHandler {
+
+public:
+	DependencyTrackingIncludeHandler(IDxcUtils* pUtils) 
+	{
+		pUtils->CreateDefaultIncludeHandler(&m_defaultIncludeHandler);
+	}
+
+	// IDxcIncludeHandler implementation
+	HRESULT STDMETHODCALLTYPE LoadSource(_In_z_ LPCWSTR pFilename, _COM_Outptr_result_maybenull_ IDxcBlob** ppIncludeSource) override 
+	{
+		std::wstring filename = pFilename;
+
+		// Remove the first three characters from filename (".\\")
+		if (filename.size() > 2)
+		{
+			filename = filename.substr(2);
+		}
+
+		// Add to our tracking set
+		m_includedFiles.insert(filename);
+
+		// Delegate to the default handler
+		return m_defaultIncludeHandler->LoadSource(filename.c_str(), ppIncludeSource);
+	}
+
+	const std::unordered_set<std::wstring>& GetIncludedFiles() const 
+	{
+		return m_includedFiles;
+	}
+
+	// IUnknown implementation
+	ULONG STDMETHODCALLTYPE AddRef() override { return 0; }
+	ULONG STDMETHODCALLTYPE Release() override { return 0; }
+	HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** ppvObject) override { return E_NOINTERFACE; }
+
+private:
+
+	// The default include handler to delegate actual file loading
+	ComPtr<IDxcIncludeHandler> m_defaultIncludeHandler;
+
+	// Set of included files for the current compilation
+	std::unordered_set<std::wstring> m_includedFiles;
+};
 
 std::wstring ShaderModelArg(Shader::ShaderModel shaderModel, Shader::ShaderType shaderType)
 {
@@ -275,18 +327,11 @@ ShaderCompilationManager::ShaderCompilationManager() :
 {
 	ThrowIfFailed(DxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(m_library.GetAddressOf())), L"Could not create library instance");
 	ThrowIfFailed(DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(m_compiler.GetAddressOf())), L"Could not create compiler instance");
-	ThrowIfFailed(m_library->CreateIncludeHandler(m_includeHandler.GetAddressOf()), L"Could not create include handler");
+	ThrowIfFailed(DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(m_utils.GetAddressOf())), L"Could not create utils instance");
 
 	m_shaderDirWatcher.AddExtensionFilter(".hlsl");
+	m_shaderDirWatcher.AddExtensionFilter(".hlsli");
 	m_shaderDirWatcher.Start();
-
-	InitializeShaderIncludes();
-}
-
-void ShaderCompilationManager::InitializeShaderIncludes()
-{
-	::AddToIncludeManager(m_includeHandler, L"Common.hlsli");
-	::AddToIncludeManager(m_includeHandler, L"RCCommon.hlsli");
 }
 
 Shader::ShaderData* ShaderCompilationManager::GetShaderData(UUID64 shaderID)
@@ -304,6 +349,12 @@ Shader::ShaderData* ShaderCompilationManager::GetShaderData(UUID64 shaderID)
 	}
 
 	return shaderData;
+}
+
+void ShaderCompilationManager::AddShaderDependency(const std::wstring& shaderFilename, UUID64 shaderID)
+{
+	std::set<UUID64>& dependencies = m_shaderDependencyMap[shaderFilename];
+	dependencies.insert(shaderID);
 }
 
 std::set<UUID64>* ShaderCompilationManager::GetShaderDependencies(const std::wstring& shaderFilename)
@@ -330,6 +381,16 @@ void ShaderCompilationManager::CompileShader(UUID64 shaderID)
 	{
 		if (CompileShaderPackageToBlob(shaderData->shaderCompPackage, shaderData->shaderBlob.GetAddressOf()))
 		{
+			// Add include files to dependency map.
+			/*
+				TODO: 
+				Add the capability to see if the same include files are used.If not, dependencies need to be removed for the files that are no longer used.
+			*/
+			for (const std::wstring& includeFile : shaderData->shaderCompPackage.includeFiles)
+			{
+				AddShaderDependency(includeFile, shaderID);
+			}
+
 			AddRecentCompilation(shaderID);
 		}
 	}	
@@ -373,6 +434,8 @@ bool ShaderCompilationManager::CompileShaderPackageToBlob(Shader::ShaderCompilat
 		ThrowIfFailed(m_library->CreateBlobFromFile(shaderPath.c_str(), nullptr, source.GetAddressOf()));
 		comDxcBuffer = BlobEncodingToBuffer(source);
 	}
+
+	DependencyTrackingIncludeHandler includeHandler = DependencyTrackingIncludeHandler(m_utils.Get());
 	
 	ComPtr<IDxcOperationResult> compResult = nullptr;
 	{
@@ -381,7 +444,7 @@ bool ShaderCompilationManager::CompileShaderPackageToBlob(Shader::ShaderCompilat
 			&comDxcBuffer.dxcBuffer,
 			(LPCWSTR*)argPtrs.data(),
 			(UINT32)argPtrs.size(),
-			m_includeHandler.Get(),
+			&includeHandler,
 			IID_PPV_ARGS(compResult.GetAddressOf())
 		));
 	}
@@ -403,7 +466,11 @@ bool ShaderCompilationManager::CompileShaderPackageToBlob(Shader::ShaderCompilat
 
 	if(SUCCEEDED(status))
 	{
+		// Write result to out blob.
 		compResult->GetResult(outBlob);
+
+		// Overwrite any previous include files.
+		shaderCompPackage.includeFiles = includeHandler.GetIncludedFiles();
 
 #if defined(_DEBUG)
 		LOG_DEBUG(L"Sucessfully compiled '{}'.", ::BuildShaderPath(shaderCompPackage.shaderFilename));
@@ -459,7 +526,7 @@ void ShaderCompilationManager::RegisterShader(UUID64 shaderID, const Shader::Sha
 
 	{
 		const std::wstring& shaderFilename = compPackage.shaderFilename;
-		m_shaderDependencyMap[shaderFilename].insert(shaderID);
+		AddShaderDependency(shaderFilename, shaderID);
 	}
 	
 	if (compile)
