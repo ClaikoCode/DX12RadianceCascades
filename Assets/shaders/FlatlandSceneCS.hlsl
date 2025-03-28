@@ -1,4 +1,4 @@
-#define OUT_OF_BOUNDS(pos, bounds) (pos.x >= bounds.x || pos.x < 0 || pos.y >= bounds.y || pos.y < 0) 
+#include "Common.hlsli"
 
 struct SceneInfo
 {
