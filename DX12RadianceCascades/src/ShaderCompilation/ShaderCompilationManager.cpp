@@ -1,7 +1,5 @@
 #include "rcpch.h"
 
-#include <locale> // For wstring convert
-
 #include "ShaderCompilationManager.h"
 
 using namespace Microsoft::WRL;
@@ -18,53 +16,6 @@ typedef std::vector<std::wstring> ShaderCompilationArgs;
 
 static std::mutex s_shaderCompMutex;
 #define MUTEX_LOCK() std::lock_guard<std::mutex> guard(s_shaderCompMutex)
-
-namespace Utils
-{
-	// These conversion functions were written by AI, not by me.
-
-	std::string WstringToString(const std::wstring& wstr) {
-		// Initialize the converter for the current locale
-		const std::codecvt<wchar_t, char, std::mbstate_t>& codecvt =
-			std::use_facet<std::codecvt<wchar_t, char, std::mbstate_t>>(std::locale());
-
-		std::mbstate_t state = std::mbstate_t();
-		std::string result(wstr.size() * codecvt.max_length(), '\0');
-
-		const wchar_t* from_next;
-		char* to_next;
-
-		// Perform the conversion
-		codecvt.out(state,
-			wstr.data(), wstr.data() + wstr.size(), from_next,
-			result.data(), result.data() + result.size(), to_next);
-
-		// Resize the result to the actual converted size
-		result.resize(to_next - result.data());
-		return result;
-	}
-
-	std::wstring StringToWstring(const std::string& str) {
-		// Initialize the converter for the current locale
-		const std::codecvt<wchar_t, char, std::mbstate_t>& codecvt =
-			std::use_facet<std::codecvt<wchar_t, char, std::mbstate_t>>(std::locale());
-
-		std::mbstate_t state = std::mbstate_t();
-		std::wstring result(str.size(), L'\0');
-
-		const char* from_next;
-		wchar_t* to_next;
-
-		// Perform the conversion
-		codecvt.in(state,
-			str.data(), str.data() + str.size(), from_next,
-			result.data(), result.data() + result.size(), to_next);
-
-		// Resize the result to the actual converted size
-		result.resize(to_next - result.data());
-		return result;
-	}
-}
 
 namespace
 {
