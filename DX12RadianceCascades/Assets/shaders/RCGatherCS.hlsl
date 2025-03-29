@@ -8,27 +8,51 @@ SamplerState sceneSampler : register(s0);
 
 float4 RayMarch(float2 origin, float2 direction, float range, float2 texelSize)
 {
-    int iterationCount = 0;
     float distanceTraveled = 0.0f;
-    for (int i = 0; i < 100; i++)
+    if(false)
     {
-        float2 samplingPoint = origin + direction * min(distanceTraveled, range) * texelSize;
-        if (OUT_OF_BOUNDS_RELATIVE(samplingPoint))
+        for (int i = 0; i < 100; i++)
         {
-            return float4(0.0f, 0.0f, 0.0f, TRANSPARENT);
+            float2 samplingPoint = origin + direction * min(distanceTraveled, range) * texelSize;
+            if (OUT_OF_BOUNDS_RELATIVE(samplingPoint))
+            {
+                return float4(0.0f, 0.0f, 0.0f, TRANSPARENT);
+            }
+        
+            float4 sceneSample = sceneColor.SampleLevel(sceneSampler, samplingPoint, 0);
+            float3 sceneColor = sceneSample.rgb;
+            float sdfDistance = sceneSample.a;
+        
+            if (sdfDistance <= EPSILON)
+            {
+                return float4(sceneColor.rgb, OPAQUE);
+            }
+        
+            distanceTraveled += sdfDistance;
         }
-        
-        float4 sceneSample = sceneColor.SampleLevel(sceneSampler, samplingPoint, 0);
-        float3 sceneColor = sceneSample.rgb;
-        float sdfDistance = sceneSample.a;
-        
-        if (sdfDistance <= EPSILON)
+    }
+    else
+    {
+        float2 rt = range * texelSize;
+        for (float i = 0.0f; i < range; i++)
         {
-            return float4(sceneColor.rgb, OPAQUE);
-        }
+            float2 ray = origin + direction * min(distanceTraveled, rt);
+            float4 sceneSample = sceneColor.SampleLevel(sceneSampler, ray, 0);
+            float3 sceneColor = sceneSample.rgb;
+            float sdfDistance = sceneSample.a;
         
-        distanceTraveled += sdfDistance;
-        iterationCount++;
+            distanceTraveled += sdfDistance;
+        
+            if (distanceTraveled >= length(rt) || OUT_OF_BOUNDS_RELATIVE(ray))
+            {
+                break;
+            }
+        
+            if (sdfDistance <= EPSILON)
+            {
+                return float4(sceneColor.rgb, OPAQUE);
+            }
+        }
     }
     
     return float4(0.0f, 0.0f, 0.0f, TRANSPARENT);

@@ -82,5 +82,6 @@
     <FxCompile Include="Assets\shaders\RCMergeCS.hlsl" />
     <FxCompile Include="Assets\shaders\SceneRenderPS.hlsl" />
     <FxCompile Include="Assets\shaders\SceneRenderVS.hlsl" />
+    <FxCompile Include="Assets\shaders\RCRadianceFieldCS.hlsl" />
   </ItemGroup>
 </Project>

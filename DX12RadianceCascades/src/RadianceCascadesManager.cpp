@@ -1,5 +1,6 @@
 #include "rcpch.h"
 #include "Core\ColorBuffer.h"
+#include "Core\CommandContext.h"
 #include "RadianceCascadesManager.h"
 
 RadianceCascadesManager::~RadianceCascadesManager()
@@ -43,6 +44,8 @@ void RadianceCascadesManager::Init(float _rayLength0, float _maxRayLength)
 	// Set internal variables.
 	rayLength0 = _rayLength0;
 	probeDim0 = probeCountPerDim0;
+
+	m_radianceField.Create(L"Radiance Field", probeDim0, probeDim0, 1, DXGI_FORMAT_R16G16B16A16_FLOAT);
 }
 
 void RadianceCascadesManager::Shutdown()
@@ -51,19 +54,11 @@ void RadianceCascadesManager::Shutdown()
 	{
 		cascadeInterval.Destroy();
 	}
+
+	m_radianceField.Destroy();
 }
 
-ColorBuffer& RadianceCascadesManager::GetCascadeInterval(uint32_t cascadeIndex)
-{
-	return m_cascadeIntervals[cascadeIndex];
-}
-
-uint32_t RadianceCascadesManager::GetCascadeCount()
-{
-	return (uint32_t)m_cascadeIntervals.size();
-}
-
-RCGlobals RadianceCascadesManager::FillRCGlobalsData(uint32_t scenePixelWidth, uint32_t scenePixelHeight)
+RCGlobals RadianceCascadesManager::FillRCGlobalsData()
 {
 	RCGlobals rcGlobals = {};
 	rcGlobals.probeDim0 = probeDim0;
@@ -72,8 +67,6 @@ RCGlobals RadianceCascadesManager::FillRCGlobalsData(uint32_t scenePixelWidth, u
 	rcGlobals.probeSpacing0 = GetProbeSpacing(0);
 	rcGlobals.probeScalingFactor = scalingFactor.probeScalingFactor;
 	rcGlobals.rayScalingFactor = scalingFactor.rayScalingFactor;
-	rcGlobals.scenePixelWidth = scenePixelWidth;
-	rcGlobals.scenePixelHeight = scenePixelHeight;
 
 	return rcGlobals;
 }
@@ -92,4 +85,16 @@ float RadianceCascadesManager::GetProbeSpacing(uint32_t cascadeIndex)
 {
 	float probeSpacing0 = GetCascadeInterval(0).GetWidth() / (float)(GetProbeCount(0));
 	return probeSpacing0 * Math::Pow(scalingFactor.probeScalingFactor, (float)cascadeIndex);
+}
+
+void RadianceCascadesManager::ClearBuffers(GraphicsContext& gfxContext)
+{
+	for (ColorBuffer& cascadeInterval : m_cascadeIntervals)
+	{
+		gfxContext.TransitionResource(cascadeInterval, D3D12_RESOURCE_STATE_RENDER_TARGET);
+		gfxContext.ClearColor(cascadeInterval);
+	}
+
+	gfxContext.TransitionResource(m_radianceField, D3D12_RESOURCE_STATE_RENDER_TARGET);
+	gfxContext.ClearColor(m_radianceField);
 }

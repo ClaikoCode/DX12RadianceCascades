@@ -2,9 +2,8 @@
 
 __declspec(align(16)) struct CascadeInfo
 {
-	uint32_t probePixelSize;
 	uint32_t cascadeIndex;
-	float padding[2];
+	float padding[3];
 };
 
 __declspec(align(16)) struct RCGlobals
@@ -15,14 +14,12 @@ __declspec(align(16)) struct RCGlobals
 	uint32_t rayCount0;
 	float rayLength0;
 	float probeSpacing0;
-	uint32_t scenePixelWidth;
-	uint32_t scenePixelHeight;
 };
 
 class RadianceCascadesManager
 {
 public:
-	static const uint32_t s_RaysPerProbe0 = 4u; // TODO: Move this to member variable.
+	static const uint32_t s_RaysPerProbe0 = 16u; // TODO: Move this to member variable.
 
 public:
 	RadianceCascadesManager() : probeDim0(0), rayLength0(0.0f) {};
@@ -30,14 +27,17 @@ public:
 	void Init(float rayLength0, float maxRayLength);
 	void Shutdown();
 
-	ColorBuffer& GetCascadeInterval(uint32_t cascadeIndex);
-	uint32_t GetCascadeCount();
+	ColorBuffer& GetCascadeInterval(uint32_t cascadeIndex) { return m_cascadeIntervals[cascadeIndex]; }
+	ColorBuffer& GetRadianceField() { return m_radianceField; }
+	uint32_t GetCascadeCount() { return (uint32_t)m_cascadeIntervals.size(); }
 
-	RCGlobals FillRCGlobalsData(uint32_t scenePixelWidth, uint32_t scenePixelHeight);
+	RCGlobals FillRCGlobalsData();
 
 	uint32_t GetProbePixelSize(uint32_t cascadeIndex); // Per dim.
 	uint32_t GetProbeCount(uint32_t cascadeIndex); // Per dim.
 	float GetProbeSpacing(uint32_t cascadeIndex);
+
+	void ClearBuffers(GraphicsContext& gfxContext);
 
 public:
 	struct ScalingFactor
@@ -51,4 +51,5 @@ public:
 
 private:
 	std::vector<ColorBuffer> m_cascadeIntervals;
+	ColorBuffer m_radianceField;
 };
