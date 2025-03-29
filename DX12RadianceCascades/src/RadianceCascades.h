@@ -19,6 +19,8 @@ enum ShaderID : UUID64
 	ShaderIDFullScreenQuadVS,
 	ShaderIDFullScreenCopyPS,
 	ShaderIDFullScreenCopyCS,
+	ShaderIDRCMergeCS,
+	ShaderIDRCRadianceFieldCS,
 
 	ShaderIDNone = NULL_ID
 };
@@ -32,6 +34,8 @@ enum PSOID : PSOIDType
 	PSOIDComputeRCGatherPSO,
 	PSOIDComputeFlatlandScenePSO,
 	PSOIDFullScreenCopyComputePSO,
+	PSOIDComputeRCMergePSO,
+	PSOIDComputeRCRadianceFieldPSO,
 
 	PSOIDCount
 };
@@ -60,6 +64,18 @@ private:
 		RootEntryFullScreenCopyComputeDestInfo,
 		RootEntryFullScreenCopyComputeCount,
 
+		RootEntryRCMergeCascadeNUAV = 0,
+		RootEntryRCMergeCascadeN1SRV,
+		RootEntryRCMergeCascadeInfo,
+		RootEntryRCMergeGlobals,
+		RootEntryRCMergeCount,
+
+		RootEntryRCRadianceFieldGlobals = 0,
+		RootEntryRCRadianceFieldCascadeInfo,
+		RootEntryRCRadianceFieldUAV,
+		RootEntryRCRadianceFieldCascadeSRV,
+		RootEntryRCRadianceFieldInfo,
+		RootEntryRCRadianceFieldCount
 	};
 
 public:
@@ -84,8 +100,12 @@ private:
 	void RenderSceneImpl(Camera& camera, D3D12_VIEWPORT viewPort, D3D12_RECT scissor);
 	void RunComputeFlatlandScene();
 	void RunComputeRCGather();
+	void RunComputeRCMerge();
+	void RunComputeRCRadianceField(ColorBuffer& outputBuffer);
 	void UpdateViewportAndScissor();
 	void UpdateGraphicsPSOs();
+
+	void ClearPixelBuffers();
 
 	// Will run a compute shader that samples the source and writes to dest.
 	void FullScreenCopyCompute(PixelBuffer& source, D3D12_CPU_DESCRIPTOR_HANDLE sourceSRV, ColorBuffer& dest);
@@ -110,7 +130,7 @@ private:
 	std::unordered_map<UUID64, std::set<PSOIDType>> m_shaderPSODependencyMap;
 	std::array<PSO*, PSOIDCount> m_usedPSOs;
 
-	ComputePSO m_rcGatherPSO = ComputePSO(L"Compute RC Gather");
+	ComputePSO m_rcGatherPSO = ComputePSO(L"RC Gather Compute");
 	RootSignature m_computeGatherRootSig;
 
 	ComputePSO m_flatlandScenePSO = ComputePSO(L"Compute Flatland Scene");
@@ -118,6 +138,12 @@ private:
 
 	ComputePSO m_fullScreenCopyComputePSO = ComputePSO(L"Full Screen Copy Compute");
 	RootSignature m_fullScreenCopyComputeRootSig;
+
+	ComputePSO m_rcMergePSO = ComputePSO(L"RC Merge Compute");
+	RootSignature m_rcMergeRootSig;
+
+	ComputePSO m_rcRadianceFieldPSO = ComputePSO(L"RC Radiance Field Compute");
+	RootSignature m_rcRadianceFieldRootSig;
 
 	ColorBuffer m_flatlandScene = ColorBuffer({ 0.0f, 0.0f, 0.0f, 100000.0f });
 
