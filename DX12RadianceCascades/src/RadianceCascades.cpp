@@ -16,7 +16,8 @@ static const std::set<Shader::ShaderType> s_ValidShaderTypes = { Shader::ShaderT
 static const DXGI_FORMAT s_flatlandSceneFormat = DXGI_FORMAT_R16G16B16A16_FLOAT;
 static const std::wstring sBackupModelPath = L"models\\Testing\\SphereTest.gltf";
 
-#define SAMPLE_LEN_0 1.0f
+#define SAMPLE_LEN_0 20.0f
+#define RAYS_PER_PROBE_0 4.0f
 namespace
 {
 	uint32_t GetSceneColorWidth()
@@ -317,7 +318,7 @@ void RadianceCascades::InitializeRCResources()
 	m_flatlandScene.Create(L"Flatland Scene", ::GetSceneColorWidth(), ::GetSceneColorHeight(), 1, s_flatlandSceneFormat);
 
 	float diag = Math::Length({ (float)::GetSceneColorWidth(), (float)::GetSceneColorHeight(), 0.0f });
-	m_rcManager.Init(SAMPLE_LEN_0, diag);
+	m_rcManager.Init(SAMPLE_LEN_0, RAYS_PER_PROBE_0, diag);
 }
 
 void RadianceCascades::RenderSceneImpl(Camera& camera, D3D12_VIEWPORT viewPort, D3D12_RECT scissor)
@@ -400,7 +401,7 @@ void RadianceCascades::RunComputeFlatlandScene()
 void RadianceCascades::RunComputeRCGather()
 {
 	ColorBuffer& sceneBuffer = m_flatlandScene;
-	RCGlobals rcGlobals = m_rcManager.FillRCGlobalsData();
+	RCGlobals rcGlobals = m_rcManager.FillRCGlobalsData(sceneBuffer.GetWidth());
 
 	ComputeContext& cmptContext = ComputeContext::Begin(L"RC Gather Compute");
 
@@ -436,7 +437,12 @@ void RadianceCascades::RunComputeRCMerge()
 	cmptContext.SetRootSignature(m_rcMergeRootSig);
 	cmptContext.SetPipelineState(m_rcMergePSO);
 
-	RCGlobals rcGlobals = m_rcManager.FillRCGlobalsData();
+	RCGlobals rcGlobals = {};
+	{
+		ColorBuffer& cascade0 = m_rcManager.GetCascadeInterval(0);
+		rcGlobals = m_rcManager.FillRCGlobalsData(cascade0.GetWidth());
+	}
+	 
 	cmptContext.SetDynamicConstantBufferView(RootEntryRCMergeGlobals, sizeof(rcGlobals), &rcGlobals);
 
 	// Start loop at second last cascade and go down to the first cascade.
@@ -466,11 +472,11 @@ void RadianceCascades::RunComputeRCRadianceField(ColorBuffer& outputBuffer)
 	cmptContext.SetRootSignature(m_rcRadianceFieldRootSig);
 	cmptContext.SetPipelineState(m_rcRadianceFieldPSO);
 
-	RCGlobals rcGlobals = m_rcManager.FillRCGlobalsData();
-	cmptContext.SetDynamicConstantBufferView(RootEntryRCRadianceFieldGlobals, sizeof(rcGlobals), &rcGlobals);
-
 	ColorBuffer& radianceField = m_rcManager.GetRadianceField();
 	ColorBuffer& targetCascade = m_rcManager.GetCascadeInterval(0);
+
+	RCGlobals rcGlobals = m_rcManager.FillRCGlobalsData(targetCascade.GetWidth());
+	cmptContext.SetDynamicConstantBufferView(RootEntryRCRadianceFieldGlobals, sizeof(rcGlobals), &rcGlobals);
 
 	{
 		CascadeInfo cascadeInfo = {};

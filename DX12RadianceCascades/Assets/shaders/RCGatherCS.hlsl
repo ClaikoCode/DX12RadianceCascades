@@ -6,10 +6,10 @@ Texture2D<float4> sceneColor : register(t0);
 
 SamplerState sceneSampler : register(s0);
 
-float4 RayMarch(float2 origin, float2 direction, float range, float2 texelSize)
+float4 RayMarch(float2 origin, float2 direction, float range, float texelSize)
 {
     float distanceTraveled = 0.0f;
-    float2 maxRange = range * texelSize;
+    float maxRange = range * texelSize;
     for (float i = 0.0f; i < range; i++)
     {
         float2 ray = origin + direction * min(distanceTraveled, maxRange);
@@ -19,7 +19,7 @@ float4 RayMarch(float2 origin, float2 direction, float range, float2 texelSize)
         float sdfDistance = sceneSample.a;
         distanceTraveled += sdfDistance * texelSize;
         
-        if (distanceTraveled >= length(maxRange) || OUT_OF_BOUNDS_RELATIVE(ray))
+        if (distanceTraveled >= maxRange || OUT_OF_BOUNDS_RELATIVE(ray))
         {
             break;
         }
@@ -49,8 +49,10 @@ void main(uint3 DTid : SV_DispatchThreadID)
 
     if (!OUT_OF_BOUNDS_RELATIVE(relative))
     {
-        ProbeInfo probeInfo = BuildProbeInfo(pixelPos, cascadeInfo.cascadeIndex);
+        uint2 sceneDims;
+        sceneColor.GetDimensions(sceneDims.x, sceneDims.y);
         
+        ProbeInfo probeInfo = BuildProbeInfo(pixelPos, cascadeInfo.cascadeIndex);
         {
             // Origin is correct and verified.
             float2 probeOrigin = (float2(probeInfo.probeIndex) + 0.5f) * probeInfo.probeSpacing * probeInfo.texelSize;
@@ -61,6 +63,9 @@ void main(uint3 DTid : SV_DispatchThreadID)
             
             // This should be correct.
             float2 rayOrigin = probeOrigin + (direction * probeInfo.startDistance * probeInfo.texelSize);
+            //int2 rayOriginPixel = rayOrigin * sideLen;
+            //target[rayOriginPixel] = float4(1.0f, 0.0f, 0.0f, 1.0f);
+            //return;
 
             float4 retColor = RayMarch(rayOrigin, direction, probeInfo.range, probeInfo.texelSize);
             target[pixelPos] = retColor;

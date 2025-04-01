@@ -32,6 +32,26 @@ void DrawCircle(uint2 pixelPos, int2 origin, float radius, float3 color, float c
     scene[pixelPos] = float4(colorToBeWritten, distToBeWritten);
 }
 
+//void DrawCircle(uint2 pixelPos, int2 origin, float radius, float3 color, float curSignedDistance, float3 curColor)
+//{
+//    float2 relativePixelPoint = float2(pixelPos) - float2(origin);
+//    float2 relativeUV = relativePixelPoint / float2(sceneInfo.sceneDims);
+//    
+//    float newSignedDistance = sdCircle(relativePoint, radius);
+//    
+//    float distToBeWritten = newSignedDistance < curSignedDistance ? newSignedDistance : curSignedDistance;
+//    float3 colorToBeWritten = newSignedDistance <= 0.0f ? color : curColor;
+//    
+//    if (newSignedDistance > 0.0f)
+//    {   
+//        float maggedDist = newSignedDistance / 100.0f;
+//        maggedDist = frac(maggedDist);
+//        colorToBeWritten = float3(maggedDist, maggedDist, maggedDist);
+//    }
+//    
+//    scene[pixelPos] = float4(colorToBeWritten, distToBeWritten);
+//}
+
 [numthreads(8, 8, 1)]
 void main(uint3 DTid : SV_DispatchThreadID)
 {
@@ -43,9 +63,9 @@ void main(uint3 DTid : SV_DispatchThreadID)
         float3 currentColorValue = currentSceneValue.rgb;
         float currentSignedDistance = currentSceneValue.a;
         
-        float3 circleColor = float3(0.5f, 0.0f, 0.0f);
-        float circleRadius = 200.0f;
-        int2 circleOrigin = sceneInfo.sceneDims / 2.0f;
+        float3 circleColor = float3(1.0f, 0.0f, 0.0f);
+        float circleRadius = 5.0f;
+        int2 circleOrigin = sceneInfo.sceneDims / 2.0f + int2(00, 00);
         DrawCircle(pixelPos, circleOrigin, circleRadius, circleColor, currentSignedDistance, currentColorValue);
     }
 }

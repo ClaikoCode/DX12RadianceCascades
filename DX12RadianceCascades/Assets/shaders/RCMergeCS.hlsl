@@ -54,9 +54,10 @@ void main(uint3 DTid : SV_DispatchThreadID)
         ProbeInfo probeInfoN1 = BuildProbeInfo(pixelPos, cascadeIndex + 1);
         
         float2 probeIndexN1 = floor((float2(probeInfoN.probeIndex) - float2(1.0f, 1.0f)) / rcGlobals.probeScalingFactor);
+        float2 probeIndexN1_n = floor((probeIndexN1 * 2.0f) + 1.0f);
         
         float4 radiance = cascadeN[pixelPos];
-        if(radiance.a == 0.0f)
+        if (radiance.a == 0.0f)
         {
             cascadeN[pixelPos] = float4(radiance.rgb, 1.0f - radiance.a);
             return;

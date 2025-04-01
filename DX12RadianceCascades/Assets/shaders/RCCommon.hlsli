@@ -8,6 +8,7 @@ struct RCGlobals
     uint rayCount0;
     float rayLength0;
     float probeSpacing0;
+    float sourceSize;
 };
 
 struct CascadeInfo
@@ -48,7 +49,7 @@ struct ProbeInfo
     float rayIndex;
     float startDistance;
     float range;
-    float2 texelSize;
+    float texelSize;
 };
 
 ProbeInfo BuildProbeInfo(uint2 pixelPos, uint cascadeIndex)
@@ -70,7 +71,7 @@ ProbeInfo BuildProbeInfo(uint2 pixelPos, uint cascadeIndex)
     probeInfo.range += sign(cascadeIndex) * length(float2(d, d));
 #endif
     
-    probeInfo.texelSize = 1.0f / (THIS_PROBES_PER_DIM(cascadeIndex) * probeInfo.sideLength);
+    probeInfo.texelSize = 1.0f / rcGlobals.sourceSize;
     
     return probeInfo;
 }
