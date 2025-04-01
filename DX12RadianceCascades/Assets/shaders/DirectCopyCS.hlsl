@@ -11,7 +11,8 @@ struct DestInfo
 };
 
 ConstantBuffer<DestInfo> destInfo : register(b0);
-SamplerState sourceSampler : register(s0);
+SamplerState pointSampler : register(s0);
+SamplerState linearSampler : register(s1);
 
 Texture2D sourceTex : register(t0);
 RWTexture2D<float4> destTex : register(u0);
@@ -24,7 +25,7 @@ void main(uint3 DTid : SV_DispatchThreadID)
     if (IN_BOUNDS(pixelPos, destInfo.destResolution))
     {
         float2 relative = pixelPos / float2(destInfo.destResolution);
-        float4 sampledColor = sourceTex.SampleLevel(sourceSampler, relative, 0);
+        float4 sampledColor = sourceTex.SampleLevel(pointSampler, relative, 0);
         destTex[pixelPos] = float4(sampledColor.rgb, 1.0f);
     }
 }
