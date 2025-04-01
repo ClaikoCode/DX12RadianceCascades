@@ -74,17 +74,17 @@ namespace Graphics
     void PreparePresentHDR();
     void CompositeOverlays( GraphicsContext& Context );
 
-    enum eResolution { k720p, k900p, k1080p, k1440p, k1800p, k2160p };
+    enum eResolution { k720p, k900p, k1080p, k1440p, k1800p, k2160p, k1024x2 };
     enum eEQAAQuality { kEQAA1x1, kEQAA1x8, kEQAA1x16 };
 
-    const uint32_t kNumPredefinedResolutions = 6;
+    const uint32_t kNumPredefinedResolutions = 7;
 
-    const char* ResolutionLabels[] = { "1280x720", "1600x900", "1920x1080", "2560x1440", "3200x1800", "3840x2160" };
-    EnumVar NativeResolution("Graphics/Display/Native Resolution", k1080p, kNumPredefinedResolutions, ResolutionLabels);
+    const char* ResolutionLabels[] = { "1280x720", "1600x900", "1920x1080", "2560x1440", "3200x1800", "3840x2160", "1024x1024"};
+    EnumVar NativeResolution("Graphics/Display/Native Resolution", k1024x2, kNumPredefinedResolutions, ResolutionLabels);
 #ifdef _GAMING_DESKTOP
     // This can set the window size to common dimensions.  It's also possible for the window to take on other dimensions
     // through resizing or going full-screen.
-    EnumVar DisplayResolution("Graphics/Display/Display Resolution", k1080p, kNumPredefinedResolutions, ResolutionLabels);
+    EnumVar DisplayResolution("Graphics/Display/Display Resolution", k1024x2, kNumPredefinedResolutions, ResolutionLabels);
 #endif
 
     bool g_bEnableHDROutput = false;
@@ -95,8 +95,8 @@ namespace Graphics
 
     uint32_t g_NativeWidth = 0;
     uint32_t g_NativeHeight = 0;
-    uint32_t g_DisplayWidth = 1920;
-    uint32_t g_DisplayHeight = 1080;
+    uint32_t g_DisplayWidth = 1024;
+    uint32_t g_DisplayHeight = 1024;
     ColorBuffer g_PreDisplayBuffer;
 
     void ResolutionToUINT(eResolution res, uint32_t& width, uint32_t& height)
@@ -127,6 +127,10 @@ namespace Graphics
         case k2160p:
             width = 3840;
             height = 2160;
+            break;
+        case k1024x2:
+            width = 1024;
+            height = width;
             break;
         }
     }

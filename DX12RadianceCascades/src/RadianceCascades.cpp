@@ -16,7 +16,7 @@ static const std::set<Shader::ShaderType> s_ValidShaderTypes = { Shader::ShaderT
 static const DXGI_FORMAT s_flatlandSceneFormat = DXGI_FORMAT_R16G16B16A16_FLOAT;
 static const std::wstring sBackupModelPath = L"models\\Testing\\SphereTest.gltf";
 
-#define SAMPLE_LEN_0 0.5f
+#define SAMPLE_LEN_0 1.0f
 namespace
 {
 	uint32_t GetSceneColorWidth()
@@ -147,12 +147,14 @@ void RadianceCascades::InitializeScene()
 
 	// Setup camera
 	{
+		m_camera.SetAspectRatio((float)::GetSceneColorWidth() / (float)::GetSceneColorHeight());
+
 		OrientedBox obb = m_sceneModels[m_mainSceneModelInstanceIndex].GetBoundingBox();
 		float modelRadius = Length(obb.GetDimensions()) * 0.5f;
 		const Vector3 eye = obb.GetCenter() + Vector3(modelRadius * 0.5f, 0.0f, 0.0f);
 		m_camera.SetEyeAtUp(eye, Vector3(kZero), Vector3(kYUnitVector));
 		m_camera.SetZRange(0.5f, 10000.0f);
-
+		
 		m_cameraController.reset(new FlyingFPSCamera(m_camera, Vector3(kYUnitVector)));
 	}
 }
@@ -219,8 +221,8 @@ void RadianceCascades::InitializePSOs()
 		rootSig[RootEntryRCGatherSceneSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 0, 1);
 
 		{
-			SamplerDesc defaultSampler;
-			rootSig.InitStaticSampler(0, defaultSampler);
+			SamplerDesc sampler = Graphics::SamplerPointBorderDesc;
+			rootSig.InitStaticSampler(0, sampler);
 		}
 
 		rootSig.Finalize(L"Compute RC Gather");
@@ -234,14 +236,17 @@ void RadianceCascades::InitializePSOs()
 		pso.SetComputeShader(compManager.GetShaderByteCode(ShaderIDFullScreenCopyCS));
 
 		RootSignature& rootSig = m_fullScreenCopyComputeRootSig;
-		rootSig.Reset(RootEntryFullScreenCopyComputeCount, 1);
+		rootSig.Reset(RootEntryFullScreenCopyComputeCount, 2);
 		rootSig[RootEntryFullScreenCopyComputeSource].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 0, 1);
 		rootSig[RootEntryFullScreenCopyComputeDest].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 1);
 		rootSig[RootEntryFullScreenCopyComputeDestInfo].InitAsConstants(0, 2);
 
 		{
-			SamplerDesc sampler = Graphics::SamplerLinearClampDesc;
-			rootSig.InitStaticSampler(0, sampler);
+			SamplerDesc pointSampler = Graphics::SamplerPointClampDesc;
+			rootSig.InitStaticSampler(0, pointSampler);
+
+			SamplerDesc linearSampler = Graphics::SamplerLinearClampDesc;
+			rootSig.InitStaticSampler(1, linearSampler);
 		}
 
 		rootSig.Finalize(L"Compute Full Screen Copy");
@@ -295,9 +300,9 @@ void RadianceCascades::InitializePSOs()
 		rootSig[RootEntryRCRadianceFieldCascadeInfo].InitAsConstantBuffer(1);
 		rootSig[RootEntryRCRadianceFieldUAV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 1);
 		rootSig[RootEntryRCRadianceFieldCascadeSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 0, 1);
-		rootSig[RootEntryRCRadianceFieldInfo].InitAsConstantBuffer(2);
+		rootSig[RootEntryRCRadianceFieldInfo].InitAsConstants(2, 2);
 		{
-			SamplerDesc sampler = Graphics::SamplerPointClampDesc;
+			SamplerDesc sampler = Graphics::SamplerPointBorderDesc;
 			rootSig.InitStaticSampler(0, sampler);
 		}
 		rootSig.Finalize(L"Compute RC Radiance Field");
@@ -471,6 +476,8 @@ void RadianceCascades::RunComputeRCRadianceField(ColorBuffer& outputBuffer)
 		CascadeInfo cascadeInfo = {};
 		cascadeInfo.cascadeIndex = 0;
 		cmptContext.SetDynamicConstantBufferView(RootEntryRCRadianceFieldCascadeInfo, sizeof(cascadeInfo), &cascadeInfo);
+
+		cmptContext.SetConstants(RootEntryRCRadianceFieldInfo, radianceField.GetWidth(), radianceField.GetHeight());
 
 		cmptContext.TransitionResource(radianceField, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 		cmptContext.TransitionResource(targetCascade, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);

@@ -9,53 +9,35 @@ SamplerState sceneSampler : register(s0);
 float4 RayMarch(float2 origin, float2 direction, float range, float2 texelSize)
 {
     float distanceTraveled = 0.0f;
-    if(false)
+    float2 maxRange = range * texelSize;
+    for (float i = 0.0f; i < range; i++)
     {
-        for (int i = 0; i < 100; i++)
+        float2 ray = origin + direction * min(distanceTraveled, maxRange);
+        
+        float4 sceneSample = sceneColor.SampleLevel(sceneSampler, ray, 0);
+        float3 sceneColor = sceneSample.rgb;
+        float sdfDistance = sceneSample.a;
+        distanceTraveled += sdfDistance * texelSize;
+        
+        if (distanceTraveled >= length(maxRange) || OUT_OF_BOUNDS_RELATIVE(ray))
         {
-            float2 samplingPoint = origin + direction * min(distanceTraveled, range) * texelSize;
-            if (OUT_OF_BOUNDS_RELATIVE(samplingPoint))
-            {
-                return float4(0.0f, 0.0f, 0.0f, TRANSPARENT);
-            }
-        
-            float4 sceneSample = sceneColor.SampleLevel(sceneSampler, samplingPoint, 0);
-            float3 sceneColor = sceneSample.rgb;
-            float sdfDistance = sceneSample.a;
-        
-            if (sdfDistance <= EPSILON)
-            {
-                return float4(sceneColor.rgb, OPAQUE);
-            }
-        
-            distanceTraveled += sdfDistance;
+            break;
         }
-    }
-    else
-    {
-        float2 rt = range * texelSize;
-        for (float i = 0.0f; i < range; i++)
+        
+        // If first sample is inside the object, return nothing.
+        //if(sdfDistance <= EPSILON && distanceTraveled <= EPSILON)
+        //{
+        //    return 0.0f;
+        //}
+        
+        // If we hit the object, return the color of the object.
+        if (sdfDistance <= EPSILON)
         {
-            float2 ray = origin + direction * min(distanceTraveled, rt);
-            float4 sceneSample = sceneColor.SampleLevel(sceneSampler, ray, 0);
-            float3 sceneColor = sceneSample.rgb;
-            float sdfDistance = sceneSample.a;
-        
-            distanceTraveled += sdfDistance;
-        
-            if (distanceTraveled >= length(rt) || OUT_OF_BOUNDS_RELATIVE(ray))
-            {
-                break;
-            }
-        
-            if (sdfDistance <= EPSILON)
-            {
-                return float4(sceneColor.rgb, OPAQUE);
-            }
+            return float4(sceneColor.rgb, 0.0f);
         }
     }
     
-    return float4(0.0f, 0.0f, 0.0f, TRANSPARENT);
+    return float4(0.0f, 0.0f, 0.0f, 1.0f);
 }
 
 [numthreads(16, 16, 1)]
@@ -70,9 +52,14 @@ void main(uint3 DTid : SV_DispatchThreadID)
         ProbeInfo probeInfo = BuildProbeInfo(pixelPos, cascadeInfo.cascadeIndex);
         
         {
+            // Origin is correct and verified.
             float2 probeOrigin = (float2(probeInfo.probeIndex) + 0.5f) * probeInfo.probeSpacing * probeInfo.texelSize;
+            
+            // Direction is correct and verified
             float angle = MATH_TAU * (probeInfo.rayIndex + 0.5f) / probeInfo.rayCount;
             float2 direction = float2(cos(angle), -sin(angle));
+            
+            // This should be correct.
             float2 rayOrigin = probeOrigin + (direction * probeInfo.startDistance * probeInfo.texelSize);
 
             float4 retColor = RayMarch(rayOrigin, direction, probeInfo.range, probeInfo.texelSize);

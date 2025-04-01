@@ -17,8 +17,8 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPSTR, _In
     FXAA::Enable = false;
     PostEffects::EnableHDR = true;
     PostEffects::EnableAdaptation = false;
+    PostEffects::BloomEnable = false;
     SSAO::Enable = false;
-
 
     RadianceCascades radianceCascades = RadianceCascades();
     return GameCore::RunApplication(radianceCascades, L"RadianceCascades", hInstance, nCmdShow);

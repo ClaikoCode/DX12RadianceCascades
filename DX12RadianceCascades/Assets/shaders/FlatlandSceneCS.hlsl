@@ -22,12 +22,12 @@ void DrawCircle(uint2 pixelPos, int2 origin, float radius, float3 color, float c
     float distToBeWritten = newSignedDistance < curSignedDistance ? newSignedDistance : curSignedDistance;
     float3 colorToBeWritten = newSignedDistance <= 0.0f ? color : curColor;
     
-    //if (newSignedDistance > 0.0f)
-    //{
-    //    float maggedDist = newSignedDistance / 100.0f;
-    //    maggedDist = frac(maggedDist);
-    //    colorToBeWritten = float3(maggedDist, maggedDist, maggedDist);
-    //}
+    if (newSignedDistance > 0.0f)
+    {
+        float maggedDist = newSignedDistance / 100.0f;
+        maggedDist = frac(maggedDist);
+        colorToBeWritten = float3(maggedDist, maggedDist, maggedDist);
+    }
     
     scene[pixelPos] = float4(colorToBeWritten, distToBeWritten);
 }
@@ -43,8 +43,8 @@ void main(uint3 DTid : SV_DispatchThreadID)
         float3 currentColorValue = currentSceneValue.rgb;
         float currentSignedDistance = currentSceneValue.a;
         
-        float3 circleColor = float3(1.0f, 0.0f, 0.0f);
-        float circleRadius = 100.0f;
+        float3 circleColor = float3(0.5f, 0.0f, 0.0f);
+        float circleRadius = 200.0f;
         int2 circleOrigin = sceneInfo.sceneDims / 2.0f;
         DrawCircle(pixelPos, circleOrigin, circleRadius, circleColor, currentSignedDistance, currentColorValue);
     }
