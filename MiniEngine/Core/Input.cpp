@@ -444,3 +444,23 @@ float GameInput::GetTimeCorrectedAnalogInput( AnalogInput ai )
 {
     return s_AnalogsTC[ai];
 }
+
+void GameInput::SetMouseExclusiveMode(bool exclusive)
+{
+    if (exclusive)
+    {
+		s_Mouse->Unacquire();
+		if (FAILED(s_Mouse->SetCooperativeLevel(GameCore::g_hWnd, DISCL_FOREGROUND | DISCL_EXCLUSIVE)))
+			ASSERT(false, "Mouse SetCooperativeLevel failed.");
+        s_Mouse->Acquire();
+    }
+    else
+    {
+		s_Mouse->Unacquire();
+		if (FAILED(s_Mouse->SetCooperativeLevel(GameCore::g_hWnd, DISCL_FOREGROUND | DISCL_NONEXCLUSIVE)))
+			ASSERT(false, "Mouse SetCooperativeLevel failed.");
+		s_Mouse->Acquire();
+    }
+
+
+}
