@@ -34,7 +34,7 @@ void main( uint3 DTid : SV_DispatchThreadID )
     float2 relPos = float2(pixelPos) / radianceFieldInfo.radianceFieldDims;
     
     float4 radiance = 0.0f;
-    float rayCount = 1.0f;
+    float rayCount = THIS_RAYS_PER_PROBE(cascadeInfo.cascadeIndex);
     if (!OUT_OF_BOUNDS_RELATIVE(relPos))
     {
         uint2 probePixelPos = relPos * CASCADE_SIDE_LENGTH(cascadeInfo.cascadeIndex);

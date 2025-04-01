@@ -8,7 +8,7 @@ RadianceCascadesManager::~RadianceCascadesManager()
 	Shutdown();
 }
 
-void RadianceCascadesManager::Init(float _rayLength0, float _maxRayLength)
+void RadianceCascadesManager::Init(float _rayLength0, float _raysPerProbe0, float _maxRayLength)
 {
 	const uint16_t rayScalingFactor = scalingFactor.rayScalingFactor;
 	const uint16_t probeScalingFactor = scalingFactor.probeScalingFactor;
@@ -17,11 +17,13 @@ void RadianceCascadesManager::Init(float _rayLength0, float _maxRayLength)
 
 	// This is calculated by solving for factorCount in the following equation: rayLength0 * scalingFactor^(factorCount) = maxLength;
 	// It calculates how many times the factor has to be applied to an initial ray length until the max length has been reached.
-	float factorCount = Math::Ceiling(Math::LogAB(rayScalingFactorFloat, _maxRayLength / _rayLength0));
-	float finalCascadeInvervalStart = Math::GeometricSeriesSum(_rayLength0, rayScalingFactorFloat, factorCount);
-	uint32_t cascadeCount = (uint32_t)Math::Ceiling(Math::LogAB(rayScalingFactorFloat, finalCascadeInvervalStart)) - 1;
+	//float factorCount = Math::Ceiling(Math::LogAB(rayScalingFactorFloat, _maxRayLength / _rayLength0));
+	//float finalCascadeInvervalStart = Math::GeometricSeriesSum(_rayLength0, rayScalingFactorFloat, factorCount);
+	//uint32_t cascadeCount = (uint32_t)Math::Ceiling(Math::LogAB(rayScalingFactorFloat, finalCascadeInvervalStart));
 
-	const uint32_t probeCountPerDim0 = (uint32_t)Math::Pow(probeScalingFactorFloat, (float)cascadeCount);
+	uint32_t cascadeCount = 6;
+	float probeSpacing = 2.0f;
+	const uint32_t probeCountPerDim0 = (uint32_t)Math::AlignPowerOfTwo<float>(1024.0f / probeSpacing);
 
 	if (m_cascadeIntervals.size() < cascadeCount)
 	{
@@ -29,7 +31,7 @@ void RadianceCascadesManager::Init(float _rayLength0, float _maxRayLength)
 	}
 
 	uint32_t probeCount = probeCountPerDim0 * probeCountPerDim0;
-	uint32_t raysPerProbe = s_RaysPerProbe0;
+	uint32_t raysPerProbe = (uint32_t)_raysPerProbe0;
 	for (uint32_t i = 0; i < (uint32_t)cascadeCount; i++)
 	{
 		std::wstring cascadeName = std::wstring(L"Cascade Interval ") + std::to_wstring(i);
@@ -44,6 +46,8 @@ void RadianceCascadesManager::Init(float _rayLength0, float _maxRayLength)
 	// Set internal variables.
 	rayLength0 = _rayLength0;
 	probeDim0 = probeCountPerDim0;
+	raysPerProbe0 = (uint32_t)_raysPerProbe0;
+	probeSpacing0 = probeSpacing;
 
 	m_radianceField.Create(L"Radiance Field", probeDim0, probeDim0, 1, DXGI_FORMAT_R16G16B16A16_FLOAT);
 }
@@ -58,15 +62,18 @@ void RadianceCascadesManager::Shutdown()
 	m_radianceField.Destroy();
 }
 
-RCGlobals RadianceCascadesManager::FillRCGlobalsData()
+RCGlobals RadianceCascadesManager::FillRCGlobalsData(uint32_t sourceSize)
 {
+	ASSERT(Math::IsPowerOfTwo(sourceSize));
+
 	RCGlobals rcGlobals = {};
 	rcGlobals.probeDim0 = probeDim0;
-	rcGlobals.rayCount0 = s_RaysPerProbe0;
+	rcGlobals.rayCount0 = raysPerProbe0;
 	rcGlobals.rayLength0 = rayLength0;
-	rcGlobals.probeSpacing0 = GetProbeSpacing(0);
+	rcGlobals.probeSpacing0 = probeSpacing0;
 	rcGlobals.probeScalingFactor = scalingFactor.probeScalingFactor;
 	rcGlobals.rayScalingFactor = scalingFactor.rayScalingFactor;
+	rcGlobals.sourceSize = (float)sourceSize;
 
 	return rcGlobals;
 }
@@ -83,7 +90,6 @@ uint32_t RadianceCascadesManager::GetProbeCount(uint32_t cascadeIndex)
 
 float RadianceCascadesManager::GetProbeSpacing(uint32_t cascadeIndex)
 {
-	float probeSpacing0 = GetCascadeInterval(0).GetWidth() / (float)(GetProbeCount(0));
 	return probeSpacing0 * Math::Pow(scalingFactor.probeScalingFactor, (float)cascadeIndex);
 }
 
