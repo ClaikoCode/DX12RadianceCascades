@@ -72,6 +72,18 @@ void RadianceCascades::Cleanup()
 
 void RadianceCascades::Update(float deltaT)
 {
+	static bool isMouseExclusive = true;
+	if (GameInput::IsFirstPressed(GameInput::kKey_f))
+	{
+		isMouseExclusive = !isMouseExclusive;
+		GameInput::SetMouseExclusiveMode(isMouseExclusive);
+	}
+
+	if (isMouseExclusive)
+	{
+		m_cameraController->Update(deltaT);
+	}
+
 	GraphicsContext& gfxContext = GraphicsContext::Begin(L"Scene Update");
 
 	{	
@@ -82,9 +94,6 @@ void RadianceCascades::Update(float deltaT)
 	}
 	
 	gfxContext.Finish();
-
-	m_cameraController->Update(deltaT);
-	m_camera.Update();
 
 	UpdateViewportAndScissor();
 	UpdateGraphicsPSOs();
