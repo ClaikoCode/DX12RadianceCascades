@@ -105,28 +105,32 @@ void RadianceCascades::RenderScene()
 	ClearPixelBuffers();
 
 	RenderSceneImpl(m_camera, m_mainViewport, m_mainScissor);
-	RunComputeFlatlandScene();
-	RunComputeRCGather();
-	RunComputeRCMerge();
-	RunComputeRCRadianceField(Graphics::g_SceneColorBuffer);
 
-	static int currentCascadeVisIndex = -1;
-	for (int i = 0; i < (int)m_rcManager.GetCascadeCount(); i++)
+	if (m_rcSettings.visualize2DCascades)
 	{
-		if (GameInput::IsFirstPressed((GameInput::DigitalInput)(i + 1)))
+		RunComputeFlatlandScene();
+		RunComputeRCGather();
+		RunComputeRCMerge();
+		RunComputeRCRadianceField(Graphics::g_SceneColorBuffer);
+
+		static int currentCascadeVisIndex = -1;
+		for (int i = 0; i < (int)m_rcManager.GetCascadeCount(); i++)
 		{
-			currentCascadeVisIndex = i;
+			if (GameInput::IsFirstPressed((GameInput::DigitalInput)(i + 1)))
+			{
+				currentCascadeVisIndex = i;
+			}
 		}
-	}
-	
-	if (GameInput::IsFirstPressed(GameInput::kKey_0))
-	{
-		currentCascadeVisIndex = -1;
-	}
 
-	if (currentCascadeVisIndex != -1)
-	{
-		FullScreenCopyCompute(m_rcManager.GetCascadeInterval(currentCascadeVisIndex), Graphics::g_SceneColorBuffer);
+		if (GameInput::IsFirstPressed(GameInput::kKey_0))
+		{
+			currentCascadeVisIndex = -1;
+		}
+
+		if (currentCascadeVisIndex != -1)
+		{
+			FullScreenCopyCompute(m_rcManager.GetCascadeInterval(currentCascadeVisIndex), Graphics::g_SceneColorBuffer);
+		}
 	}
 }
 
@@ -148,13 +152,14 @@ void RadianceCascades::InitializeScene()
 
 	// Setup camera
 	{
-		m_camera.SetAspectRatio((float)::GetSceneColorWidth() / (float)::GetSceneColorHeight());
+		m_camera.SetAspectRatio((float)GetSceneColorHeight() / (float)GetSceneColorWidth());
 
 		OrientedBox obb = m_sceneModels[m_mainSceneModelInstanceIndex].GetBoundingBox();
 		float modelRadius = Length(obb.GetDimensions()) * 0.5f;
 		const Vector3 eye = obb.GetCenter() + Vector3(modelRadius * 0.5f, 0.0f, 0.0f);
 		m_camera.SetEyeAtUp(eye, Vector3(kZero), Vector3(kYUnitVector));
 		m_camera.SetZRange(0.5f, 10000.0f);
+		
 		
 		m_cameraController.reset(new FlyingFPSCamera(m_camera, Vector3(kYUnitVector)));
 	}

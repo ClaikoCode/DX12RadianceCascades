@@ -40,6 +40,11 @@ enum PSOID : PSOIDType
 	PSOIDCount
 };
 
+struct RadianceCascadesSettings
+{
+	bool visualize2DCascades = false;
+};
+
 class RadianceCascades : public GameCore::IGameApp
 {
 private:
@@ -116,6 +121,8 @@ private:
 	void RegisterPSO(PSOID psoID, PSO* psoPtr);
 
 private:
+
+	RadianceCascadesSettings m_rcSettings = {};
 
 	Camera m_camera;
 	std::unique_ptr<CameraController> m_cameraController;

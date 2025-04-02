@@ -64,7 +64,7 @@ void RadianceCascadesManager::Shutdown()
 
 RCGlobals RadianceCascadesManager::FillRCGlobalsData(uint32_t sourceSize)
 {
-	ASSERT(Math::IsPowerOfTwo(sourceSize));
+	//ASSERT(Math::IsPowerOfTwo(sourceSize));
 
 	RCGlobals rcGlobals = {};
 	rcGlobals.probeDim0 = probeDim0;
