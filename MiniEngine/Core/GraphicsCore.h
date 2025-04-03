@@ -37,6 +37,7 @@ namespace Graphics
     bool IsDeviceIntel(ID3D12Device* pDevice);
 
     extern ID3D12Device* g_Device;
+	extern ID3D12Device5* g_Device5; // Added by JD
     extern CommandListManager g_CommandManager;
     extern ContextManager g_ContextManager;
 
@@ -49,18 +50,4 @@ namespace Graphics
     {
         return g_DescriptorAllocator[Type].Allocate(Count);
     }
-
-    // Get raytracing device. Added by JD.
-	inline ID3D12Device5* GetRTDevice()
-	{
-		if (g_Device == nullptr)
-		{
-			return nullptr;
-		}
-
-		ID3D12Device5* rtDevice = nullptr;
-		g_Device->QueryInterface(IID_PPV_ARGS(&rtDevice));
-
-		return rtDevice;
-	}
 }
