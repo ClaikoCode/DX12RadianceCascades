@@ -18,12 +18,12 @@ RaytracingPSO::RaytracingPSO(const wchar_t* Name)
 void RaytracingPSO::Finalize()
 {
 	D3D12_STATE_OBJECT_DESC* stateObjectDesc = const_cast<D3D12_STATE_OBJECT_DESC*>((const D3D12_STATE_OBJECT_DESC*)m_desc);
-	
-	HRESULT hr = Graphics::GetRTDevice()->CreateStateObject(
+
+	HRESULT hr = Graphics::g_Device5->CreateStateObject(
 		stateObjectDesc,
 		IID_PPV_ARGS(m_stateObject.GetAddressOf())
 	);
-
+	
 	if (FAILED(hr))
 	{
 		LOG_ERROR(L"Could not create state object '{}'.", m_name);
@@ -69,10 +69,8 @@ void RootSignature1::Finalize(const std::wstring& name, D3D12_ROOT_SIGNATURE_FLA
 		ThrowIfFailed(hr, errorMsgW);
 	}
 
-	ID3D12Device5* rtDevice = Graphics::GetRTDevice();
-
 	ThrowIfFailed(
-		rtDevice->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(m_signature.GetAddressOf())), 
+		Graphics::g_Device5->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(m_signature.GetAddressOf())), 
 		L"Failed to create root signature."
 	);
 

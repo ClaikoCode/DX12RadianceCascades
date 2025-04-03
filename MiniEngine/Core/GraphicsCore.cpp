@@ -50,6 +50,7 @@ namespace Graphics
     bool g_bTypedUAVLoadSupport_R16G16B16A16_FLOAT = false;
 
     ID3D12Device* g_Device = nullptr;
+	ID3D12Device5* g_Device5 = nullptr; // Added by JD
     CommandListManager g_CommandManager;
     ContextManager g_ContextManager;
 
@@ -272,8 +273,8 @@ void Graphics::Initialize(bool RequireDXRSupport)
             if (g_Device != nullptr)
                 g_Device->Release();
 
-            g_Device = pDevice.Detach();
-
+			g_Device = pDevice.Detach();
+            
             Utility::Printf(L"Selected GPU:  %s (%u MB)\n", desc.Description, desc.DedicatedVideoMemory >> 20);
         }
     }
@@ -316,6 +317,11 @@ void Graphics::Initialize(bool RequireDXRSupport)
         // Prevent the GPU from overclocking or underclocking to get consistent timings
         if (DeveloperModeEnabled)
             g_Device->SetStablePowerState(TRUE);
+
+        // Added by JD
+        {
+            ASSERT_SUCCEEDED(g_Device->QueryInterface<ID3D12Device5>(&g_Device5));
+        }
     }
 #endif	
 
@@ -453,4 +459,11 @@ void Graphics::Shutdown( void )
         g_Device->Release();
         g_Device = nullptr;
     }
+
+	// Added by JD
+	if (g_Device5 != nullptr)
+	{
+		g_Device5->Release();
+		g_Device5 = nullptr;
+	}
 }
