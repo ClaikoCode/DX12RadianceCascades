@@ -101,6 +101,7 @@ private:
 	void InitializeShaders();
 	void InitializePSOs();
 	void InitializeRCResources();
+	void InitializeRT();
 
 	void RenderSceneImpl(Camera& camera, D3D12_VIEWPORT viewPort, D3D12_RECT scissor);
 	void RunComputeFlatlandScene();

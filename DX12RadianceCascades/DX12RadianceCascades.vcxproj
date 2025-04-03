@@ -175,6 +175,7 @@ if %errorlevel% leq 3 exit 0</Command>
     <ClInclude Include="src\RadianceCascades.h" />
     <ClInclude Include="src\RadianceCascadesManager.h" />
     <ClInclude Include="src\RayTracingHlslCompat.h" />
+    <ClInclude Include="src\RaytracingUtils.h" />
     <ClInclude Include="src\rcpch.h" />
     <ClInclude Include="src\DirectoryWatcher.h" />
     <ClInclude Include="src\ShaderCompilation\ShaderCompilationManager.h" />
@@ -185,6 +186,7 @@ if %errorlevel% leq 3 exit 0</Command>
     <ClCompile Include="src\Main.cpp" />
     <ClCompile Include="src\RadianceCascades.cpp" />
     <ClCompile Include="src\RadianceCascadesManager.cpp" />
+    <ClCompile Include="src\RaytracingUtils.cpp" />
     <ClCompile Include="src\rcpch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">rcpch.h</PrecompiledHeaderFile>

@@ -49,4 +49,18 @@ namespace Graphics
     {
         return g_DescriptorAllocator[Type].Allocate(Count);
     }
+
+    // Get raytracing device. Added by JD.
+	inline ID3D12Device5* GetRTDevice()
+	{
+		if (g_Device == nullptr)
+		{
+			return nullptr;
+		}
+
+		ID3D12Device5* rtDevice = nullptr;
+		g_Device->QueryInterface(IID_PPV_ARGS(&rtDevice));
+
+		return rtDevice;
+	}
 }
