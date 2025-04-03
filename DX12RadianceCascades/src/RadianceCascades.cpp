@@ -8,6 +8,7 @@
 #include "Core\GameInput.h"
 
 #include "ShaderCompilation\ShaderCompilationManager.h"
+#include "RaytracingUtils.h"
 
 #include "RadianceCascades.h"
 
@@ -50,6 +51,8 @@ void RadianceCascades::Startup()
 	InitializeShaders();
 	InitializePSOs();
 	InitializeRCResources();
+
+	InitializeRT();
 }
 
 void RadianceCascades::Cleanup()
@@ -324,6 +327,19 @@ void RadianceCascades::InitializeRCResources()
 
 	float diag = Math::Length({ (float)::GetSceneColorWidth(), (float)::GetSceneColorHeight(), 0.0f });
 	m_rcManager.Init(SAMPLE_LEN_0, RAYS_PER_PROBE_0, diag);
+}
+
+void RadianceCascades::InitializeRT()
+{
+	{
+		RaytracingPSO pso = RaytracingPSO(L"Raytracing PSO");
+		
+		pso.SetMaxRayRecursionDepth(1);
+		
+		pso.Finalize();
+	}
+
+
 }
 
 void RadianceCascades::RenderSceneImpl(Camera& camera, D3D12_VIEWPORT viewPort, D3D12_RECT scissor)

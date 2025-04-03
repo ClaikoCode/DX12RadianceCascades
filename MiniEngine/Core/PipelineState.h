@@ -113,3 +113,4 @@ private:
 
     D3D12_COMPUTE_PIPELINE_STATE_DESC m_PSODesc;
 };
+

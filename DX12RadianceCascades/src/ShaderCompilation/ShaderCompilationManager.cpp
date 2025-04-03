@@ -69,24 +69,6 @@ namespace
 		std::wstring errorOut = header + L"\n" + errorStringW + L"\n" + footer;
 		LOG_ERROR(L"Shader compilation failed:\n\n{}", errorOut);
 	}
-
-	void AddToIncludeManager(ComPtr<IDxcIncludeHandler> includeHandler, const std::wstring& filename)
-	{
-		ComPtr<IDxcBlob> includeBlob = nullptr;
-		std::wstring filePath = BuildShaderPath(filename);
-		ThrowIfFailed(includeHandler->LoadSource(filePath.c_str(), includeBlob.GetAddressOf()));
-
-#if defined(_DEBUG)
-		if (includeBlob == nullptr)
-		{
-			LOG_ERROR(L"Failed to load '{}' for shader includes.", filePath);
-		}
-		else
-		{
-			LOG_DEBUG(L"Added '{}' to shader includes.", filePath);
-		}
-#endif
-	}
 }
 
 // Saves all the filenames of included files.

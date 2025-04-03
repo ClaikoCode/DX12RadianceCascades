@@ -115,6 +115,7 @@ private:
     Microsoft::WRL::ComPtr<IDxcLibrary> m_library;
     Microsoft::WRL::ComPtr<IDxcCompiler3> m_compiler;
     Microsoft::WRL::ComPtr<IDxcUtils> m_utils;
+    Microsoft::WRL::ComPtr<IDxcLinker> m_linker;
 
     // Maps unique shader ids to shader compilation objects.
     std::unordered_map<UUID64, Shader::ShaderData> m_shaderDataMap;
