@@ -8,23 +8,27 @@ namespace Shader
     // ID for a type of shader from the rendering pipeline.
     enum ShaderType : uint32_t
     {
-        ShaderTypeNone = 0,
-        ShaderTypeVS = 1,
-        ShaderTypeHS = 1 << 1,
-        ShaderTypeDS = 1 << 2,
-        ShaderTypeGS = 1 << 3,
-        ShaderTypePS = 1 << 4,
-        ShaderTypeCS = 1 << 5,
+        ShaderTypeNone  = 0,
+        ShaderTypeVS    = 1 << 0,
+        ShaderTypeHS    = 1 << 1,
+        ShaderTypeDS    = 1 << 2,
+        ShaderTypeGS    = 1 << 3,
+        ShaderTypePS    = 1 << 4,
+        ShaderTypeCS    = 1 << 5,
+		ShaderTypeLib   = 1 << 6, // Library shader. Used for raytracing shaders.
 
         // Keep this after all the other shader types.
-        ShaderTypeLast = 1 << 6,
+        ShaderTypeLast = 1 << 7,
 
         // Common combinations of shader types.
         ShaderTypeVS_PS = ShaderTypeVS | ShaderTypePS,
         ShaderTypeVS_PS_CS = ShaderTypeVS | ShaderTypePS | ShaderTypeCS,
         ShaderTypeHS_DS_GS = ShaderTypeHS | ShaderTypeDS | ShaderTypeGS,
         ShaderTypeHS_ALL_BUT_VS = ShaderTypeHS | ShaderTypeDS | ShaderTypeGS | ShaderTypePS | ShaderTypeCS,
-        ShaderTypeAll = ShaderTypeVS | ShaderTypeHS | ShaderTypeDS | ShaderTypeGS | ShaderTypePS | ShaderTypeCS
+        ShaderTypeAll = ShaderTypeVS | ShaderTypeHS | ShaderTypeDS | ShaderTypeGS | ShaderTypePS | ShaderTypeCS,
+
+        // Alias for raytracing shaders.
+        ShaderTypeRT = ShaderTypeLib 
     };
 
     enum ShaderModel
@@ -89,6 +93,7 @@ public:
     void RegisterComputeShader(UUID64 shaderID, const std::wstring shaderFilename, bool compile = false);
     void RegisterVertexShader(UUID64 shaderID, const std::wstring shaderFilename, bool compile = false);
     void RegisterPixelShader(UUID64 shaderID, const std::wstring shaderFilename, bool compile = false);
+	void RegisterRaytracingShader(UUID64 shaderID, const std::wstring shaderFilename, bool compile = false);
     void RegisterShader(UUID64 shaderID, const std::wstring shaderFilename, Shader::ShaderType shaderType, bool compile = false);
     void RegisterShader(UUID64 shaderID, const Shader::ShaderCompilationPackage& compPackage, bool compile);
     

@@ -21,6 +21,7 @@ enum ShaderID : UUID64
 	ShaderIDFullScreenCopyCS,
 	ShaderIDRCMergeCS,
 	ShaderIDRCRadianceFieldCS,
+	ShaderIDRaytracingTestRT,
 
 	ShaderIDNone = NULL_ID
 };
