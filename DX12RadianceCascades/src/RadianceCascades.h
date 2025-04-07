@@ -122,6 +122,12 @@ private:
 	void AddShaderDependency(ShaderID shaderID, std::vector<PSOIDType> psoIDs);
 	void RegisterPSO(PSOID psoID, PSO* psoPtr);
 
+	ModelInstance& GetMainSceneModelInstance()
+	{
+		ASSERT(m_mainSceneModelInstanceIndex < m_sceneModels.size());
+		return m_sceneModels[m_mainSceneModelInstanceIndex];
+	}
+
 private:
 
 	RadianceCascadesSettings m_rcSettings = {};

@@ -24,9 +24,6 @@
     <ClInclude Include="src\rcpch.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\DirectXRaytracingHelper.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="src\ShaderCompilation\ShaderCompilationManager.h">
       <Filter>Header Files</Filter>
     </ClInclude>

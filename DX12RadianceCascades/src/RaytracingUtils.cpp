@@ -4,10 +4,6 @@
 
 using namespace Microsoft::WRL;
 
-D3D12_DISPATCH_RAYS_DESC RaytracingDispatchRayInputs::GetDispatchRaysDesc()
-{
-    return D3D12_DISPATCH_RAYS_DESC();
-}
 
 RaytracingPSO::RaytracingPSO(const wchar_t* Name)
 {
@@ -17,6 +13,12 @@ RaytracingPSO::RaytracingPSO(const wchar_t* Name)
 
 void RaytracingPSO::Finalize()
 {
+	if(m_finalized)
+	{
+		LOG_ERROR(L"RaytracingPSO::Finalize() called multiple times for '{}'.", m_name);
+		return;
+	}
+
 	D3D12_STATE_OBJECT_DESC* stateObjectDesc = const_cast<D3D12_STATE_OBJECT_DESC*>((const D3D12_STATE_OBJECT_DESC*)m_desc);
 
 	HRESULT hr = Graphics::g_Device5->CreateStateObject(
@@ -30,6 +32,28 @@ void RaytracingPSO::Finalize()
 		ThrowIfFailed(hr, L"Failed to create state object.");
 	}
 
+	m_finalized = true;
+}
+
+void* RaytracingPSO::GetShaderIdentifier(const std::wstring& exportName)
+{
+	if (m_finalized == false)
+	{
+		LOG_ERROR(L"RaytracingPSO::GetShaderIdentifier() called before Finalize() for '{}'.", m_name);
+		return nullptr;
+	}
+
+	ComPtr<ID3D12StateObjectProperties> stateObjectProperties = nullptr;
+	ThrowIfFailed(m_stateObject->QueryInterface(IID_PPV_ARGS(stateObjectProperties.GetAddressOf())), L"Failed to get state object properties.");
+
+	void* shaderIdentifier = stateObjectProperties->GetShaderIdentifier(exportName.c_str());
+
+	if (shaderIdentifier == nullptr)
+	{
+		LOG_ERROR(L"Could not get shader identifier for export name '{}'.", exportName);
+	}
+
+	return shaderIdentifier;
 }
 
 void RootSignature1::Finalize(const std::wstring& name, D3D12_ROOT_SIGNATURE_FLAGS flags)
@@ -75,4 +99,26 @@ void RootSignature1::Finalize(const std::wstring& name, D3D12_ROOT_SIGNATURE_FLA
 	);
 
 	m_signature->SetName(name.c_str());
+}
+
+D3D12_DISPATCH_RAYS_DESC RaytracingDispatchRayInputs::BuildDispatchRaysDesc(UINT width, UINT height)
+{
+	D3D12_DISPATCH_RAYS_DESC desc = {};
+
+	desc.HitGroupTable.StartAddress = m_hitGroupShaderTable.GetGpuVirtualAddress();
+	desc.HitGroupTable.SizeInBytes = m_hitGroupShaderTable.GetBufferSize();
+	desc.HitGroupTable.StrideInBytes = m_hitGroupStride;
+
+	desc.MissShaderTable.StartAddress = m_missShaderTable.GetGpuVirtualAddress();
+	desc.MissShaderTable.SizeInBytes = m_missShaderTable.GetBufferSize();
+	desc.MissShaderTable.StrideInBytes = desc.MissShaderTable.SizeInBytes; // Assumes only a single entry for miss ST.
+
+	desc.RayGenerationShaderRecord.StartAddress = m_rayGenShaderTable.GetGpuVirtualAddress();
+	desc.RayGenerationShaderRecord.SizeInBytes = m_rayGenShaderTable.GetBufferSize();
+
+	desc.Width = width;
+	desc.Height = height;
+	desc.Depth = 1;
+
+	return desc;
 }
