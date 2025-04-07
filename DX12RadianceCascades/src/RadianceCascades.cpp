@@ -19,6 +19,13 @@ static const std::wstring sBackupModelPath = L"models\\Testing\\SphereTest.gltf"
 
 #define SAMPLE_LEN_0 20.0f
 #define RAYS_PER_PROBE_0 4.0f
+
+// Raytracing entry data.
+struct LocalHitData
+{
+	D3D12_GPU_DESCRIPTOR_HANDLE sourceTex;
+};
+
 namespace
 {
 	uint32_t GetSceneColorWidth()
@@ -29,6 +36,27 @@ namespace
 	uint32_t GetSceneColorHeight()
 	{
 		return Graphics::g_SceneColorBuffer.GetHeight();
+	}
+
+	ShaderTable<LocalHitData> CreateModelShaderTable(const std::wstring& exportName, const Model& model, RaytracingPSO& rtPSO)
+	{
+		ShaderTable<LocalHitData> hitShaderTable = {};
+
+		const uint8_t* meshPtr = model.m_MeshData.get();
+		for (int i = 0; i < (int)model.m_NumMeshes; i++)
+		{
+			const Mesh& mesh = *(Mesh*)meshPtr;
+
+			auto& entry = hitShaderTable.emplace_back();
+			entry.entryData.sourceTex = Renderer::s_TextureHeap[mesh.srvTable];
+			//entry.entryData.materialID = (uint32_t)i;
+
+			entry.SetShaderIdentifier(rtPSO.GetShaderIdentifier(exportName));
+
+			meshPtr += sizeof(Mesh) + (mesh.numDraws - 1) * sizeof(Mesh::Draw);
+		}
+
+		return hitShaderTable;
 	}
 }
 
@@ -334,15 +362,45 @@ void RadianceCascades::InitializeRCResources()
 
 void RadianceCascades::InitializeRT()
 {
+	RaytracingPSO pso = RaytracingPSO(L"Raytracing PSO");
 	{
-		RaytracingPSO pso = RaytracingPSO(L"Raytracing PSO");
+		RootSignature1 globalRootSig = RootSignature1(3, 0);
+		globalRootSig[0].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 0, 1);
+		globalRootSig[1].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 1);
+		globalRootSig[2].InitAsConstants(2, 0);
+		globalRootSig.Finalize(L"Global Root Signature");
+		pso.SetGlobalRootSignature(&globalRootSig);
+
+		RootSignature1 localRootSig = RootSignature1(1, 0);
+		localRootSig[0].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1);
+		localRootSig.Finalize(L"Local Root Signature", D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE);
+		pso.SetLocalRootSignature(&localRootSig);
+
+		D3D12_SHADER_BYTECODE byteCode = ShaderCompilationManager::Get().GetShaderByteCode(ShaderIDRaytracingTestRT);
+
+		pso.SetDxilLibrary({ L"RayGenerationShader", L"AnyHitShader", L"ClosestHitShader", L"MissShader" }, byteCode);
+		pso.SetPayloadAndAttributeSize(4, 8);
+
+		pso.SetHitGroup(L"HitGroup", D3D12_HIT_GROUP_TYPE_TRIANGLES);
+		pso.SetClosestHitShader(L"ClosestHitShader");
 		
-		pso.SetMaxRayRecursionDepth(1);
-		
+		pso.SetMaxRayRecursionDepth(4);
+
 		pso.Finalize();
 	}
 
 
+	{
+		ShaderTable<LocalHitData> hitShaderTable = ::CreateModelShaderTable(L"HitGroup", GetMainSceneModelInstance().GetModel(), pso);
+		RaytracingDispatchRayInputs dispatchInputs = RaytracingDispatchRayInputs(
+			pso,
+			hitShaderTable,
+			L"RayGenerationShader",
+			L"MissShader"
+		);
+	}
+
+	// TODO: Check if i need to set stacksize here??
 }
 
 void RadianceCascades::RenderSceneImpl(Camera& camera, D3D12_VIEWPORT viewPort, D3D12_RECT scissor)
