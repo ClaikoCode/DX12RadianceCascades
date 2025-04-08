@@ -8,16 +8,16 @@
 #include "Core\GameInput.h"
 
 #include "ShaderCompilation\ShaderCompilationManager.h"
-#include "RaytracingUtils.h"
-
 #include "RadianceCascades.h"
 
 using namespace Microsoft::WRL;
 
 constexpr size_t MAX_INSTANCES = 256;
 static const std::set<Shader::ShaderType> s_ValidShaderTypes = { Shader::ShaderTypeCS, Shader::ShaderTypeVS, Shader::ShaderTypePS, Shader::ShaderTypeRT };
-static const DXGI_FORMAT s_flatlandSceneFormat = DXGI_FORMAT_R16G16B16A16_FLOAT;
-static const std::wstring sBackupModelPath = L"models\\Testing\\SphereTest.gltf";
+static const DXGI_FORMAT s_FlatlandSceneFormat = DXGI_FORMAT_R16G16B16A16_FLOAT;
+static const std::wstring s_BackupModelPath = L"models\\Testing\\SphereTest.gltf";
+static const std::wstring s_HitGroupName = L"HitGroup";
+static const std::vector<std::wstring> s_DXILExports = { L"RayGenerationShader", L"AnyHitShader", L"ClosestHitShader", L"MissShader" };
 
 #define SAMPLE_LEN_0 20.0f
 #define RAYS_PER_PROBE_0 4.0f
@@ -83,6 +83,14 @@ void RadianceCascades::Startup()
 	InitializeRCResources();
 
 	InitializeRT();
+
+	{
+		m_descCopies.Init();
+
+		DescriptorHandle& handle = m_descCopies.sceneColorUAVHandle;
+		handle = m_descCopies.descHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV].Alloc();
+		Graphics::g_Device->CopyDescriptorsSimple(1, handle, Graphics::g_SceneColorBuffer.GetUAV(), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+	}
 }
 
 void RadianceCascades::Cleanup()
@@ -97,6 +105,15 @@ void RadianceCascades::Cleanup()
 		}
 
 		m_flatlandScene.Destroy();
+	}
+
+	{
+		m_rtTestPSO.Destroy();
+		m_rtTestGlobalRootSig.Destroy();
+		m_rtTestLocalRootSig.Destroy();
+		m_testRTDispatch.Destroy();
+		m_sceneModelBLAS.Destroy();
+		m_sceneModelTLASInstance.Destroy();
 	}
 
 	m_rcManager.Shutdown();
@@ -137,9 +154,17 @@ void RadianceCascades::RenderScene()
 {
 	ClearPixelBuffers();
 
-	RenderSceneImpl(m_camera, m_mainViewport, m_mainScissor);
+	if (m_settings.globalSettings.renderRaster)
+	{
+		RenderSceneImpl(m_camera, m_mainViewport, m_mainScissor);
+	}
 
-	if (m_rcSettings.visualize2DCascades)
+	if (m_settings.globalSettings.renderRaytracing)
+	{
+		RenderRaytracing(m_camera, Graphics::g_SceneColorBuffer);
+	}
+
+	if (m_settings.rcSettings.visualize2DCascades)
 	{
 		RunComputeFlatlandScene();
 		RunComputeRCGather();
@@ -227,13 +252,15 @@ void RadianceCascades::InitializePSOs()
 
 	// Pointers to used PSOs
 	{
-		RegisterPSO(PSOIDFirstExternalPSO, &Renderer::sm_PSOs[9]);
-		RegisterPSO(PSOIDSecondExternalPSO, &Renderer::sm_PSOs[11]);
-		RegisterPSO(PSOIDComputeRCGatherPSO, &m_rcGatherPSO);
-		RegisterPSO(PSOIDComputeFlatlandScenePSO, &m_flatlandScenePSO);
-		RegisterPSO(PSOIDFullScreenCopyComputePSO, &m_fullScreenCopyComputePSO);
-		RegisterPSO(PSOIDComputeRCMergePSO, &m_rcMergePSO);
-		RegisterPSO(PSOIDComputeRCRadianceFieldPSO, &m_rcRadianceFieldPSO);
+		RegisterPSO(PSOIDFirstExternalPSO,			&Renderer::sm_PSOs[9],			PSOTypeGraphics);
+		RegisterPSO(PSOIDSecondExternalPSO,			&Renderer::sm_PSOs[11],			PSOTypeGraphics);
+		RegisterPSO(PSOIDComputeRCGatherPSO,		&m_rcGatherPSO,					PSOTypeCompute);
+		RegisterPSO(PSOIDComputeFlatlandScenePSO,	&m_flatlandScenePSO,			PSOTypeCompute);
+		RegisterPSO(PSOIDComputeFullScreenCopyPSO,	&m_fullScreenCopyComputePSO,	PSOTypeCompute);
+		RegisterPSO(PSOIDComputeRCMergePSO,			&m_rcMergePSO,					PSOTypeCompute);
+		RegisterPSO(PSOIDComputeRCRadianceFieldPSO, &m_rcRadianceFieldPSO,			PSOTypeCompute);
+		RegisterPSO(PSOIDRaytracingTestPSO,			&m_rtTestPSO,					PSOTypeRaytracing);
+
 	}
 
 	// Bind shader ids to specific PSOs for recompilation purposes.
@@ -246,9 +273,11 @@ void RadianceCascades::InitializePSOs()
 		// Internal PSO dependencies.
 		AddShaderDependency(ShaderIDRCGatherCS, { PSOIDComputeRCGatherPSO });
 		AddShaderDependency(ShaderIDFlatlandSceneCS, { PSOIDComputeFlatlandScenePSO });
-		AddShaderDependency(ShaderIDFullScreenCopyCS, { PSOIDFullScreenCopyComputePSO });
+		AddShaderDependency(ShaderIDFullScreenCopyCS, { PSOIDComputeFullScreenCopyPSO });
 		AddShaderDependency(ShaderIDRCMergeCS, { PSOIDComputeRCMergePSO });
 		AddShaderDependency(ShaderIDRCRadianceFieldCS, { PSOIDComputeRCRadianceFieldPSO });
+		AddShaderDependency(ShaderIDRaytracingTestRT, { PSOIDRaytracingTestPSO });
+		
 	}
 
 	{
@@ -356,7 +385,7 @@ void RadianceCascades::InitializePSOs()
 
 void RadianceCascades::InitializeRCResources()
 {
-	m_flatlandScene.Create(L"Flatland Scene", ::GetSceneColorWidth(), ::GetSceneColorHeight(), 1, s_flatlandSceneFormat);
+	m_flatlandScene.Create(L"Flatland Scene", ::GetSceneColorWidth(), ::GetSceneColorHeight(), 1, s_FlatlandSceneFormat);
 
 	float diag = Math::Length({ (float)::GetSceneColorWidth(), (float)::GetSceneColorHeight(), 0.0f });
 	m_rcManager.Init(SAMPLE_LEN_0, RAYS_PER_PROBE_0, diag);
@@ -364,55 +393,58 @@ void RadianceCascades::InitializeRCResources()
 
 void RadianceCascades::InitializeRT()
 {
-	RaytracingPSO pso = RaytracingPSO(L"Raytracing PSO");
+	RaytracingPSO& pso = m_rtTestPSO;
 	{
-		RootSignature1 globalRootSig = RootSignature1(3, 0);
-		globalRootSig[0].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 0, 1);
-		globalRootSig[1].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 1);
-		globalRootSig[2].InitAsConstants(2, 0);
+		RootSignature1& globalRootSig = m_rtTestGlobalRootSig;
+		globalRootSig.Reset(RootEntryRTGCount, 1);
+		globalRootSig[RootEntryRTGSRV].InitAsShaderResourceView(0);
+		globalRootSig[RootEntryRTGUAV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 1);
+		globalRootSig[RootEntryRTGParamCB].InitAsConstantBufferView(0);
+		globalRootSig[RootEntryRTGInfoCB].InitAsConstantBufferView(1);
+		{
+			SamplerDesc sampler = Graphics::SamplerLinearClampDesc;
+			globalRootSig.InitStaticSampler(0, sampler);
+		}
+
 		globalRootSig.Finalize(L"Global Root Signature");
 		pso.SetGlobalRootSignature(&globalRootSig);
 
-		RootSignature1 localRootSig = RootSignature1(1, 0);
-		localRootSig[0].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1);
+		RootSignature1& localRootSig = m_rtTestLocalRootSig;
+		localRootSig.Reset(RootEntryRTLCount, 0);
+		localRootSig[RootEntryRTLSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1);
 		localRootSig.Finalize(L"Local Root Signature", D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE);
 		pso.SetLocalRootSignature(&localRootSig);
 
 		D3D12_SHADER_BYTECODE byteCode = ShaderCompilationManager::Get().GetShaderByteCode(ShaderIDRaytracingTestRT);
 
-		pso.SetDxilLibrary({ L"RayGenerationShader", L"AnyHitShader", L"ClosestHitShader", L"MissShader" }, byteCode);
+		pso.SetDxilLibrary(s_DXILExports, byteCode);
 		pso.SetPayloadAndAttributeSize(4, 8);
 
-		pso.SetHitGroup(L"HitGroup", D3D12_HIT_GROUP_TYPE_TRIANGLES);
+		pso.SetHitGroup(s_HitGroupName, D3D12_HIT_GROUP_TYPE_TRIANGLES);
 		pso.SetClosestHitShader(L"ClosestHitShader");
 		
-		pso.SetMaxRayRecursionDepth(4);
+		pso.SetMaxRayRecursionDepth(1);
 
 		pso.Finalize();
 	}
 
 
 	{
-		ShaderTable<LocalHitData> hitShaderTable = ::CreateModelShaderTable(L"HitGroup", GetMainSceneModelInstance().GetModel(), pso);
-		RaytracingDispatchRayInputs dispatchInputs = RaytracingDispatchRayInputs(
-			pso,
-			hitShaderTable,
-			L"RayGenerationShader",
-			L"MissShader"
-		);
-	}
+		ShaderTable<LocalHitData> hitShaderTable = ::CreateModelShaderTable(s_HitGroupName, GetMainSceneModelInstance().GetModel(), pso);
+		m_testRTDispatch.Init(pso, hitShaderTable, L"RayGenerationShader", L"MissShader");
 
-	// TODO: Check if i need to set stacksize here??
+		// TODO: Check if i need to set stacksize here??
+	}
 
 	// Initializing acceleration structures.
 	{
 		const Model& model = GetMainSceneModelInstance().GetModel();
-		
-		BLASBuffers blasBuffers = BLASBuffers(model);
+		m_sceneModelBLAS.Init(model);
 
 		std::vector<Math::Matrix4> instances = {};
-		instances.push_back(Math::Matrix4(Math::kIdentity));
-		TLASBuffers tlasBuffers = TLASBuffers(blasBuffers, instances);
+		float scale = GetMainSceneModelInstance().GetTransform().GetScale();
+		instances.push_back(Math::Matrix4(Math::kIdentity).MakeScale(scale));
+		m_sceneModelTLASInstance.Init(m_sceneModelBLAS, instances);
 	}
 }
 
@@ -472,6 +504,63 @@ void RadianceCascades::RenderSceneImpl(Camera& camera, D3D12_VIEWPORT viewPort, 
 
 		gfxContext.Finish(true);
 	}
+}
+
+void RadianceCascades::RenderRaytracing(Camera& camera, ColorBuffer& colorTarget)
+{
+	__declspec(align(16)) struct RTParams
+	{
+		uint32_t dispatchWidth;
+		uint32_t dispatchHeight;
+		uint32_t rayFlags;
+		float holeSize;
+	} rtParams;
+
+	rtParams.dispatchHeight = colorTarget.GetHeight();
+	rtParams.dispatchWidth = colorTarget.GetWidth();
+	rtParams.rayFlags = D3D12_RAY_FLAG_CULL_BACK_FACING_TRIANGLES;
+	rtParams.holeSize = 0.0f;
+
+	__declspec(align(16)) struct GlobalInfo
+	{
+		Math::Matrix4 viewProjMatrix;
+		Math::Matrix4 invViewProjMatrix;
+		Math::Vector3 cameraPos;
+	} rtGlobalInfo;
+
+	Math::Matrix4 viewProjMatrix = camera.GetViewProjMatrix();
+	rtGlobalInfo.viewProjMatrix = viewProjMatrix;
+
+	Math::Matrix4 invViewProjMatrix = Math::Matrix4(DirectX::XMMatrixInverse(nullptr, viewProjMatrix));
+	rtGlobalInfo.invViewProjMatrix = invViewProjMatrix;
+
+	rtGlobalInfo.cameraPos = camera.GetPosition();
+
+	ComputeContext& cmptContext = ComputeContext::Begin(L"Render Raytracing");
+	ComPtr<ID3D12GraphicsCommandList4> rtCommandList = nullptr;
+	ThrowIfFailed(cmptContext.GetCommandList()->QueryInterface(rtCommandList.GetAddressOf()));
+
+	// Transition resources
+	{
+		cmptContext.TransitionResource(colorTarget, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+		cmptContext.FlushResourceBarriers();
+	}
+
+	cmptContext.SetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, Renderer::s_TextureHeap.GetHeapPointer());
+
+	ID3D12DescriptorHeap* pDescriptorHeaps[] = { m_descCopies.descHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV].GetHeapPointer() };
+	rtCommandList->SetDescriptorHeaps(1, pDescriptorHeaps);
+	rtCommandList->SetComputeRootSignature(m_rtTestGlobalRootSig.GetSignature());
+	rtCommandList->SetComputeRootShaderResourceView(RootEntryRTGSRV, m_sceneModelTLASInstance.GetBVH());
+	rtCommandList->SetComputeRootDescriptorTable(RootEntryRTGUAV, m_descCopies.sceneColorUAVHandle);
+	cmptContext.SetDynamicConstantBufferView(RootEntryRTGParamCB, sizeof(RTParams), &rtParams);
+	cmptContext.SetDynamicConstantBufferView(RootEntryRTGInfoCB, sizeof(GlobalInfo), &rtGlobalInfo);
+
+	D3D12_DISPATCH_RAYS_DESC rayDispatchDesc = m_testRTDispatch.BuildDispatchRaysDesc(colorTarget.GetWidth(), colorTarget.GetHeight());
+	rtCommandList->SetPipelineState1(m_rtTestPSO.GetStateObject().Get());
+	rtCommandList->DispatchRays(&rayDispatchDesc);
+
+	cmptContext.Finish(true);
 }
 
 void RadianceCascades::RunComputeFlatlandScene()
@@ -633,11 +722,9 @@ void RadianceCascades::UpdateGraphicsPSOs()
 				continue;
 			}
 
-			void* binary = nullptr;
-			size_t binarySize = 0;
-			shaderCompManager.GetShaderDataBinary(shaderID, &binary, &binarySize);
+			D3D12_SHADER_BYTECODE shaderByteCode = shaderCompManager.GetShaderByteCode(shaderID);
 			
-			if (binary)
+			if (shaderByteCode.pShaderBytecode)
 			{
 				const auto& psoIds = m_shaderPSODependencyMap[shaderID];
 
@@ -645,31 +732,49 @@ void RadianceCascades::UpdateGraphicsPSOs()
 				{
 					for (PSOIDType psoId : psoIds)
 					{
-						if (shaderType == Shader::ShaderTypeCS)
+						const PSOPackage& package = m_usedPSOs[psoId];
+
+						if (package.psoType == PSOTypeCompute)
 						{
-							ComputePSO& pso = *(reinterpret_cast<ComputePSO*>(m_usedPSOs[psoId]));
+							ComputePSO& pso = *(reinterpret_cast<ComputePSO*>(package.PSOPointer));
 
 							if (pso.GetPipelineStateObject() != nullptr)
 							{
-								pso.SetComputeShader(binary, binarySize);
+								pso.SetComputeShader(shaderByteCode);
 								pso.Finalize();
 							}
 						}
-						else
+						else if (package.psoType == PSOTypeGraphics)
 						{
-							GraphicsPSO& pso = *(reinterpret_cast<GraphicsPSO*>(m_usedPSOs[psoId]));
+							GraphicsPSO& pso = *(reinterpret_cast<GraphicsPSO*>(package.PSOPointer));
 
 							if (pso.GetPipelineStateObject() != nullptr)
 							{
 								if (shaderType == Shader::ShaderTypePS)
 								{
-									pso.SetPixelShader(binary, binarySize);
+									pso.SetPixelShader(shaderByteCode);
 								}
 								else if (shaderType == Shader::ShaderTypeVS)
 								{
-									pso.SetVertexShader(binary, binarySize);
+									pso.SetVertexShader(shaderByteCode);
 								}
 
+								pso.Finalize();
+							}
+						}
+						else if (package.psoType == PSOTypeRaytracing)
+						{
+							LOG_INFO(L"Raytracing PSO Reloading is not implemented yet.");
+							continue;
+
+							Graphics::g_CommandManager.IdleGPU();
+
+							RaytracingPSO& pso = *(reinterpret_cast<RaytracingPSO*>(package.PSOPointer));
+
+							if (pso.GetStateObject() != nullptr)
+							{
+								pso.SetDxilLibrary(s_DXILExports, shaderByteCode);
+							
 								pso.Finalize();
 							}
 						}
@@ -740,7 +845,7 @@ ModelInstance& RadianceCascades::AddModelInstance(std::shared_ptr<Model> modelPt
 
 	if (modelPtr == nullptr)
 	{
-		modelPtr = Renderer::LoadModel(sBackupModelPath, false);
+		modelPtr = Renderer::LoadModel(s_BackupModelPath, false);
 		LOG_ERROR(L"Model was invalid. Using backup model instead. If Sponza model is missing, download a Sponza PBR gltf model online.");
 	}
 	
@@ -756,8 +861,12 @@ void RadianceCascades::AddShaderDependency(ShaderID shaderID, std::vector<uint32
 	}
 }
 
-void RadianceCascades::RegisterPSO(PSOID psoID, PSO* psoPtr)
+void RadianceCascades::RegisterPSO(PSOID psoID, void* psoPtr, PSOType psoType)
 {
-	m_usedPSOs[psoID] = psoPtr;
+	m_usedPSOs[psoID] = { psoPtr, psoType };
 }
 
+void DescriptorCopies::Init()
+{
+	descHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV].Create(L"Desc Copies CBV SRV UAV", D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 256);
+}

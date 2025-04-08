@@ -12,13 +12,15 @@ RaytracingPSO::RaytracingPSO(const wchar_t* Name)
 	m_desc = CD3DX12_STATE_OBJECT_DESC(D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE);
 }
 
+RaytracingPSO::~RaytracingPSO()
+{
+	Destroy();
+}
+
 void RaytracingPSO::Finalize()
 {
-	if(m_finalized)
-	{
-		LOG_ERROR(L"RaytracingPSO::Finalize() called multiple times for '{}'.", m_name);
-		return;
-	}
+	// Releases the previous state object.
+	m_stateObject = nullptr;
 
 	D3D12_STATE_OBJECT_DESC* stateObjectDesc = const_cast<D3D12_STATE_OBJECT_DESC*>((const D3D12_STATE_OBJECT_DESC*)m_desc);
 
@@ -33,12 +35,17 @@ void RaytracingPSO::Finalize()
 		ThrowIfFailed(hr, L"Failed to create state object.");
 	}
 
-	m_finalized = true;
+	m_stateObject.Get()->SetName(m_name.c_str());
+}
+
+void RaytracingPSO::Destroy()
+{
+	m_stateObject = nullptr;
 }
 
 void* RaytracingPSO::GetShaderIdentifier(const std::wstring& exportName)
 {
-	if (m_finalized == false)
+	if (m_stateObject == nullptr)
 	{
 		LOG_ERROR(L"RaytracingPSO::GetShaderIdentifier() called before Finalize() for '{}'.", m_name);
 		return nullptr;
@@ -61,6 +68,7 @@ void RootSignature1::Finalize(const std::wstring& name, D3D12_ROOT_SIGNATURE_FLA
 {
 	UINT numParameters = (UINT)m_params.size();
 	UINT numSamplers = (UINT)m_samplers.size();
+	ASSERT(numSamplers == m_initializedSamplers);
 
 	D3D12_ROOT_PARAMETER1* params = numParameters > 0 ? m_params.data() : nullptr;
 	D3D12_STATIC_SAMPLER_DESC* samplers = numSamplers > 0 ? m_samplers.data() : nullptr;
@@ -102,6 +110,61 @@ void RootSignature1::Finalize(const std::wstring& name, D3D12_ROOT_SIGNATURE_FLA
 	m_signature->SetName(name.c_str());
 }
 
+void RootSignature1::InitStaticSampler(uint32_t reg, const D3D12_SAMPLER_DESC& samplerDesc, D3D12_SHADER_VISIBILITY visibility)
+{
+	// The code below is adapted from the InitStaticSampler inside RootSignature.cpp in MiniEngine.
+
+	ASSERT(m_initializedSamplers < m_samplers.size());
+	D3D12_STATIC_SAMPLER_DESC& StaticSamplerDesc = m_samplers[m_initializedSamplers++];
+
+	StaticSamplerDesc.Filter = samplerDesc.Filter;
+	StaticSamplerDesc.AddressU = samplerDesc.AddressU;
+	StaticSamplerDesc.AddressV = samplerDesc.AddressV;
+	StaticSamplerDesc.AddressW = samplerDesc.AddressW;
+	StaticSamplerDesc.MipLODBias = samplerDesc.MipLODBias;
+	StaticSamplerDesc.MaxAnisotropy = samplerDesc.MaxAnisotropy;
+	StaticSamplerDesc.ComparisonFunc = samplerDesc.ComparisonFunc;
+	StaticSamplerDesc.BorderColor = D3D12_STATIC_BORDER_COLOR_OPAQUE_WHITE;
+	StaticSamplerDesc.MinLOD = samplerDesc.MinLOD;
+	StaticSamplerDesc.MaxLOD = samplerDesc.MaxLOD;
+	StaticSamplerDesc.ShaderRegister = reg;
+	StaticSamplerDesc.RegisterSpace = 0;
+	StaticSamplerDesc.ShaderVisibility = visibility;
+
+	if (StaticSamplerDesc.AddressU == D3D12_TEXTURE_ADDRESS_MODE_BORDER ||
+		StaticSamplerDesc.AddressV == D3D12_TEXTURE_ADDRESS_MODE_BORDER ||
+		StaticSamplerDesc.AddressW == D3D12_TEXTURE_ADDRESS_MODE_BORDER)
+	{
+		WARN_ONCE_IF_NOT(
+			// Transparent Black
+			samplerDesc.BorderColor[0] == 0.0f &&
+			samplerDesc.BorderColor[1] == 0.0f &&
+			samplerDesc.BorderColor[2] == 0.0f &&
+			samplerDesc.BorderColor[3] == 0.0f ||
+			// Opaque Black
+			samplerDesc.BorderColor[0] == 0.0f &&
+			samplerDesc.BorderColor[1] == 0.0f &&
+			samplerDesc.BorderColor[2] == 0.0f &&
+			samplerDesc.BorderColor[3] == 1.0f ||
+			// Opaque White
+			samplerDesc.BorderColor[0] == 1.0f &&
+			samplerDesc.BorderColor[1] == 1.0f &&
+			samplerDesc.BorderColor[2] == 1.0f &&
+			samplerDesc.BorderColor[3] == 1.0f,
+			"Sampler border color does not match static sampler limitations");
+
+		if (samplerDesc.BorderColor[3] == 1.0f)
+		{
+			if (samplerDesc.BorderColor[0] == 1.0f)
+				StaticSamplerDesc.BorderColor = D3D12_STATIC_BORDER_COLOR_OPAQUE_WHITE;
+			else
+				StaticSamplerDesc.BorderColor = D3D12_STATIC_BORDER_COLOR_OPAQUE_BLACK;
+		}
+		else
+			StaticSamplerDesc.BorderColor = D3D12_STATIC_BORDER_COLOR_TRANSPARENT_BLACK;
+	}
+}
+
 D3D12_DISPATCH_RAYS_DESC RaytracingDispatchRayInputs::BuildDispatchRaysDesc(UINT width, UINT height)
 {
 	D3D12_DISPATCH_RAYS_DESC desc = {};
@@ -124,7 +187,17 @@ D3D12_DISPATCH_RAYS_DESC RaytracingDispatchRayInputs::BuildDispatchRaysDesc(UINT
 	return desc;
 }
 
+BLASBuffers::~BLASBuffers()
+{
+	Destroy();
+}
+
 BLASBuffers::BLASBuffers(const Model& model)
+{
+	Init(model);
+}
+
+void BLASBuffers::Init(const Model& model)
 {
 	const uint32_t meshCounts = model.m_NumMeshes;
 	const Mesh* meshPtr = (const Mesh*)model.m_MeshData.get();
@@ -142,6 +215,12 @@ BLASBuffers::BLASBuffers(const Model& model)
 
 	m_asData.CreateAndSetBuffers(blasDesc);
 	BuildAccelerationStructure(blasDesc);
+}
+
+void BLASBuffers::Destroy()
+{
+	m_asData.Destroy();
+	m_geomDescs.clear();
 }
 
 void BLASBuffers::FillGeomDescs(const Mesh* meshes, uint32_t numMeshes, D3D12_GPU_VIRTUAL_ADDRESS modelDataBuffer)
@@ -182,7 +261,17 @@ D3D12_GPU_VIRTUAL_ADDRESS BLASBuffers::GetBVH() const
 	return m_asData.bvhBuffer.GetGpuVirtualAddress();
 }
 
+TLASBuffers::~TLASBuffers()
+{
+	Destroy();
+}
+
 TLASBuffers::TLASBuffers(const BLASBuffers& blas, const std::vector<Math::Matrix4>& instances)
+{
+	Init(blas, instances);
+}
+
+void TLASBuffers::Init(const BLASBuffers& blas, const std::vector<Math::Matrix4>& instances)
 {
 	if (instances.size() == 0)
 	{
@@ -191,7 +280,7 @@ TLASBuffers::TLASBuffers(const BLASBuffers& blas, const std::vector<Math::Matrix
 	}
 
 	FillInstanceDescs(blas.GetBVH(), instances);
-	
+
 	const uint32_t numInstances = (uint32_t)instances.size();
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC tlasDesc = {};
 	{
@@ -206,6 +295,18 @@ TLASBuffers::TLASBuffers(const BLASBuffers& blas, const std::vector<Math::Matrix
 	m_asData.CreateAndSetBuffers(tlasDesc);
 	CreateInstanceDataBuffer(tlasDesc, numInstances, m_instanceDescs.data());
 	BuildAccelerationStructure(tlasDesc);
+}
+
+void TLASBuffers::Destroy()
+{
+	m_asData.Destroy();
+	m_instanceDataBuffer.Destroy();
+	m_instanceDescs.clear();
+}
+
+D3D12_GPU_VIRTUAL_ADDRESS TLASBuffers::GetBVH() const
+{
+	return m_asData.bvhBuffer.GetGpuVirtualAddress();
 }
 
 void TLASBuffers::FillInstanceDescs(D3D12_GPU_VIRTUAL_ADDRESS blasAddress, const std::vector<Math::Matrix4>& instances)
