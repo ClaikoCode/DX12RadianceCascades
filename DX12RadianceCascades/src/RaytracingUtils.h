@@ -301,3 +301,73 @@ struct RaytracingDispatchRayInputs
 	ByteAddressBuffer m_missShaderTable;
 	ByteAddressBuffer m_hitGroupShaderTable;
 };
+
+void BuildAccelerationStructure(D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC& structDesc);
+
+class AccelerationStructureBuffer : public ByteAddressBuffer
+{
+public:
+	AccelerationStructureBuffer() : ByteAddressBuffer()
+	{
+		m_UsageState = D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE;
+	}
+};
+
+struct AccelerationStructureData
+{
+	AccelerationStructureBuffer bvhBuffer;
+	ByteAddressBuffer scratchBuffer;
+
+	inline void CreateAndSetBuffers(D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC& structDesc)
+	{
+		D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO prebuildInfo = {};
+		Graphics::g_Device5->GetRaytracingAccelerationStructurePrebuildInfo(&structDesc.Inputs, &prebuildInfo);
+
+		scratchBuffer.Create(L"Scratch Buffer", (uint32_t)prebuildInfo.ScratchDataSizeInBytes, 1);
+		bvhBuffer.Create(L"BVH Buffer", 1, (uint32_t)prebuildInfo.ResultDataMaxSizeInBytes);
+
+		SetAccelerationStructureData(structDesc);
+	}
+
+private:
+	inline void SetAccelerationStructureData(D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC& desc)
+	{
+		desc.DestAccelerationStructureData = bvhBuffer.GetGpuVirtualAddress();
+		desc.ScratchAccelerationStructureData = scratchBuffer.GetGpuVirtualAddress();
+	}
+
+};
+
+class BLASBuffers
+{
+public:
+	BLASBuffers() = default;
+	BLASBuffers(const Model& model);
+
+	D3D12_GPU_VIRTUAL_ADDRESS GetBVH() const;
+
+private:
+	void FillGeomDescs(const Mesh* meshes, uint32_t numMeshes, D3D12_GPU_VIRTUAL_ADDRESS modelDataBuffer);
+
+private:
+	AccelerationStructureData m_asData;
+	std::vector<D3D12_RAYTRACING_GEOMETRY_DESC> m_geomDescs;
+};
+
+class TLASBuffers
+{
+public:
+
+	TLASBuffers() = default;
+	TLASBuffers(const BLASBuffers& blas, const std::vector<Math::Matrix4>& instances);
+
+private:
+
+	void FillInstanceDescs(D3D12_GPU_VIRTUAL_ADDRESS blasAddress, const std::vector<Math::Matrix4>& instances);
+	void CreateInstanceDataBuffer(D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC& structDesc, uint32_t numInstances, D3D12_RAYTRACING_INSTANCE_DESC* descs);
+
+private:
+	AccelerationStructureData m_asData;
+	std::vector<D3D12_RAYTRACING_INSTANCE_DESC> m_instanceDescs;
+	ByteAddressBuffer m_instanceDataBuffer;
+};
