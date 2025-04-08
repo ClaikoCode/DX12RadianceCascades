@@ -31,7 +31,8 @@ void GpuBuffer::Create( const std::wstring& name, uint32_t NumElements, uint32_t
 
     D3D12_RESOURCE_DESC ResourceDesc = DescribeBuffer();
 
-    m_UsageState = D3D12_RESOURCE_STATE_COMMON;
+    // Modified by JD.
+    m_UsageState = m_UsageState == D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE ? m_UsageState : D3D12_RESOURCE_STATE_COMMON;
 
     D3D12_HEAP_PROPERTIES HeapProps;
     HeapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
