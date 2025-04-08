@@ -12,6 +12,8 @@
 
 #include "RadianceCascades.h"
 
+using namespace Microsoft::WRL;
+
 constexpr size_t MAX_INSTANCES = 256;
 static const std::set<Shader::ShaderType> s_ValidShaderTypes = { Shader::ShaderTypeCS, Shader::ShaderTypeVS, Shader::ShaderTypePS, Shader::ShaderTypeRT };
 static const DXGI_FORMAT s_flatlandSceneFormat = DXGI_FORMAT_R16G16B16A16_FLOAT;
@@ -401,6 +403,17 @@ void RadianceCascades::InitializeRT()
 	}
 
 	// TODO: Check if i need to set stacksize here??
+
+	// Initializing acceleration structures.
+	{
+		const Model& model = GetMainSceneModelInstance().GetModel();
+		
+		BLASBuffers blasBuffers = BLASBuffers(model);
+
+		std::vector<Math::Matrix4> instances = {};
+		instances.push_back(Math::Matrix4(Math::kIdentity));
+		TLASBuffers tlasBuffers = TLASBuffers(blasBuffers, instances);
+	}
 }
 
 void RadianceCascades::RenderSceneImpl(Camera& camera, D3D12_VIEWPORT viewPort, D3D12_RECT scissor)
