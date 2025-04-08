@@ -317,11 +317,6 @@ void Graphics::Initialize(bool RequireDXRSupport)
         // Prevent the GPU from overclocking or underclocking to get consistent timings
         if (DeveloperModeEnabled)
             g_Device->SetStablePowerState(TRUE);
-
-        // Added by JD
-        {
-            ASSERT_SUCCEEDED(g_Device->QueryInterface<ID3D12Device5>(&g_Device5));
-        }
     }
 #endif	
 
@@ -377,6 +372,11 @@ void Graphics::Initialize(bool RequireDXRSupport)
         pInfoQueue->Release();
     }
 #endif
+
+    // Added by JD
+    {
+        ASSERT_SUCCEEDED(g_Device->QueryInterface<ID3D12Device5>(&g_Device5));
+    }
 
     // We like to do read-modify-write operations on UAVs during post processing.  To support that, we
     // need to either have the hardware do typed UAV loads of R11G11B10_FLOAT or we need to manually
