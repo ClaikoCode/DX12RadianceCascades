@@ -102,6 +102,21 @@ public:
 		Reset(numParams, numSamplers);
 	}
 
+	~RootSignature1()
+	{
+		Destroy();
+	}
+
+	void Destroy()
+	{
+		for (auto& param : m_params)
+		{
+			param.Clear();
+		}
+
+		m_signature = nullptr;
+	}
+
 	void Reset(uint32_t numParams, uint32_t numSamplers)
 	{
 		m_params.clear();
@@ -109,7 +124,10 @@ public:
 
 		m_samplers.clear();
 		m_samplers.resize(numSamplers);
+
+		m_initializedSamplers = 0;
 	}
+	
 
 	ID3D12RootSignature* GetSignature() const
 	{
@@ -117,6 +135,7 @@ public:
 	}
 
 	void Finalize(const std::wstring& name, D3D12_ROOT_SIGNATURE_FLAGS flags = D3D12_ROOT_SIGNATURE_FLAG_NONE);
+	void InitStaticSampler(uint32_t reg, const D3D12_SAMPLER_DESC& samplerDesc, D3D12_SHADER_VISIBILITY visibility = D3D12_SHADER_VISIBILITY_ALL);
 	
 	RootParameter1& operator[](size_t entryIndex)
 	{
@@ -132,6 +151,7 @@ public:
 
 private:
 	std::vector<RootParameter1> m_params;
+	uint32_t m_initializedSamplers;
 	std::vector<D3D12_STATIC_SAMPLER_DESC> m_samplers;
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> m_signature;
 };
@@ -145,14 +165,16 @@ struct SubObjectPtrs
 	CD3DX12_RAYTRACING_PIPELINE_CONFIG_SUBOBJECT* pipelineConfig = nullptr;
 	CD3DX12_LOCAL_ROOT_SIGNATURE_SUBOBJECT* localRootSignature = nullptr;
 	CD3DX12_GLOBAL_ROOT_SIGNATURE_SUBOBJECT* globalRootSignature = nullptr;
-	std::vector<CD3DX12_DXIL_LIBRARY_SUBOBJECT*> dxilLibraries = {nullptr};
+	CD3DX12_DXIL_LIBRARY_SUBOBJECT* dxilLibrary = nullptr;
 };
 
 class RaytracingPSO
 {
 public:
 	RaytracingPSO(const wchar_t* Name = L"Unnamed Raytracing PSO");
+	~RaytracingPSO();
 	void Finalize();
+	void Destroy();
 
 	void SetNodeMask(UINT nodeMask) // This function is called without template
 	{
@@ -182,7 +204,10 @@ public:
 
 	void SetDxilLibrary(const std::vector<std::wstring>& exportNames, const D3D12_SHADER_BYTECODE& shaderByteCode)
 	{
-		auto dxilLibrary = GetOrCreate(m_subObjectPtrs.dxilLibraries.emplace_back());
+		auto dxilLibrary = GetOrCreate(m_subObjectPtrs.dxilLibrary);
+		// This effectively clears the library.
+		*dxilLibrary = CD3DX12_DXIL_LIBRARY_SUBOBJECT();
+
 		dxilLibrary->SetDXILLibrary(&shaderByteCode);
 
 		std::vector<LPCWSTR> exportNamePtrs(exportNames.size());
@@ -219,8 +244,8 @@ public:
 	}
 
 	void* GetShaderIdentifier(const std::wstring& exportName);
-
 	Microsoft::WRL::ComPtr<ID3D12StateObject> GetStateObject() { return m_stateObject; }
+
 
 private:
 
@@ -242,7 +267,6 @@ private:
 
 private:
 
-	bool m_finalized = false;
 	std::wstring m_name;
 	SubObjectPtrs m_subObjectPtrs;
 	CD3DX12_STATE_OBJECT_DESC m_desc;
@@ -253,13 +277,19 @@ private:
 struct RaytracingDispatchRayInputs
 {
 	RaytracingDispatchRayInputs() : m_hitGroupStride(0) {}
+	~RaytracingDispatchRayInputs()
+	{
+		Destroy();
+	}
 
 	template<typename T>
-	RaytracingDispatchRayInputs(
-		RaytracingPSO& rtPSO,
-		ShaderTable<T>& hitShaderTable,
-		const std::wstring& rayGenExport,
-		const std::wstring& missShaderExport)
+	RaytracingDispatchRayInputs(RaytracingPSO& rtPSO, ShaderTable<T>& hitShaderTable, const std::wstring& rayGenExport, const std::wstring& missShaderExport)
+	{
+		Init(rtPSO, hitShaderTable, rayGenExport, missShaderExport);
+	}
+
+	template<typename T>
+	void Init(RaytracingPSO& rtPSO, ShaderTable<T>& hitShaderTable, const std::wstring& rayGenExport, const std::wstring& missShaderExport)
 	{
 		m_stateObject = rtPSO.GetStateObject();
 		m_hitGroupStride = GetShaderTableEntrySize(hitShaderTable);
@@ -288,12 +318,18 @@ struct RaytracingDispatchRayInputs
 			GetShaderTableSimpleSize(missShaderTable),
 			missShaderTable.data()
 		);
-		
-		
+
+	}
+
+	void Destroy()
+	{
+		m_stateObject = nullptr;
+		m_rayGenShaderTable.Destroy();
+		m_missShaderTable.Destroy();
+		m_hitGroupShaderTable.Destroy();
 	}
 
 	D3D12_DISPATCH_RAYS_DESC BuildDispatchRaysDesc(UINT width, UINT height);
-	
 
 	Microsoft::WRL::ComPtr<ID3D12StateObject> m_stateObject;
 	uint32_t m_hitGroupStride;
@@ -318,7 +354,7 @@ struct AccelerationStructureData
 	AccelerationStructureBuffer bvhBuffer;
 	ByteAddressBuffer scratchBuffer;
 
-	inline void CreateAndSetBuffers(D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC& structDesc)
+	void CreateAndSetBuffers(D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC& structDesc)
 	{
 		D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO prebuildInfo = {};
 		Graphics::g_Device5->GetRaytracingAccelerationStructurePrebuildInfo(&structDesc.Inputs, &prebuildInfo);
@@ -329,8 +365,14 @@ struct AccelerationStructureData
 		SetAccelerationStructureData(structDesc);
 	}
 
+	void Destroy()
+	{
+		bvhBuffer.Destroy();
+		scratchBuffer.Destroy();
+	}
+
 private:
-	inline void SetAccelerationStructureData(D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC& desc)
+	void SetAccelerationStructureData(D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC& desc)
 	{
 		desc.DestAccelerationStructureData = bvhBuffer.GetGpuVirtualAddress();
 		desc.ScratchAccelerationStructureData = scratchBuffer.GetGpuVirtualAddress();
@@ -342,7 +384,11 @@ class BLASBuffers
 {
 public:
 	BLASBuffers() = default;
+	~BLASBuffers();
 	BLASBuffers(const Model& model);
+	
+	void Init(const Model& model);
+	void Destroy();
 
 	D3D12_GPU_VIRTUAL_ADDRESS GetBVH() const;
 
@@ -359,7 +405,13 @@ class TLASBuffers
 public:
 
 	TLASBuffers() = default;
+	~TLASBuffers();
 	TLASBuffers(const BLASBuffers& blas, const std::vector<Math::Matrix4>& instances);
+
+	void Init(const BLASBuffers& blas, const std::vector<Math::Matrix4>& instances);
+	void Destroy();
+
+	D3D12_GPU_VIRTUAL_ADDRESS GetBVH() const;
 
 private:
 
