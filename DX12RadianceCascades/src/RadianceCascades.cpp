@@ -45,6 +45,7 @@ namespace
 		ShaderTable<LocalHitData> hitShaderTable = {};
 
 		const uint8_t* meshPtr = model.m_MeshData.get();
+		void* shaderIdentifier = rtPSO.GetShaderIdentifier(exportName);
 		for (int i = 0; i < (int)model.m_NumMeshes; i++)
 		{
 			const Mesh& mesh = *(Mesh*)meshPtr;
@@ -53,7 +54,7 @@ namespace
 			entry.entryData.sourceTex = Renderer::s_TextureHeap[mesh.srvTable];
 			//entry.entryData.materialID = (uint32_t)i;
 
-			entry.SetShaderIdentifier(rtPSO.GetShaderIdentifier(exportName));
+			entry.SetShaderIdentifier(shaderIdentifier);
 
 			meshPtr += sizeof(Mesh) + (mesh.numDraws - 1) * sizeof(Mesh::Draw);
 		}
@@ -441,10 +442,17 @@ void RadianceCascades::InitializeRT()
 		const Model& model = GetMainSceneModelInstance().GetModel();
 		m_sceneModelBLAS.Init(model);
 
-		std::vector<Math::Matrix4> instances = {};
+		std::vector<TLASInstanceGroup> instanceGroups = {};
+
+		TLASInstanceGroup& instanceGroup = instanceGroups.emplace_back();
+
 		float scale = GetMainSceneModelInstance().GetTransform().GetScale();
-		instances.push_back(Math::Matrix4(Math::kIdentity).MakeScale(scale));
-		m_sceneModelTLASInstance.Init(m_sceneModelBLAS, instances);
+		instanceGroup.instanceTransforms.push_back(Math::Matrix4(Math::kIdentity).MakeScale(scale));
+		instanceGroup.instanceTransforms.push_back(Math::Matrix4(Math::kIdentity).MakeScale(scale * 0.1f));
+
+		instanceGroup.blasBuffer = &m_sceneModelBLAS;
+
+		m_sceneModelTLASInstance.Init(instanceGroups);
 	}
 }
 
@@ -764,10 +772,8 @@ void RadianceCascades::UpdateGraphicsPSOs()
 						}
 						else if (package.psoType == PSOTypeRaytracing)
 						{
-							LOG_INFO(L"Raytracing PSO Reloading is not implemented yet.");
-							continue;
-
-							Graphics::g_CommandManager.IdleGPU();
+							//LOG_INFO(L"Raytracing PSO Reloading is not implemented yet.");
+							//continue;
 
 							RaytracingPSO& pso = *(reinterpret_cast<RaytracingPSO*>(package.PSOPointer));
 
