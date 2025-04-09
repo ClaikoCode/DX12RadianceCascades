@@ -176,7 +176,7 @@ public:
 	void Finalize();
 	void Destroy();
 
-	void SetNodeMask(UINT nodeMask) // This function is called without template
+	void SetNodeMask(UINT nodeMask)
 	{
 		GetOrCreate(m_subObjectPtrs.nodeMask)->SetNodeMask(nodeMask);
 	}
@@ -338,8 +338,6 @@ struct RaytracingDispatchRayInputs
 	ByteAddressBuffer m_hitGroupShaderTable;
 };
 
-void BuildAccelerationStructure(D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC& structDesc);
-
 class AccelerationStructureBuffer : public ByteAddressBuffer
 {
 public:
@@ -354,15 +352,14 @@ struct AccelerationStructureData
 	AccelerationStructureBuffer bvhBuffer;
 	ByteAddressBuffer scratchBuffer;
 
-	void CreateAndSetBuffers(D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC& structDesc)
+	// Takes in the AS desc to get prebuild info and creates BVH and Scratch buffers from that data.
+	void CreateBuffers(D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC& structDesc)
 	{
 		D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO prebuildInfo = {};
 		Graphics::g_Device5->GetRaytracingAccelerationStructurePrebuildInfo(&structDesc.Inputs, &prebuildInfo);
 
 		scratchBuffer.Create(L"Scratch Buffer", (uint32_t)prebuildInfo.ScratchDataSizeInBytes, 1);
 		bvhBuffer.Create(L"BVH Buffer", 1, (uint32_t)prebuildInfo.ResultDataMaxSizeInBytes);
-
-		SetAccelerationStructureData(structDesc);
 	}
 
 	void Destroy()
@@ -370,34 +367,30 @@ struct AccelerationStructureData
 		bvhBuffer.Destroy();
 		scratchBuffer.Destroy();
 	}
-
-private:
-	void SetAccelerationStructureData(D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC& desc)
-	{
-		desc.DestAccelerationStructureData = bvhBuffer.GetGpuVirtualAddress();
-		desc.ScratchAccelerationStructureData = scratchBuffer.GetGpuVirtualAddress();
-	}
-
 };
 
-class BLASBuffers
+class BLASBuffer
 {
 public:
-	BLASBuffers() = default;
-	~BLASBuffers();
-	BLASBuffers(const Model& model);
+	BLASBuffer() = default;
+	~BLASBuffer();
+	BLASBuffer(const Model& model);
 	
 	void Init(const Model& model);
 	void Destroy();
 
 	D3D12_GPU_VIRTUAL_ADDRESS GetBVH() const;
-
-private:
-	void FillGeomDescs(const Mesh* meshes, uint32_t numMeshes, D3D12_GPU_VIRTUAL_ADDRESS modelDataBuffer);
+	uint32_t GetNumGeometries() const { return m_numGeometryDescriptions; }
 
 private:
 	AccelerationStructureData m_asData;
-	std::vector<D3D12_RAYTRACING_GEOMETRY_DESC> m_geomDescs;
+	uint32_t m_numGeometryDescriptions;
+};
+
+struct TLASInstanceGroup
+{
+	const BLASBuffer* blasBuffer;
+	std::vector<Math::Matrix4> instanceTransforms;
 };
 
 class TLASBuffers
@@ -406,20 +399,18 @@ public:
 
 	TLASBuffers() = default;
 	~TLASBuffers();
-	TLASBuffers(const BLASBuffers& blas, const std::vector<Math::Matrix4>& instances);
+	TLASBuffers(const BLASBuffer& blas, const std::vector<TLASInstanceGroup>& instanceGroups);
 
-	void Init(const BLASBuffers& blas, const std::vector<Math::Matrix4>& instances);
+	void Init(const std::vector<TLASInstanceGroup>& instanceGroups);
 	void Destroy();
 
 	D3D12_GPU_VIRTUAL_ADDRESS GetBVH() const;
 
 private:
 
-	void FillInstanceDescs(D3D12_GPU_VIRTUAL_ADDRESS blasAddress, const std::vector<Math::Matrix4>& instances);
 	void CreateInstanceDataBuffer(D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC& structDesc, uint32_t numInstances, D3D12_RAYTRACING_INSTANCE_DESC* descs);
 
 private:
 	AccelerationStructureData m_asData;
-	std::vector<D3D12_RAYTRACING_INSTANCE_DESC> m_instanceDescs;
 	ByteAddressBuffer m_instanceDataBuffer;
 };
