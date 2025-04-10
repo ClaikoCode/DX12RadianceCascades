@@ -85,6 +85,7 @@ void RadianceCascades::Startup()
 	Renderer::Initialize();
 	UpdateViewportAndScissor();
 
+	InitializeResources();
 	InitializeScene();
 	InitializeShaders();
 	InitializePSOs();
@@ -199,11 +200,17 @@ void RadianceCascades::RenderScene()
 	}
 }
 
+void RadianceCascades::InitializeResources()
+{
+	m_models[ModelIDSponza]			= Renderer::LoadModel(L"models\\Sponza\\PBR\\sponza2.gltf", false);
+	m_models[ModelIDSphereTest]		= Renderer::LoadModel(L"models\\Testing\\SphereTest.gltf", false);
+}
+
 void RadianceCascades::InitializeScene()
 {
 	// Setup scene.
 	{
-		std::shared_ptr<Model> modelPtr = Renderer::LoadModel(L"models\\Sponza\\PBR\\sponza2.gltf", false);
+		std::shared_ptr<Model> modelPtr = GetModelPtr(ModelIDSponza);
 		ModelInstance& modelInstance = AddModelInstance(modelPtr);
 		m_mainSceneModelInstanceIndex = (uint32_t)m_sceneModels.size() - 1;
 		modelInstance.Resize(100.0f * modelInstance.GetRadius());
@@ -213,7 +220,7 @@ void RadianceCascades::InitializeScene()
 	}
 
 	{
-		std::shared_ptr<Model> modelRef = Renderer::LoadModel(L"models\\Testing\\SphereTest.gltf", false);
+		std::shared_ptr<Model> modelRef = GetModelPtr(ModelIDSphereTest);
 		ModelInstance& modelInstance = AddModelInstance(modelRef);
 		modelInstance.Resize(100.0f * modelInstance.GetRadius());
 		modelInstance.GetTransform().SetTranslation(m_sceneModels[m_mainSceneModelInstanceIndex].GetCenter());
