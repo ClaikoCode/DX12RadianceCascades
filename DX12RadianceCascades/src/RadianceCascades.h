@@ -12,6 +12,12 @@
 
 typedef uintptr_t modelhash_t;
 
+enum ModelID : UUID64
+{
+	ModelIDSponza = 0,
+	ModelIDSphereTest,
+};
+
 enum ShaderID : UUID64
 {
 	ShaderIDInvalid = 0,
@@ -147,6 +153,7 @@ public:
 
 private:
 
+	void InitializeResources();
 	void InitializeScene();
 	void InitializeShaders();
 	void InitializePSOs();
@@ -176,6 +183,11 @@ private:
 	{
 		ASSERT(m_mainSceneModelInstanceIndex < m_sceneModels.size());
 		return m_sceneModels[m_mainSceneModelInstanceIndex];
+	}
+
+	std::shared_ptr<Model> GetModelPtr(ModelID modelID)
+	{
+		return m_models[modelID];
 	}
 
 private:
@@ -223,6 +235,7 @@ private:
 
 	DescriptorCopies m_descCopies;
 
+	std::unordered_map<ModelID, std::shared_ptr<Model>> m_models;
 	std::unordered_map<modelhash_t, BLASBuffer> m_modelBLASes;
 };
 
