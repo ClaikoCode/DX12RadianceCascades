@@ -105,27 +105,6 @@ void RadianceCascades::Startup()
 void RadianceCascades::Cleanup()
 {
 	Graphics::g_CommandManager.IdleGPU();
-
-	{
-		// Destroys all models in the scene by freeing their underlying pointers.
-		for (ModelInstance& modelInstance : m_sceneModels)
-		{
-			modelInstance = nullptr;
-		}
-
-		m_flatlandScene.Destroy();
-	}
-
-	{
-		m_rtTestPSO.Destroy();
-		m_rtTestGlobalRootSig.Destroy();
-		m_rtTestLocalRootSig.Destroy();
-		m_testRTDispatch.Destroy();
-		m_sceneModelTLASInstance.Destroy();
-	}
-
-	m_rcManager.Shutdown();
-
 	Renderer::Shutdown();
 }
 

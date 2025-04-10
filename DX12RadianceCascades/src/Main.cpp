@@ -20,6 +20,12 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPSTR, _In
     PostEffects::BloomEnable = false;
     SSAO::Enable = false;
 
-    RadianceCascades radianceCascades = RadianceCascades();
-    return GameCore::RunApplication(radianceCascades, L"RadianceCascades", hInstance, nCmdShow);
+    int returnVal = 0;
+    {
+        RadianceCascades radianceCascades = RadianceCascades();
+        returnVal = GameCore::RunApplication(radianceCascades, L"RadianceCascades", hInstance, nCmdShow);
+    }
+    
+    Graphics::Shutdown();
+    return returnVal;
 };
