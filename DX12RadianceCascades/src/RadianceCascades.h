@@ -60,6 +60,19 @@ enum PSOType : uint32_t
 	PSOTypeCount
 };
 
+struct InternalModelInstance : public ModelInstance
+{
+	InternalModelInstance() = default;
+
+	InternalModelInstance(std::shared_ptr<Model> modelPtr, ModelID modelID) 
+		: ModelInstance(modelPtr)
+	{
+		underlyingModelID = modelID;
+	}
+
+	ModelID underlyingModelID;
+};
+
 struct RadianceCascadesSettings
 {
 	bool visualize2DCascades = false;
@@ -175,11 +188,13 @@ private:
 	void FullScreenCopyCompute(PixelBuffer& source, D3D12_CPU_DESCRIPTOR_HANDLE sourceSRV, ColorBuffer& dest);
 	void FullScreenCopyCompute(ColorBuffer& source, ColorBuffer& dest);
 
-	ModelInstance& AddModelInstance(std::shared_ptr<Model> modelPtr);
+	
 	void AddShaderDependency(ShaderID shaderID, std::vector<PSOIDType> psoIDs);
 	void RegisterPSO(PSOID psoID, void* psoPtr, PSOType psoType);
 
-	ModelInstance& GetMainSceneModelInstance()
+	InternalModelInstance& AddModelInstance(ModelID modelID);
+
+	InternalModelInstance& GetMainSceneModelInstance()
 	{
 		ASSERT(m_mainSceneModelInstanceIndex < m_sceneModels.size());
 		return m_sceneModels[m_mainSceneModelInstanceIndex];
@@ -198,7 +213,7 @@ private:
 	std::unique_ptr<CameraController> m_cameraController;
 
 	uint32_t m_mainSceneModelInstanceIndex;
-	std::vector<ModelInstance> m_sceneModels;
+	std::vector<InternalModelInstance> m_sceneModels;
 
 	D3D12_VIEWPORT m_mainViewport;
 	D3D12_RECT m_mainScissor;
@@ -235,6 +250,6 @@ private:
 	DescriptorCopies m_descCopies;
 
 	std::unordered_map<ModelID, std::shared_ptr<Model>> m_models;
-	std::unordered_map<modelhash_t, BLASBuffer> m_modelBLASes;
+	std::unordered_map<ModelID, BLASBuffer> m_modelBLASes;
 };
 
