@@ -61,13 +61,6 @@ namespace
 
 		return hitShaderTable;
 	}
-
-	modelhash_t GetModelHash(const Model& model)
-	{
-		return reinterpret_cast<modelhash_t>(model.m_MeshData.get());
-	}
-
-	
 }
 
 RadianceCascades::RadianceCascades()
@@ -188,28 +181,35 @@ void RadianceCascades::InitializeResources()
 void RadianceCascades::InitializeScene()
 {
 	// Setup scene.
+	Math::Vector3 sceneModelCenter = {};
 	{
-		std::shared_ptr<Model> modelPtr = GetModelPtr(ModelIDSponza);
-		ModelInstance& modelInstance = AddModelInstance(modelPtr);
+		ModelInstance& modelInstance = AddModelInstance(ModelIDSponza);
 		m_mainSceneModelInstanceIndex = (uint32_t)m_sceneModels.size() - 1;
 		modelInstance.Resize(100.0f * modelInstance.GetRadius());
 
-		ModelInstance& modelInstance2 = AddModelInstance(modelPtr);
-		modelInstance2.Resize(20.0f * modelInstance2.GetRadius());
+		sceneModelCenter = modelInstance.GetBoundingBox().GetCenter();
 	}
 
 	{
-		std::shared_ptr<Model> modelRef = GetModelPtr(ModelIDSphereTest);
-		ModelInstance& modelInstance = AddModelInstance(modelRef);
+		ModelInstance& modelInstance = AddModelInstance(ModelIDSponza);
+		modelInstance.Resize(10.0f * modelInstance.GetRadius());
+
+		Math::Vector3 instanceCenter = sceneModelCenter;
+		instanceCenter.SetY(20.0f);
+		modelInstance.GetTransform().SetTranslation(instanceCenter);
+	}
+
+	{
+		ModelInstance& modelInstance = AddModelInstance(ModelIDSphereTest);
 		modelInstance.Resize(100.0f * modelInstance.GetRadius());
-		modelInstance.GetTransform().SetTranslation(m_sceneModels[m_mainSceneModelInstanceIndex].GetCenter());
+		modelInstance.GetTransform().SetTranslation(sceneModelCenter);
 	}
 
 	// Setup camera
 	{
 		m_camera.SetAspectRatio((float)GetSceneColorHeight() / (float)GetSceneColorWidth());
 
-		OrientedBox obb = m_sceneModels[m_mainSceneModelInstanceIndex].GetBoundingBox();
+		OrientedBox obb = GetMainSceneModelInstance().GetBoundingBox();
 		float modelRadius = Length(obb.GetDimensions()) * 0.5f;
 		const Vector3 eye = obb.GetCenter() + Vector3(modelRadius * 0.5f, 0.0f, 0.0f);
 		m_camera.SetEyeAtUp(eye, Vector3(kZero), Vector3(kYUnitVector));
@@ -217,20 +217,6 @@ void RadianceCascades::InitializeScene()
 		
 		
 		m_cameraController.reset(new FlyingFPSCamera(m_camera, Vector3(kYUnitVector)));
-	}
-
-	// Initialize BLASEs
-	{
-		for (ModelInstance& modelInstance : m_sceneModels)
-		{
-			const Model& model = modelInstance.GetModel();
-			modelhash_t modelHash = ::GetModelHash(model);
-			auto it = m_modelBLASes.find(modelHash);
-			if (it == m_modelBLASes.end())
-			{
-				m_modelBLASes[modelHash].Init(model);
-			}
-		}
 	}
 }
 
@@ -439,26 +425,31 @@ void RadianceCascades::InitializeRT()
 		pso.Finalize();
 	}
 
-
+	// Initialize BLASEs
 	{
-		ShaderTable<LocalHitData> hitShaderTable = ::CreateModelShaderTable(s_HitGroupName, GetMainSceneModelInstance().GetModel(), pso);
-		m_testRTDispatch.Init(pso, hitShaderTable, L"RayGenerationShader", L"MissShader");
+		for (InternalModelInstance& modelInstance : m_sceneModels)
+		{
+			const Model& model = modelInstance.GetModel();
+			ModelID modelID = modelInstance.underlyingModelID;
 
-		// TODO: Check if i need to set stacksize here??
+			auto it = m_modelBLASes.find(modelID);
+			if (it == m_modelBLASes.end())
+			{
+				m_modelBLASes[modelID].Init(model);
+			}
+		}
 	}
 
-	// Initializing acceleration structures.
+	// Initialize TLASes.
+	std::vector<TLASInstanceGroup> instanceGroups = {};
+	std::unordered_map<ModelID, std::vector<Utils::GPUMatrix>> blasInstances = {};
 	{
-		std::unordered_map<modelhash_t, std::vector<Utils::GPUMatrix>> blasInstances = {};
-
-		for (ModelInstance& modelInstance : m_sceneModels)
+		for (InternalModelInstance& modelInstance : m_sceneModels)
 		{
-			modelhash_t modelHash = ::GetModelHash(modelInstance.GetModel());
+			ModelID modelID = modelInstance.underlyingModelID;
 			Math::Matrix4 mat = Math::Matrix4(modelInstance.GetTransform());
-			blasInstances[modelHash].push_back(mat);
+			blasInstances[modelID].push_back(mat);
 		}
-
-		std::vector<TLASInstanceGroup> instanceGroups = {};
 
 		for (auto& [key, value] : blasInstances)
 		{
@@ -470,6 +461,23 @@ void RadianceCascades::InitializeRT()
 		}
 
 		m_sceneModelTLASInstance.Init(instanceGroups);
+	}
+
+	// Initialize shader tables.
+	// Will append a shader table for each unique BLAS in the order of the rendered instances.
+	{
+		ShaderTable<LocalHitData> hitShaderTable = {};
+		for (auto& [key, value] : blasInstances)
+		{
+			auto modelPtr = GetModelPtr(key);
+			ASSERT(modelPtr != nullptr);
+
+			ShaderTable<LocalHitData> blasSpecificHitTable = ::CreateModelShaderTable(s_HitGroupName, *modelPtr, pso);
+
+			hitShaderTable.insert(std::end(hitShaderTable), std::begin(blasSpecificHitTable), std::end(blasSpecificHitTable));
+		}
+
+		m_testRTDispatch.Init(pso, hitShaderTable, L"RayGenerationShader", L"MissShader");
 	}
 }
 
@@ -862,18 +870,18 @@ void RadianceCascades::FullScreenCopyCompute(ColorBuffer& source, ColorBuffer& d
 	FullScreenCopyCompute(source, source.GetSRV(), dest);
 }
 
-ModelInstance& RadianceCascades::AddModelInstance(std::shared_ptr<Model> modelPtr)
+InternalModelInstance& RadianceCascades::AddModelInstance(ModelID modelID)
 {
 	ASSERT(m_sceneModels.size() < MAX_INSTANCES);
+	std::shared_ptr<Model> modelPtr = GetModelPtr(modelID);
 
 	if (modelPtr == nullptr)
 	{
 		modelPtr = Renderer::LoadModel(s_BackupModelPath, false);
 		LOG_ERROR(L"Model was invalid. Using backup model instead. If Sponza model is missing, download a Sponza PBR gltf model online.");
 	}
-	
-	m_sceneModels.push_back(ModelInstance(modelPtr));
-	return m_sceneModels.back();
+
+	return m_sceneModels.emplace_back(modelPtr, modelID);
 }
 
 void RadianceCascades::AddShaderDependency(ShaderID shaderID, std::vector<uint32_t> psoIDs)
