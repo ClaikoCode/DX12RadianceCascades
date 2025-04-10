@@ -12,11 +12,6 @@ RaytracingPSO::RaytracingPSO(const wchar_t* Name)
 	m_desc = CD3DX12_STATE_OBJECT_DESC(D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE);
 }
 
-RaytracingPSO::~RaytracingPSO()
-{
-	Destroy();
-}
-
 void RaytracingPSO::Finalize()
 {
 	// Releases the previous state object.
@@ -36,11 +31,6 @@ void RaytracingPSO::Finalize()
 	}
 
 	m_stateObject.Get()->SetName(m_name.c_str());
-}
-
-void RaytracingPSO::Destroy()
-{
-	m_stateObject = nullptr;
 }
 
 void* RaytracingPSO::GetShaderIdentifier(const std::wstring& exportName)
@@ -187,11 +177,6 @@ D3D12_DISPATCH_RAYS_DESC RaytracingDispatchRayInputs::BuildDispatchRaysDesc(UINT
 	return desc;
 }
 
-BLASBuffer::~BLASBuffer()
-{
-	Destroy();
-}
-
 BLASBuffer::BLASBuffer(const Model& model)
 {
 	Init(model);
@@ -252,20 +237,9 @@ void BLASBuffer::Init(const Model& model)
 	gfxContext.Finish(true);
 }
 
-void BLASBuffer::Destroy()
-{
-	m_asData.Destroy();
-}
-
-
 D3D12_GPU_VIRTUAL_ADDRESS BLASBuffer::GetBVH() const
 {
 	return m_asData.bvhBuffer.GetGpuVirtualAddress();
-}
-
-TLASBuffers::~TLASBuffers()
-{
-	Destroy();
 }
 
 TLASBuffers::TLASBuffers(const BLASBuffer& blas, const std::vector<TLASInstanceGroup>& instanceGroups)
@@ -344,12 +318,6 @@ void TLASBuffers::Init(const std::vector<TLASInstanceGroup>& instanceGroups)
 	rtCommandList->BuildRaytracingAccelerationStructure(&tlasDesc, 0, nullptr);
 
 	gfxContext.Finish(true);
-}
-
-void TLASBuffers::Destroy()
-{
-	m_asData.Destroy();
-	m_instanceDataBuffer.Destroy();
 }
 
 D3D12_GPU_VIRTUAL_ADDRESS TLASBuffers::GetBVH() const

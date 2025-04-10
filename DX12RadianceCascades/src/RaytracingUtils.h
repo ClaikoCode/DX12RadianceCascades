@@ -9,7 +9,10 @@ struct alignas(D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT) ShaderTableEntrySi
 {
 	BYTE shaderIdentifierData[D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES];
 	
-	ShaderTableEntrySimple() {};
+	ShaderTableEntrySimple()
+	{
+		ZeroMemory((void*)shaderIdentifierData, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+	};
 
 	ShaderTableEntrySimple(const void* shaderIdentifier)
 	{
@@ -102,21 +105,6 @@ public:
 		Reset(numParams, numSamplers);
 	}
 
-	~RootSignature1()
-	{
-		Destroy();
-	}
-
-	void Destroy()
-	{
-		for (auto& param : m_params)
-		{
-			param.Clear();
-		}
-
-		m_signature = nullptr;
-	}
-
 	void Reset(uint32_t numParams, uint32_t numSamplers)
 	{
 		m_params.clear();
@@ -172,9 +160,7 @@ class RaytracingPSO
 {
 public:
 	RaytracingPSO(const wchar_t* Name = L"Unnamed Raytracing PSO");
-	~RaytracingPSO();
 	void Finalize();
-	void Destroy();
 
 	void SetNodeMask(UINT nodeMask)
 	{
@@ -277,10 +263,6 @@ private:
 struct RaytracingDispatchRayInputs
 {
 	RaytracingDispatchRayInputs() : m_hitGroupStride(0) {}
-	~RaytracingDispatchRayInputs()
-	{
-		Destroy();
-	}
 
 	template<typename T>
 	RaytracingDispatchRayInputs(RaytracingPSO& rtPSO, ShaderTable<T>& hitShaderTable, const std::wstring& rayGenExport, const std::wstring& missShaderExport)
@@ -321,14 +303,6 @@ struct RaytracingDispatchRayInputs
 
 	}
 
-	void Destroy()
-	{
-		m_stateObject = nullptr;
-		m_rayGenShaderTable.Destroy();
-		m_missShaderTable.Destroy();
-		m_hitGroupShaderTable.Destroy();
-	}
-
 	D3D12_DISPATCH_RAYS_DESC BuildDispatchRaysDesc(UINT width, UINT height);
 
 	Microsoft::WRL::ComPtr<ID3D12StateObject> m_stateObject;
@@ -361,23 +335,15 @@ struct AccelerationStructureData
 		scratchBuffer.Create(L"Scratch Buffer", (uint32_t)prebuildInfo.ScratchDataSizeInBytes, 1);
 		bvhBuffer.Create(L"BVH Buffer", 1, (uint32_t)prebuildInfo.ResultDataMaxSizeInBytes);
 	}
-
-	void Destroy()
-	{
-		bvhBuffer.Destroy();
-		scratchBuffer.Destroy();
-	}
 };
 
 class BLASBuffer
 {
 public:
 	BLASBuffer() = default;
-	~BLASBuffer();
 	BLASBuffer(const Model& model);
 	
 	void Init(const Model& model);
-	void Destroy();
 
 	D3D12_GPU_VIRTUAL_ADDRESS GetBVH() const;
 	uint32_t GetNumGeometries() const { return m_numGeometryDescriptions; }
@@ -398,11 +364,9 @@ class TLASBuffers
 public:
 
 	TLASBuffers() = default;
-	~TLASBuffers();
 	TLASBuffers(const BLASBuffer& blas, const std::vector<TLASInstanceGroup>& instanceGroups);
 
 	void Init(const std::vector<TLASInstanceGroup>& instanceGroups);
-	void Destroy();
 
 	D3D12_GPU_VIRTUAL_ADDRESS GetBVH() const;
 

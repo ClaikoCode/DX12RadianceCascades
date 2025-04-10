@@ -226,7 +226,6 @@ private:
 	RootSignature1 m_rtTestGlobalRootSig;
 	RootSignature1 m_rtTestLocalRootSig;
 	RaytracingDispatchRayInputs m_testRTDispatch;
-	//BLASBuffer m_sceneModelBLAS;
 	TLASBuffers m_sceneModelTLASInstance;
 
 	ColorBuffer m_flatlandScene = ColorBuffer({ 0.0f, 0.0f, 0.0f, 100000.0f });
