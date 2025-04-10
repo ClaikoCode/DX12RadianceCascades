@@ -61,6 +61,13 @@ namespace
 
 		return hitShaderTable;
 	}
+
+	modelhash_t GetModelHash(const Model& model)
+	{
+		return reinterpret_cast<modelhash_t>(model.m_MeshData.get());
+	}
+
+	
 }
 
 RadianceCascades::RadianceCascades()
@@ -113,7 +120,6 @@ void RadianceCascades::Cleanup()
 		m_rtTestGlobalRootSig.Destroy();
 		m_rtTestLocalRootSig.Destroy();
 		m_testRTDispatch.Destroy();
-		m_sceneModelBLAS.Destroy();
 		m_sceneModelTLASInstance.Destroy();
 	}
 
@@ -197,15 +203,19 @@ void RadianceCascades::InitializeScene()
 {
 	// Setup scene.
 	{
-		ModelInstance& modelInstance = AddModelInstance(Renderer::LoadModel(L"models\\Sponza\\PBR\\sponza2.gltf", false));
+		std::shared_ptr<Model> modelPtr = Renderer::LoadModel(L"models\\Sponza\\PBR\\sponza2.gltf", false);
+		ModelInstance& modelInstance = AddModelInstance(modelPtr);
 		m_mainSceneModelInstanceIndex = (uint32_t)m_sceneModels.size() - 1;
 		modelInstance.Resize(100.0f * modelInstance.GetRadius());
+
+		ModelInstance& modelInstance2 = AddModelInstance(modelPtr);
+		modelInstance2.Resize(20.0f * modelInstance2.GetRadius());
 	}
 
 	{
 		std::shared_ptr<Model> modelRef = Renderer::LoadModel(L"models\\Testing\\SphereTest.gltf", false);
 		ModelInstance& modelInstance = AddModelInstance(modelRef);
-		modelInstance.Resize(10.0f);
+		modelInstance.Resize(100.0f * modelInstance.GetRadius());
 		modelInstance.GetTransform().SetTranslation(m_sceneModels[m_mainSceneModelInstanceIndex].GetCenter());
 	}
 
@@ -221,6 +231,20 @@ void RadianceCascades::InitializeScene()
 		
 		
 		m_cameraController.reset(new FlyingFPSCamera(m_camera, Vector3(kYUnitVector)));
+	}
+
+	// Initialize BLASEs
+	{
+		for (ModelInstance& modelInstance : m_sceneModels)
+		{
+			const Model& model = modelInstance.GetModel();
+			modelhash_t modelHash = ::GetModelHash(model);
+			auto it = m_modelBLASes.find(modelHash);
+			if (it == m_modelBLASes.end())
+			{
+				m_modelBLASes[modelHash].Init(model);
+			}
+		}
 	}
 }
 
@@ -439,18 +463,25 @@ void RadianceCascades::InitializeRT()
 
 	// Initializing acceleration structures.
 	{
-		const Model& model = GetMainSceneModelInstance().GetModel();
-		m_sceneModelBLAS.Init(model);
+		std::unordered_map<modelhash_t, std::vector<Utils::GPUMatrix>> blasInstances = {};
+
+		for (ModelInstance& modelInstance : m_sceneModels)
+		{
+			modelhash_t modelHash = ::GetModelHash(modelInstance.GetModel());
+			Math::Matrix4 mat = Math::Matrix4(modelInstance.GetTransform());
+			blasInstances[modelHash].push_back(mat);
+		}
 
 		std::vector<TLASInstanceGroup> instanceGroups = {};
 
-		TLASInstanceGroup& instanceGroup = instanceGroups.emplace_back();
+		for (auto& [key, value] : blasInstances)
+		{
+			TLASInstanceGroup instanceGroup = {};
+			instanceGroup.blasBuffer = &m_modelBLASes[key];
+			instanceGroup.instanceTransforms = value;
 
-		float scale = GetMainSceneModelInstance().GetTransform().GetScale();
-		instanceGroup.instanceTransforms.push_back(Math::Matrix4(Math::kIdentity).MakeScale(scale));
-		instanceGroup.instanceTransforms.push_back(Math::Matrix4(Math::kIdentity).MakeScale(scale * 0.1f));
-
-		instanceGroup.blasBuffer = &m_sceneModelBLAS;
+			instanceGroups.push_back(instanceGroup);
+		}
 
 		m_sceneModelTLASInstance.Init(instanceGroups);
 	}
@@ -531,8 +562,8 @@ void RadianceCascades::RenderRaytracing(Camera& camera, ColorBuffer& colorTarget
 
 	__declspec(align(16)) struct GlobalInfo
 	{
-		Math::Matrix4 viewProjMatrix;
-		Math::Matrix4 invViewProjMatrix;
+		Utils::GPUMatrix viewProjMatrix;
+		Utils::GPUMatrix invViewProjMatrix;
 		Math::Vector3 cameraPos;
 	} rtGlobalInfo;
 
