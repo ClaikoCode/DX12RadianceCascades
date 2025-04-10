@@ -63,4 +63,27 @@ namespace Utils
 		result.resize(to_next - result.data());
 		return result;
 	}
+
+	// A structure that automatically constructs a matrix that is the transpose of its input.
+	struct GPUMatrix
+	{
+		GPUMatrix()
+		{
+			DirectX::XMStoreFloat4x4(&gpuMat, DirectX::XMMatrixIdentity());
+		}
+
+		GPUMatrix(const Math::Matrix4& other)
+		{
+			DirectX::XMStoreFloat4x4(&gpuMat, DirectX::XMMatrixTranspose(other));
+		}
+
+		GPUMatrix(const DirectX::XMMATRIX& other)
+		{
+			DirectX::XMStoreFloat4x4(&gpuMat, DirectX::XMMatrixTranspose(other));
+		}
+
+		operator DirectX::XMFLOAT4X4() const { return gpuMat; }
+
+		DirectX::XMFLOAT4X4 gpuMat;
+	};
 }

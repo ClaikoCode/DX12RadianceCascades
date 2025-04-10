@@ -390,7 +390,7 @@ private:
 struct TLASInstanceGroup
 {
 	const BLASBuffer* blasBuffer;
-	std::vector<Math::Matrix4> instanceTransforms;
+	std::vector<Utils::GPUMatrix> instanceTransforms;
 };
 
 class TLASBuffers

@@ -45,7 +45,7 @@ inline void GenerateCameraRay(uint2 index, out float3 origin, out float3 directi
     screenPos.y = -screenPos.y;
 
     // Unproject the pixel coordinate into a ray.
-    float4 world = mul(globalInfo.invViewProjMatrix, float4(screenPos, 0, 1));
+    float4 world = mul(float4(screenPos, 0, 1), globalInfo.invViewProjMatrix);
 
     world.xyz /= world.w;
     origin = globalInfo.cameraPos.xyz;

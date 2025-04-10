@@ -10,6 +10,8 @@
 
 #include "RadianceCascadesManager.h"
 
+typedef uintptr_t modelhash_t;
+
 enum ShaderID : UUID64
 {
 	ShaderIDInvalid = 0,
@@ -212,7 +214,7 @@ private:
 	RootSignature1 m_rtTestGlobalRootSig;
 	RootSignature1 m_rtTestLocalRootSig;
 	RaytracingDispatchRayInputs m_testRTDispatch;
-	BLASBuffer m_sceneModelBLAS;
+	//BLASBuffer m_sceneModelBLAS;
 	TLASBuffers m_sceneModelTLASInstance;
 
 	ColorBuffer m_flatlandScene = ColorBuffer({ 0.0f, 0.0f, 0.0f, 100000.0f });
@@ -220,5 +222,7 @@ private:
 	RadianceCascadesManager m_rcManager;
 
 	DescriptorCopies m_descCopies;
+
+	std::unordered_map<modelhash_t, BLASBuffer> m_modelBLASes;
 };
 

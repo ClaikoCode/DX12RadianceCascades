@@ -245,7 +245,7 @@ void BLASBuffer::Init(const Model& model)
 	
 	GraphicsContext& gfxContext = GraphicsContext::Begin(L"BLAS Build");
 	ComPtr<ID3D12GraphicsCommandList4> rtCommandList;
-	gfxContext.GetCommandList()->QueryInterface(rtCommandList.GetAddressOf());
+	ThrowIfFailed(gfxContext.GetCommandList()->QueryInterface(rtCommandList.GetAddressOf()));
 
 	rtCommandList->BuildRaytracingAccelerationStructure(&blasDesc, 0, nullptr);
 
@@ -275,9 +275,9 @@ TLASBuffers::TLASBuffers(const BLASBuffer& blas, const std::vector<TLASInstanceG
 
 void TLASBuffers::Init(const std::vector<TLASInstanceGroup>& instanceGroups)
 {
-	if (instanceGroups.size() == 0)
+	if (instanceGroups.empty())
 	{
-		LOG_ERROR(L"No instances were supplied.");
+		LOG_ERROR(L"Cannot initialize TLAS buffer because instance group vector is empty.");
 		return;
 	}
 
@@ -304,8 +304,7 @@ void TLASBuffers::Init(const std::vector<TLASInstanceGroup>& instanceGroups)
 			desc.InstanceMask = 1;
 			desc.InstanceContributionToHitGroupIndex = instanceContributionOffset;
 
-			DirectX::XMFLOAT4X4 transformMat;
-			DirectX::XMStoreFloat4x4(&transformMat, instanceTransform);
+			const DirectX::XMFLOAT4X4& transformMat = instanceTransform.gpuMat;
 
 			// Initialize data.
 			ZeroMemory(desc.Transform, sizeof(desc.Transform));
@@ -340,7 +339,7 @@ void TLASBuffers::Init(const std::vector<TLASInstanceGroup>& instanceGroups)
 	
 	GraphicsContext& gfxContext = GraphicsContext::Begin(L"TLAS Build");
 	ComPtr<ID3D12GraphicsCommandList4> rtCommandList;
-	gfxContext.GetCommandList()->QueryInterface(rtCommandList.GetAddressOf());
+	ThrowIfFailed(gfxContext.GetCommandList()->QueryInterface(rtCommandList.GetAddressOf()));
 
 	rtCommandList->BuildRaytracingAccelerationStructure(&tlasDesc, 0, nullptr);
 
