@@ -7,8 +7,8 @@
 // Raytracing entry data.
 struct LocalHitData
 {
-	D3D12_GPU_DESCRIPTOR_HANDLE sourceTex;
 	D3D12_GPU_DESCRIPTOR_HANDLE geometrySRV;
+	D3D12_GPU_DESCRIPTOR_HANDLE materialSRVs;
 	uint32_t indexByteOffset;
 	uint32_t vertexByteOffset;
 };
@@ -92,10 +92,10 @@ struct RootParameter1 : public CD3DX12_ROOT_PARAMETER1
 	
 	void InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE type, UINT reg, UINT count, D3D12_SHADER_VISIBILITY visibility = D3D12_SHADER_VISIBILITY_ALL, UINT space = 0)
 	{
-		CD3DX12_DESCRIPTOR_RANGE1* range = new CD3DX12_DESCRIPTOR_RANGE1[count];
-		range->Init(type, count, reg, space);
-
+		CD3DX12_DESCRIPTOR_RANGE1* range = new CD3DX12_DESCRIPTOR_RANGE1[1];
 		InitAsDescriptorTable(1, range, visibility);
+
+		range->Init(type, count, reg, space);
 	}
 
 	/*

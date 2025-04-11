@@ -49,7 +49,7 @@ namespace
 			ASSERT(mesh.numDraws == 1);
 
 			auto& entry = hitShaderTable.emplace_back();
-			entry.entryData.sourceTex			= Renderer::s_TextureHeap[mesh.srvTable];
+			entry.entryData.materialSRVs		= Renderer::s_TextureHeap[mesh.srvTable]; // Start of descriptor table.
 			entry.entryData.geometrySRV			= geometrySRV;
 			entry.entryData.indexByteOffset		= mesh.ibOffset;
 			entry.entryData.vertexByteOffset	= mesh.vbOffset;
@@ -411,8 +411,8 @@ void RadianceCascades::InitializeRT()
 		RootSignature1& localRootSig = m_rtTestLocalRootSig;
 		const uint32_t localRootSigSpace = 1;
 		localRootSig.Reset(RootEntryRTLCount, 0);
-		localRootSig[RootEntryRTLTextureSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 0, 1, D3D12_SHADER_VISIBILITY_ALL, localRootSigSpace);
-		localRootSig[RootEntryRTLGeometryDataSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1, D3D12_SHADER_VISIBILITY_ALL, localRootSigSpace);
+		localRootSig[RootEntryRTLGeometryDataSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 0, 1, D3D12_SHADER_VISIBILITY_ALL, localRootSigSpace);
+		localRootSig[RootEntryRTLTextureSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 5, D3D12_SHADER_VISIBILITY_ALL, localRootSigSpace);
 		localRootSig[RootEntryRTLOffsetConstants].InitAsConstants(2, 0, localRootSigSpace, D3D12_SHADER_VISIBILITY_ALL);
 		localRootSig.Finalize(L"Local Root Signature", D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE);
 		pso.SetLocalRootSignature(&localRootSig);

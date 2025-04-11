@@ -152,8 +152,8 @@ private:
 		RootEntryRTGInfoCB,
 		RootEntryRTGCount,
 
-		RootEntryRTLTextureSRV = 0,
-		RootEntryRTLGeometryDataSRV,
+		RootEntryRTLGeometryDataSRV = 0,
+		RootEntryRTLTextureSRV,
 		RootEntryRTLOffsetConstants,
 		RootEntryRTLCount,
 	};

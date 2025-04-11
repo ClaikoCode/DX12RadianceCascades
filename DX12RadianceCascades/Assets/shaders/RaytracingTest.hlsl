@@ -37,8 +37,14 @@ struct GeometryOffsets
     uint vertexByteOffset;
 };
 
-Texture2D<float4> sourceTex : register(t0, space1);
-ByteAddressBuffer geometryData : register(t1, space1);
+ByteAddressBuffer geometryData : register(t0, space1);
+
+Texture2D<float4> albedoTex     : register(t1, space1);
+Texture2D<float4> metalRoughTex : register(t2, space1);
+Texture2D<float4> occlusionTex  : register(t3, space1);
+Texture2D<float4> emissiveTex   : register(t4, space1);
+Texture2D<float4> normalTex     : register(t5, space1);
+
 ConstantBuffer<GeometryOffsets> geomOffsets : register(b0, space1);
 
 float3 GetBarycentrics(float2 inputBarycentrics)
@@ -211,7 +217,7 @@ void ClosestHitShader(inout RayPayload payload, in BuiltInTriangleIntersectionAt
     const float2 uv2 = LoadUVFromVertex(vertexByteOffsets.z, uvOffset);
     const float2 uv = BARYCENTRIC_NORMALIZATION(barycentrics, uv0, uv1, uv2);
     
-    renderOutput[DispatchRaysIndex().xy] = float4(sourceTex.SampleLevel(sourceSampler, uv, 0).rgb, 1);
+    renderOutput[DispatchRaysIndex().xy] = float4(emissiveTex.SampleLevel(sourceSampler, uv, 0).rgb, 1);
     //renderOutput[DispatchRaysIndex().xy] = float4(uv, 0.0f, 1);
 }
 
