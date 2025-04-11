@@ -60,8 +60,10 @@ enum PSOType : uint32_t
 	PSOTypeCount
 };
 
-struct InternalModelInstance : public ModelInstance
+
+class InternalModelInstance : public ModelInstance
 {
+public:
 	InternalModelInstance() = default;
 
 	InternalModelInstance(std::shared_ptr<Model> modelPtr, ModelID modelID) 
@@ -78,10 +80,12 @@ struct RadianceCascadesSettings
 	bool visualize2DCascades = false;
 };
 
+#define ENABLE_RT (true)
+#define ENABLE_RASTER (!ENABLE_RT)
 struct GlobalSettings
 {
-	bool renderRaster = false;
-	bool renderRaytracing = true;
+	bool renderRaster = ENABLE_RASTER;
+	bool renderRaytracing = ENABLE_RT;
 };
 
 struct AppSettings
@@ -90,7 +94,7 @@ struct AppSettings
 	RadianceCascadesSettings rcSettings;
 };
 
-struct DescriptorCopies
+struct DescriptorHeaps
 {
 	void Init();
 
@@ -148,7 +152,9 @@ private:
 		RootEntryRTGInfoCB,
 		RootEntryRTGCount,
 
-		RootEntryRTLSRV = 0,
+		RootEntryRTLTextureSRV = 0,
+		RootEntryRTLGeometryDataSRV,
+		RootEntryRTLOffsetConstants,
 		RootEntryRTLCount,
 	};
 
@@ -167,6 +173,7 @@ public:
 private:
 
 	void InitializeResources();
+	void InitializeHeaps();
 	void InitializeScene();
 	void InitializeShaders();
 	void InitializePSOs();
@@ -247,7 +254,7 @@ private:
 
 	RadianceCascadesManager m_rcManager;
 
-	DescriptorCopies m_descCopies;
+	DescriptorHeaps m_descCopies;
 
 	std::unordered_map<ModelID, std::shared_ptr<Model>> m_models;
 	std::unordered_map<ModelID, BLASBuffer> m_modelBLASes;

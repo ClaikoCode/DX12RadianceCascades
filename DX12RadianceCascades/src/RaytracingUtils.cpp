@@ -177,20 +177,24 @@ D3D12_DISPATCH_RAYS_DESC RaytracingDispatchRayInputs::BuildDispatchRaysDesc(UINT
 	return desc;
 }
 
-BLASBuffer::BLASBuffer(const Model& model)
+BLASBuffer::BLASBuffer(std::shared_ptr<Model> modelPtr, DescriptorHeap& descHeap)
 {
-	Init(model);
+	Init(modelPtr, descHeap);
 }
 
-void BLASBuffer::Init(const Model& model)
+void BLASBuffer::Init(std::shared_ptr<Model> modelPtr, DescriptorHeap& descHeap)
 {
-	m_numGeometryDescriptions = model.m_NumMeshes;
+	ASSERT(modelPtr != nullptr);
+
+	m_modelPtr = modelPtr;
+	const Model& model = *m_modelPtr;
+	const uint32_t numMeshes = model.m_NumMeshes;
 	const Mesh* meshPtr = (const Mesh*)model.m_MeshData.get();
 
 	// Fill geometry description information per submesh.
-	std::vector<D3D12_RAYTRACING_GEOMETRY_DESC> geometryDescs(m_numGeometryDescriptions);
+	std::vector<D3D12_RAYTRACING_GEOMETRY_DESC> geometryDescs(numMeshes);
 	const D3D12_GPU_VIRTUAL_ADDRESS modelDataBuffer = model.m_DataBuffer.GetGpuVirtualAddress();
-	for (uint32_t i = 0; i < m_numGeometryDescriptions; i++)
+	for (uint32_t i = 0; i < numMeshes; i++)
 	{
 		const Mesh& mesh = meshPtr[i];
 
@@ -235,6 +239,10 @@ void BLASBuffer::Init(const Model& model)
 	rtCommandList->BuildRaytracingAccelerationStructure(&blasDesc, 0, nullptr);
 
 	gfxContext.Finish(true);
+
+	// Copy the SRV handle to geometry data for binding in shader table.
+	m_geometryDataSRVHandle = descHeap.Alloc();
+	Graphics::g_Device->CopyDescriptorsSimple(1, m_geometryDataSRVHandle, model.m_DataBuffer.GetSRV(), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 }
 
 D3D12_GPU_VIRTUAL_ADDRESS BLASBuffer::GetBVH() const
@@ -291,8 +299,6 @@ void TLASBuffers::Init(const std::vector<TLASInstanceGroup>& instanceGroups)
 
 		instanceContributionOffset += instanceGroup.blasBuffer->GetNumGeometries();
 	}
-
-	
 
 	const uint32_t numInstances = (uint32_t)instanceDescs.size();
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC tlasDesc = {};
