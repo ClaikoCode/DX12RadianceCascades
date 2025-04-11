@@ -22,12 +22,6 @@ static const std::vector<std::wstring> s_DXILExports = { L"RayGenerationShader",
 #define SAMPLE_LEN_0 20.0f
 #define RAYS_PER_PROBE_0 4.0f
 
-// Raytracing entry data.
-struct LocalHitData
-{
-	D3D12_GPU_DESCRIPTOR_HANDLE sourceTex;
-};
-
 namespace
 {
 	uint32_t GetSceneColorWidth()
@@ -40,23 +34,27 @@ namespace
 		return Graphics::g_SceneColorBuffer.GetHeight();
 	}
 
-	ShaderTable<LocalHitData> CreateModelShaderTable(const std::wstring& exportName, const Model& model, RaytracingPSO& rtPSO)
+	ShaderTable<LocalHitData> CreateModelShaderTable(const std::wstring& exportName, std::shared_ptr<const Model> modelPtr, DescriptorHandle geometrySRV, RaytracingPSO& rtPSO)
 	{
+		ASSERT(modelPtr != nullptr);
+
 		ShaderTable<LocalHitData> hitShaderTable = {};
 
-		const uint8_t* meshPtr = model.m_MeshData.get();
+		const Model& model = *modelPtr;
+		const Mesh* meshPtr = (const Mesh*)model.m_MeshData.get();
 		void* shaderIdentifier = rtPSO.GetShaderIdentifier(exportName);
 		for (int i = 0; i < (int)model.m_NumMeshes; i++)
 		{
-			const Mesh& mesh = *(Mesh*)meshPtr;
+			const Mesh& mesh = meshPtr[i];
+			ASSERT(mesh.numDraws == 1);
 
 			auto& entry = hitShaderTable.emplace_back();
-			entry.entryData.sourceTex = Renderer::s_TextureHeap[mesh.srvTable];
-			//entry.entryData.materialID = (uint32_t)i;
+			entry.entryData.sourceTex			= Renderer::s_TextureHeap[mesh.srvTable];
+			entry.entryData.geometrySRV			= geometrySRV;
+			entry.entryData.indexByteOffset		= mesh.ibOffset;
+			entry.entryData.vertexByteOffset	= mesh.vbOffset;
 
 			entry.SetShaderIdentifier(shaderIdentifier);
-
-			meshPtr += sizeof(Mesh) + (mesh.numDraws - 1) * sizeof(Mesh::Draw);
 		}
 
 		return hitShaderTable;
@@ -79,6 +77,7 @@ void RadianceCascades::Startup()
 	UpdateViewportAndScissor();
 
 	InitializeResources();
+	InitializeHeaps();
 	InitializeScene();
 	InitializeShaders();
 	InitializePSOs();
@@ -87,8 +86,6 @@ void RadianceCascades::Startup()
 	InitializeRT();
 
 	{
-		m_descCopies.Init();
-
 		DescriptorHandle& handle = m_descCopies.sceneColorUAVHandle;
 		handle = m_descCopies.descHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV].Alloc();
 		Graphics::g_Device->CopyDescriptorsSimple(1, handle, Graphics::g_SceneColorBuffer.GetUAV(), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
@@ -176,6 +173,11 @@ void RadianceCascades::InitializeResources()
 {
 	m_models[ModelIDSponza]			= Renderer::LoadModel(L"models\\Sponza\\PBR\\sponza2.gltf", false);
 	m_models[ModelIDSphereTest]		= Renderer::LoadModel(L"models\\Testing\\SphereTest.gltf", false);
+}
+
+void RadianceCascades::InitializeHeaps()
+{
+	m_descCopies.Init();
 }
 
 void RadianceCascades::InitializeScene()
@@ -399,7 +401,7 @@ void RadianceCascades::InitializeRT()
 		globalRootSig[RootEntryRTGParamCB].InitAsConstantBufferView(0);
 		globalRootSig[RootEntryRTGInfoCB].InitAsConstantBufferView(1);
 		{
-			SamplerDesc sampler = Graphics::SamplerLinearClampDesc;
+			SamplerDesc sampler = Graphics::SamplerLinearWrapDesc;
 			globalRootSig.InitStaticSampler(0, sampler);
 		}
 
@@ -407,8 +409,11 @@ void RadianceCascades::InitializeRT()
 		pso.SetGlobalRootSignature(&globalRootSig);
 
 		RootSignature1& localRootSig = m_rtTestLocalRootSig;
+		const uint32_t localRootSigSpace = 1;
 		localRootSig.Reset(RootEntryRTLCount, 0);
-		localRootSig[RootEntryRTLSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1);
+		localRootSig[RootEntryRTLTextureSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 0, 1, D3D12_SHADER_VISIBILITY_ALL, localRootSigSpace);
+		localRootSig[RootEntryRTLGeometryDataSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1, D3D12_SHADER_VISIBILITY_ALL, localRootSigSpace);
+		localRootSig[RootEntryRTLOffsetConstants].InitAsConstants(2, 0, localRootSigSpace, D3D12_SHADER_VISIBILITY_ALL);
 		localRootSig.Finalize(L"Local Root Signature", D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE);
 		pso.SetLocalRootSignature(&localRootSig);
 
@@ -429,13 +434,12 @@ void RadianceCascades::InitializeRT()
 	{
 		for (InternalModelInstance& modelInstance : m_sceneModels)
 		{
-			const Model& model = modelInstance.GetModel();
 			ModelID modelID = modelInstance.underlyingModelID;
 
 			auto it = m_modelBLASes.find(modelID);
 			if (it == m_modelBLASes.end())
 			{
-				m_modelBLASes[modelID].Init(model);
+				m_modelBLASes[modelID].Init(GetModelPtr(modelID), m_descCopies.descHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV]);
 			}
 		}
 	}
@@ -469,10 +473,9 @@ void RadianceCascades::InitializeRT()
 		ShaderTable<LocalHitData> hitShaderTable = {};
 		for (auto& [key, value] : blasInstances)
 		{
-			auto modelPtr = GetModelPtr(key);
-			ASSERT(modelPtr != nullptr);
-
-			ShaderTable<LocalHitData> blasSpecificHitTable = ::CreateModelShaderTable(s_HitGroupName, *modelPtr, pso);
+			
+			auto& blasBuffer = m_modelBLASes[key];
+			ShaderTable<LocalHitData> blasSpecificHitTable = ::CreateModelShaderTable(s_HitGroupName, blasBuffer.GetModelPtr(), blasBuffer.GetGeometrySRV(), pso);
 
 			hitShaderTable.insert(std::end(hitShaderTable), std::begin(blasSpecificHitTable), std::end(blasSpecificHitTable));
 		}
@@ -897,7 +900,7 @@ void RadianceCascades::RegisterPSO(PSOID psoID, void* psoPtr, PSOType psoType)
 	m_usedPSOs[psoID] = { psoPtr, psoType };
 }
 
-void DescriptorCopies::Init()
+void DescriptorHeaps::Init()
 {
-	descHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV].Create(L"Desc Copies CBV SRV UAV", D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 256);
+	descHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV].Create(L"Desc Copies CBV SRV UAV", D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 2048);
 }

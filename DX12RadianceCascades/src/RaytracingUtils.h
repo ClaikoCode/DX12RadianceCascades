@@ -4,6 +4,15 @@
 #include "Core\PipelineState.h"
 #include "Core\RootSignature.h"
 
+// Raytracing entry data.
+struct LocalHitData
+{
+	D3D12_GPU_DESCRIPTOR_HANDLE sourceTex;
+	D3D12_GPU_DESCRIPTOR_HANDLE geometrySRV;
+	uint32_t indexByteOffset;
+	uint32_t vertexByteOffset;
+};
+
 // Only shader identifier.
 struct alignas(D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT) ShaderTableEntrySimple
 {
@@ -341,16 +350,21 @@ class BLASBuffer
 {
 public:
 	BLASBuffer() = default;
-	BLASBuffer(const Model& model);
+	BLASBuffer(std::shared_ptr<Model> modelPtr, DescriptorHeap& descHeap);
 	
-	void Init(const Model& model);
+	void Init(std::shared_ptr<Model> modelPtr, DescriptorHeap& descHeap);
 
 	D3D12_GPU_VIRTUAL_ADDRESS GetBVH() const;
-	uint32_t GetNumGeometries() const { return m_numGeometryDescriptions; }
+	DescriptorHandle GetGeometrySRV() const { return m_geometryDataSRVHandle; }
+	uint32_t GetNumGeometries() const { return m_modelPtr->m_NumMeshes; }
+	std::shared_ptr<const Model> GetModelPtr() const { return m_modelPtr; }
 
 private:
 	AccelerationStructureData m_asData;
-	uint32_t m_numGeometryDescriptions;
+	StructuredBuffer m_geometryInstanceData;
+
+	DescriptorHandle m_geometryDataSRVHandle;
+	std::shared_ptr<const Model> m_modelPtr;
 };
 
 struct TLASInstanceGroup

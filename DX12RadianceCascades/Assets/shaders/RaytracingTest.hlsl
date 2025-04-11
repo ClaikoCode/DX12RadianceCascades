@@ -8,10 +8,10 @@
 // Copyright (C) Microsoft Corporation. All rights reserved.
 //--------------------------------------------------------------------------------------
 
+#define BARYCENTRIC_NORMALIZATION(bary, val1, val2, val3) (bary.x * val1 + bary.y * val2 + bary.z * val3)
+
 RaytracingAccelerationStructure Scene : register(t0);
 RWTexture2D<float4> renderOutput : register(u0);
-
-Texture2D<float4> sourceTex : register(t1);
 SamplerState sourceSampler : register(s0);
 
 cbuffer Params : register(b0)
@@ -30,6 +30,113 @@ struct GlobalInfo
 };
 
 ConstantBuffer<GlobalInfo> globalInfo : register(b1);
+
+struct GeometryOffsets
+{
+    uint indexByteOffset;
+    uint vertexByteOffset;
+};
+
+Texture2D<float4> sourceTex : register(t0, space1);
+ByteAddressBuffer geometryData : register(t1, space1);
+ConstantBuffer<GeometryOffsets> geomOffsets : register(b0, space1);
+
+float3 GetBarycentrics(float2 inputBarycentrics)
+{
+    return float3(1.0 - inputBarycentrics.x - inputBarycentrics.y, inputBarycentrics.x, inputBarycentrics.y);
+}
+
+uint2 Load2x16BitValues(uint offsetBytes)
+{
+    // Find the 4-byte aligned address
+    uint dwordAlignedOffset = offsetBytes & ~3;
+    
+    // Load a single 32-bit value
+    uint dwordValue = geometryData.Load(dwordAlignedOffset);
+    
+    // Extract the 16-bit values based on alignment
+    uint2 result;
+    
+    if (dwordAlignedOffset == offsetBytes)
+    {
+        // Aligned case: first two 16-bit values in the dword
+        result.x = dwordValue & 0xffff;
+        result.y = (dwordValue >> 16) & 0xffff;
+    }
+    else if (offsetBytes - dwordAlignedOffset == 2)
+    {
+        // Offset by 2 bytes: second 16-bit value in this dword and 
+        // first 16-bit value in next dword
+        result.x = (dwordValue >> 16) & 0xffff;
+        
+        // Need to load next dword for the second 16-bit value
+        uint nextDword = geometryData.Load(dwordAlignedOffset + 4);
+        result.y = nextDword & 0xffff;
+    }
+    else
+    {
+        // Load next dword for values that cross boundaries
+        uint nextDword = geometryData.Load(dwordAlignedOffset + 4);
+        
+        if (offsetBytes - dwordAlignedOffset == 1)
+        {
+            // Offset by 1 byte - first value spans bytes 1-2 of first dword
+            result.x = ((dwordValue >> 8) & 0xffff);
+            // Second value spans byte 3 of first dword and byte 0 of second dword
+            result.y = ((dwordValue >> 24) & 0xff) | ((nextDword & 0xff) << 8);
+        }
+        else // offset by 3 bytes
+        {
+            // First value spans byte 3 of first dword and byte 0 of second dword
+            result.x = ((dwordValue >> 24) & 0xff) | ((nextDword & 0xff) << 8);
+            // Second value spans bytes 1-2 of second dword
+            result.y = (nextDword >> 8) & 0xffff;
+        }
+    }
+    
+    return result;
+}
+
+uint3 Load3x16BitIndices(uint offsetBytes)
+{
+    const uint dwordAlignedOffset = offsetBytes & ~3;
+
+    const uint2 four16BitIndices = geometryData.Load2(dwordAlignedOffset);
+
+    uint3 indices;
+
+    if (dwordAlignedOffset == offsetBytes)
+    {
+        indices.x = four16BitIndices.x & 0xffff;
+        indices.y = (four16BitIndices.x >> 16) & 0xffff;
+        indices.z = four16BitIndices.y & 0xffff;
+    }
+    else
+    {
+        indices.x = (four16BitIndices.x >> 16) & 0xffff;
+        indices.y = four16BitIndices.y & 0xffff;
+        indices.z = (four16BitIndices.y >> 16) & 0xffff;
+    }
+
+    return indices;
+}
+
+float2 Load32BitIntTo16BitFloats(uint val)
+{
+    uint x16 = val & 0xFFFF;
+    uint y16 = val >> 16;
+    
+    return float2(f16tof32(x16), f16tof32(y16));
+}
+
+float2 LoadUVFromVertex(uint vertexByteOffset, uint uvOffsetInBytes)
+{
+    //uint2 uvs = Load2x16BitValues(vertexByteOffset + uvOffsetInBytes);
+    //return float2(f16tof32(uvs.x), f16tof32(uvs.y));
+    
+    uint uvs = geometryData.Load(vertexByteOffset + uvOffsetInBytes);
+    return Load32BitIntTo16BitFloats(uvs);
+}
 
 struct RayPayload
 {
@@ -55,25 +162,11 @@ inline void GenerateCameraRay(uint2 index, out float3 origin, out float3 directi
 [shader("raygeneration")]
 void RayGenerationShader()
 {
-	// Orthographic projection, just as if we were already in NDC.
-    //float2 vpos = DispatchRaysIndex().xy;
-    //float3 rayOrigin = float3(-1, 1, -5);
-    //
-    //rayOrigin.xy += float2(2, -2) * (vpos / float2(dispatchWidth, dispatchHeight));
-    //
-    //float3 rayDir = float3(0, 0, 1);
-    //
-    //RayDesc myRay = { rayOrigin, 0.0f, rayDir, 100.0f };
-    //RayPayload payload = { 0.0f };
-    //
-    //uint missShaderIndex = 1;
-    //TraceRay(Scene, rayFlags, ~0, 0, 0, missShaderIndex, myRay, payload);
-    
     float3 rayOrigin;
     float3 rayDir;
     
     GenerateCameraRay(DispatchRaysIndex().xy, rayOrigin, rayDir);
-
+    
     RayDesc ray;
     ray.Origin = rayOrigin;
     ray.Direction = rayDir;
@@ -100,8 +193,26 @@ void AnyHitShader(inout RayPayload payload, in BuiltInTriangleIntersectionAttrib
 [shader("closesthit")]
 void ClosestHitShader(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr)
 {
-    float3 barycentrics = float3(attr.barycentrics.xy, 1 - attr.barycentrics.x - attr.barycentrics.y);
-    renderOutput[DispatchRaysIndex().xy] = float4(barycentrics, 1);
+    float3 barycentrics = GetBarycentrics(attr.barycentrics);
+    
+    // POS: 3 x 32 bits (float)
+    // NORMAL: 32 bits (unorm)
+    // TANGENT: 32 bits (unorm)
+    // TEXCOORD: 2 x 16 bits (float)
+    const uint vertexSizeInBytes = 3 * 4 + 4 + 4 + 2 * 2;
+    
+    const uint indexSizeInBytes = 2;
+    const uint3 vertexIndices = Load3x16BitIndices(geomOffsets.indexByteOffset + PrimitiveIndex() * 3 * indexSizeInBytes);
+    
+    const uint3 vertexByteOffsets = vertexIndices * vertexSizeInBytes + geomOffsets.vertexByteOffset;
+    const uint uvOffset = vertexSizeInBytes - (2 * 2);
+    const float2 uv0 = LoadUVFromVertex(vertexByteOffsets.x, uvOffset);
+    const float2 uv1 = LoadUVFromVertex(vertexByteOffsets.y, uvOffset);
+    const float2 uv2 = LoadUVFromVertex(vertexByteOffsets.z, uvOffset);
+    const float2 uv = BARYCENTRIC_NORMALIZATION(barycentrics, uv0, uv1, uv2);
+    
+    renderOutput[DispatchRaysIndex().xy] = float4(sourceTex.SampleLevel(sourceSampler, uv, 0).rgb, 1);
+    //renderOutput[DispatchRaysIndex().xy] = float4(uv, 0.0f, 1);
 }
 
 [shader("miss")]
