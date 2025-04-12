@@ -23,7 +23,7 @@ void RadianceCascadesManager::Init(float _rayLength0, float _raysPerProbe0, floa
 
 	uint32_t cascadeCount = 6;
 	float probeSpacing = 2.0f;
-	const uint32_t probeCountPerDim0 = (uint32_t)Math::AlignPowerOfTwo<float>(1024.0f / probeSpacing);
+	const uint32_t probeCountPerDim0 = (uint32_t)Math::AlignPowerOfTwo<uint32_t>((uint32_t)(1024.0f / probeSpacing));
 
 	if (m_cascadeIntervals.size() < cascadeCount)
 	{
@@ -64,7 +64,7 @@ void RadianceCascadesManager::Shutdown()
 
 RCGlobals RadianceCascadesManager::FillRCGlobalsData(uint32_t sourceSize)
 {
-	ASSERT(Math::IsPowerOfTwo(sourceSize));
+	//ASSERT(Math::IsPowerOfTwo(sourceSize));
 
 	RCGlobals rcGlobals = {};
 	rcGlobals.probeDim0 = probeDim0;

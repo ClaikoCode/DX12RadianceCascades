@@ -152,7 +152,6 @@ namespace GameCore
         while (UpdateApplication(app));	// Returns false to quit loop
 
         TerminateApplication(app);
-        Graphics::Shutdown();
         return 0;
     }
 
