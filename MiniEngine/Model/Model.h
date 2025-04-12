@@ -167,7 +167,8 @@ public:
     // Added by JD.
     Math::UniformTransform& GetTransform() { return m_Locator; }
 
-private:
+// Changed to protected by JD.
+protected:
     std::shared_ptr<const Model> m_Model;
     UploadBuffer m_MeshConstantsCPU;
     ByteAddressBuffer m_MeshConstantsGPU;

@@ -50,6 +50,7 @@ namespace Graphics
     bool g_bTypedUAVLoadSupport_R16G16B16A16_FLOAT = false;
 
     ID3D12Device* g_Device = nullptr;
+	ID3D12Device5* g_Device5 = nullptr; // Added by JD
     CommandListManager g_CommandManager;
     ContextManager g_ContextManager;
 
@@ -272,8 +273,8 @@ void Graphics::Initialize(bool RequireDXRSupport)
             if (g_Device != nullptr)
                 g_Device->Release();
 
-            g_Device = pDevice.Detach();
-
+			g_Device = pDevice.Detach();
+            
             Utility::Printf(L"Selected GPU:  %s (%u MB)\n", desc.Description, desc.DedicatedVideoMemory >> 20);
         }
     }
@@ -372,6 +373,11 @@ void Graphics::Initialize(bool RequireDXRSupport)
     }
 #endif
 
+    // Added by JD
+    {
+        ASSERT_SUCCEEDED(g_Device->QueryInterface<ID3D12Device5>(&g_Device5));
+    }
+
     // We like to do read-modify-write operations on UAVs during post processing.  To support that, we
     // need to either have the hardware do typed UAV loads of R11G11B10_FLOAT or we need to manually
     // decode an R32_UINT representation of the same buffer.  This code determines if we get the hardware
@@ -453,4 +459,11 @@ void Graphics::Shutdown( void )
         g_Device->Release();
         g_Device = nullptr;
     }
+
+	// Added by JD
+	if (g_Device5 != nullptr)
+	{
+		g_Device5->Release();
+		g_Device5 = nullptr;
+	}
 }

@@ -6,8 +6,17 @@
 #include "Core\Camera.h"
 #include "Core\CameraController.h"
 #include "Model\Model.h"
+#include "RaytracingUtils.h"
 
 #include "RadianceCascadesManager.h"
+
+typedef uintptr_t modelhash_t;
+
+enum ModelID : UUID64
+{
+	ModelIDSponza = 0,
+	ModelIDSphereTest,
+};
 
 enum ShaderID : UUID64
 {
@@ -21,6 +30,7 @@ enum ShaderID : UUID64
 	ShaderIDFullScreenCopyCS,
 	ShaderIDRCMergeCS,
 	ShaderIDRCRadianceFieldCS,
+	ShaderIDRaytracingTestRT,
 
 	ShaderIDNone = NULL_ID
 };
@@ -33,11 +43,70 @@ enum PSOID : PSOIDType
 	PSOIDComputeTestPSO,
 	PSOIDComputeRCGatherPSO,
 	PSOIDComputeFlatlandScenePSO,
-	PSOIDFullScreenCopyComputePSO,
+	PSOIDComputeFullScreenCopyPSO,
 	PSOIDComputeRCMergePSO,
 	PSOIDComputeRCRadianceFieldPSO,
+	PSOIDRaytracingTestPSO,
 
 	PSOIDCount
+};
+
+enum PSOType : uint32_t
+{
+	PSOTypeCompute = 0,
+	PSOTypeGraphics,
+	PSOTypeRaytracing,
+	
+	PSOTypeCount
+};
+
+
+class InternalModelInstance : public ModelInstance
+{
+public:
+	InternalModelInstance() = default;
+
+	InternalModelInstance(std::shared_ptr<Model> modelPtr, ModelID modelID) 
+		: ModelInstance(modelPtr)
+	{
+		underlyingModelID = modelID;
+	}
+
+	ModelID underlyingModelID;
+};
+
+struct RadianceCascadesSettings
+{
+	bool visualize2DCascades = false;
+};
+
+#define ENABLE_RT (true)
+#define ENABLE_RASTER (!ENABLE_RT)
+struct GlobalSettings
+{
+	bool renderRaster = ENABLE_RASTER;
+	bool renderRaytracing = ENABLE_RT;
+};
+
+struct AppSettings
+{
+	GlobalSettings globalSettings;
+	RadianceCascadesSettings rcSettings;
+};
+
+struct DescriptorHeaps
+{
+	void Init();
+
+	std::array<DescriptorHeap, D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES> descHeaps;
+
+	DescriptorHandle sceneColorUAVHandle;
+};
+
+struct PSOPackage
+{
+	void* PSOPointer;
+	PSOType psoType;
 };
 
 class RadianceCascades : public GameCore::IGameApp
@@ -75,7 +144,18 @@ private:
 		RootEntryRCRadianceFieldUAV,
 		RootEntryRCRadianceFieldCascadeSRV,
 		RootEntryRCRadianceFieldInfo,
-		RootEntryRCRadianceFieldCount
+		RootEntryRCRadianceFieldCount,
+
+		RootEntryRTGSRV = 0,
+		RootEntryRTGUAV,
+		RootEntryRTGParamCB,
+		RootEntryRTGInfoCB,
+		RootEntryRTGCount,
+
+		RootEntryRTLGeometryDataSRV = 0,
+		RootEntryRTLTextureSRV,
+		RootEntryRTLOffsetConstants,
+		RootEntryRTLCount,
 	};
 
 public:
@@ -92,12 +172,16 @@ public:
 
 private:
 
+	void InitializeResources();
+	void InitializeHeaps();
 	void InitializeScene();
 	void InitializeShaders();
 	void InitializePSOs();
 	void InitializeRCResources();
+	void InitializeRT();
 
 	void RenderSceneImpl(Camera& camera, D3D12_VIEWPORT viewPort, D3D12_RECT scissor);
+	void RenderRaytracing(Camera& camera, ColorBuffer& colorTarget);
 	void RunComputeFlatlandScene();
 	void RunComputeRCGather();
 	void RunComputeRCMerge();
@@ -111,24 +195,39 @@ private:
 	void FullScreenCopyCompute(PixelBuffer& source, D3D12_CPU_DESCRIPTOR_HANDLE sourceSRV, ColorBuffer& dest);
 	void FullScreenCopyCompute(ColorBuffer& source, ColorBuffer& dest);
 
-	ModelInstance& AddModelInstance(std::shared_ptr<Model> modelPtr);
+	
 	void AddShaderDependency(ShaderID shaderID, std::vector<PSOIDType> psoIDs);
-	void RegisterPSO(PSOID psoID, PSO* psoPtr);
+	void RegisterPSO(PSOID psoID, void* psoPtr, PSOType psoType);
+
+	InternalModelInstance& AddModelInstance(ModelID modelID);
+
+	InternalModelInstance& GetMainSceneModelInstance()
+	{
+		ASSERT(m_mainSceneModelInstanceIndex < m_sceneModels.size());
+		return m_sceneModels[m_mainSceneModelInstanceIndex];
+	}
+
+	std::shared_ptr<Model> GetModelPtr(ModelID modelID)
+	{
+		return m_models[modelID];
+	}
 
 private:
+
+	AppSettings m_settings = {};
 
 	Camera m_camera;
 	std::unique_ptr<CameraController> m_cameraController;
 
 	uint32_t m_mainSceneModelInstanceIndex;
-	std::vector<ModelInstance> m_sceneModels;
+	std::vector<InternalModelInstance> m_sceneModels;
 
 	D3D12_VIEWPORT m_mainViewport;
 	D3D12_RECT m_mainScissor;
 
 	// Tells what PSOs are dependent on what shaders.
 	std::unordered_map<UUID64, std::set<PSOIDType>> m_shaderPSODependencyMap;
-	std::array<PSO*, PSOIDCount> m_usedPSOs;
+	std::array<PSOPackage, PSOIDCount> m_usedPSOs;
 
 	ComputePSO m_rcGatherPSO = ComputePSO(L"RC Gather Compute");
 	RootSignature m_computeGatherRootSig;
@@ -145,8 +244,19 @@ private:
 	ComputePSO m_rcRadianceFieldPSO = ComputePSO(L"RC Radiance Field Compute");
 	RootSignature m_rcRadianceFieldRootSig;
 
+	RaytracingPSO m_rtTestPSO = RaytracingPSO(L"RT Test PSO");
+	RootSignature1 m_rtTestGlobalRootSig;
+	RootSignature1 m_rtTestLocalRootSig;
+	RaytracingDispatchRayInputs m_testRTDispatch;
+	TLASBuffers m_sceneModelTLASInstance;
+
 	ColorBuffer m_flatlandScene = ColorBuffer({ 0.0f, 0.0f, 0.0f, 100000.0f });
 
 	RadianceCascadesManager m_rcManager;
+
+	DescriptorHeaps m_descCopies;
+
+	std::unordered_map<ModelID, std::shared_ptr<Model>> m_models;
+	std::unordered_map<ModelID, BLASBuffer> m_modelBLASes;
 };
 
