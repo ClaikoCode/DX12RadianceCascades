@@ -178,6 +178,7 @@ if %errorlevel% leq 3 exit 0</Command>
     <ClInclude Include="src\RaytracingUtils.h" />
     <ClInclude Include="src\rcpch.h" />
     <ClInclude Include="src\DirectoryWatcher.h" />
+    <ClInclude Include="src\RuntimeResourceManager.h" />
     <ClInclude Include="src\ShaderCompilation\ShaderCompilationManager.h" />
     <ClInclude Include="src\StepTimer.h" />
     <ClInclude Include="src\Utils.h" />
@@ -192,6 +193,7 @@ if %errorlevel% leq 3 exit 0</Command>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">rcpch.h</PrecompiledHeaderFile>
     </ClCompile>
+    <ClCompile Include="src\RuntimeResourceManager.cpp" />
     <ClCompile Include="src\ShaderCompilation\DirectoryWatcher.cpp" />
     <ClCompile Include="src\ShaderCompilation\ShaderCompilationManager.cpp" />
   </ItemGroup>
