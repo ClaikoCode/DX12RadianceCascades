@@ -80,7 +80,7 @@ struct RadianceCascadesSettings
 	bool visualize2DCascades = false;
 };
 
-#define ENABLE_RT (true)
+#define ENABLE_RT (false)
 #define ENABLE_RASTER (!ENABLE_RT)
 struct GlobalSettings
 {
