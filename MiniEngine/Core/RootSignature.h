@@ -129,6 +129,10 @@ public:
 
     void Reset( UINT NumRootParams, UINT NumStaticSamplers = 0 )
     {
+#if defined(_DEBUGDRAWING)
+        NumRootParams += 2;
+#endif
+
         if (NumRootParams > 0)
             m_ParamArray.reset(new RootParameter[NumRootParams]);
         else
@@ -141,6 +145,12 @@ public:
             m_SamplerArray = nullptr;
         m_NumSamplers = NumStaticSamplers;
         m_NumInitializedStaticSamplers = 0;
+
+#if defined(_DEBUGDRAWING)
+        // Bind fill two slots as buffer UAVs. One for debug line buffer and one for the counter.
+        m_ParamArray[m_NumParameters - 2].InitAsBufferUAV(DEBUGDRAW_REG);
+        m_ParamArray[m_NumParameters - 1].InitAsBufferUAV(DEBUGDRAW_REG + 1);
+#endif
     }
 
     RootParameter& operator[] ( size_t EntryIndex )
@@ -161,6 +171,9 @@ public:
     void Finalize(const std::wstring& name, D3D12_ROOT_SIGNATURE_FLAGS Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE);
 
     ID3D12RootSignature* GetSignature() const { return m_Signature; }
+    
+    // Added by JD
+    UINT GetNumParams() const { return m_NumParameters; }
 
 protected:
 

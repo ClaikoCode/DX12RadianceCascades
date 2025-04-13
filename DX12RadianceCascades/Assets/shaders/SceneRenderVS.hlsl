@@ -30,6 +30,15 @@ cbuffer GlobalConstants : register(b1)
     float3 SunIntensity;
 }
 
+struct DebugRenderVertex
+{
+    float3 position;
+    float3 color;
+};
+
+RWStructuredBuffer<DebugRenderVertex> debugDrawVertexData : register(u126);
+RWByteAddressBuffer debugDrawVertexCounter : register(u127);
+
 struct VSInput
 {
     float3 position : POSITION;
@@ -97,7 +106,9 @@ VSOutput main(VSInput vsInput)
 
 #endif
 
-    vsOutput.worldPos = mul(WorldMatrix, position).xyz;
+    DebugRenderVertex test = debugDrawVertexData.Load(0);
+    uint testa = debugDrawVertexCounter.Load(0);
+    vsOutput.worldPos = mul(WorldMatrix, position).xyz + test.color - test.color + testa - testa;
     vsOutput.position = mul(ViewProjMatrix, float4(vsOutput.worldPos, 1.0));
     vsOutput.sunShadowCoord = mul(SunShadowMatrix, float4(vsOutput.worldPos, 1.0)).xyz;
     vsOutput.normal = mul(WorldIT, normal);

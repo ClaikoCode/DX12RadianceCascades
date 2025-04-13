@@ -27,6 +27,9 @@
 #include "GraphicsCore.h"
 #include <vector>
 
+// Added by JD
+#include "../../DX12RadianceCascades/src/DebugDrawer.h"
+
 class ColorBuffer;
 class DepthBuffer;
 class Texture;
@@ -322,6 +325,17 @@ inline void GraphicsContext::SetRootSignature( const RootSignature& RootSig )
         return;
 
     m_CommandList->SetGraphicsRootSignature(m_CurGraphicsRootSignature = RootSig.GetSignature());
+
+#if defined(_DEBUGDRAWING)
+    StructuredBuffer& lineStructBuff = DebugDrawer::GetLineBuffer();
+    ByteAddressBuffer& counterBuffer = DebugDrawer::GetCounterBuffer();
+
+    TransitionResource(lineStructBuff, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    TransitionResource(counterBuffer, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
+
+    SetBufferUAV(RootSig.GetNumParams() - 2, lineStructBuff);
+    SetBufferUAV(RootSig.GetNumParams() - 1, counterBuffer);
+#endif
 
     m_DynamicViewDescriptorHeap.ParseGraphicsRootSignature(RootSig);
     m_DynamicSamplerDescriptorHeap.ParseGraphicsRootSignature(RootSig);
