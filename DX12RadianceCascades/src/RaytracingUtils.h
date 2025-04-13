@@ -3,6 +3,10 @@
 #include "Core\GpuBuffer.h"
 #include "Core\PipelineState.h"
 #include "Core\RootSignature.h"
+#include "Model\Model.h"
+
+static const std::vector<std::wstring> s_DXILExports = { L"RayGenerationShader", L"AnyHitShader", L"ClosestHitShader", L"MissShader" };
+
 
 // Raytracing entry data.
 struct LocalHitData

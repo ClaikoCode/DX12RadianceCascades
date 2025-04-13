@@ -18,49 +18,6 @@ enum ModelID : UUID64
 	ModelIDSphereTest,
 };
 
-enum ShaderID : UUID64
-{
-	ShaderIDInvalid = 0,
-	ShaderIDSceneRenderPS,
-	ShaderIDSceneRenderVS,
-	ShaderIDRCGatherCS,
-	ShaderIDFlatlandSceneCS,
-	ShaderIDFullScreenQuadVS,
-	ShaderIDFullScreenCopyPS,
-	ShaderIDFullScreenCopyCS,
-	ShaderIDRCMergeCS,
-	ShaderIDRCRadianceFieldCS,
-	ShaderIDRaytracingTestRT,
-
-	ShaderIDNone = NULL_ID
-};
-
-typedef uint32_t PSOIDType;
-enum PSOID : PSOIDType
-{
-	PSOIDFirstExternalPSO = 0,
-	PSOIDSecondExternalPSO,
-	PSOIDComputeTestPSO,
-	PSOIDComputeRCGatherPSO,
-	PSOIDComputeFlatlandScenePSO,
-	PSOIDComputeFullScreenCopyPSO,
-	PSOIDComputeRCMergePSO,
-	PSOIDComputeRCRadianceFieldPSO,
-	PSOIDRaytracingTestPSO,
-
-	PSOIDCount
-};
-
-enum PSOType : uint32_t
-{
-	PSOTypeCompute = 0,
-	PSOTypeGraphics,
-	PSOTypeRaytracing,
-	
-	PSOTypeCount
-};
-
-
 class InternalModelInstance : public ModelInstance
 {
 public:
@@ -101,12 +58,6 @@ struct DescriptorHeaps
 	std::array<DescriptorHeap, D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES> descHeaps;
 
 	DescriptorHandle sceneColorUAVHandle;
-};
-
-struct PSOPackage
-{
-	void* PSOPointer;
-	PSOType psoType;
 };
 
 class RadianceCascades : public GameCore::IGameApp
@@ -175,7 +126,6 @@ private:
 	void InitializeResources();
 	void InitializeHeaps();
 	void InitializeScene();
-	void InitializeShaders();
 	void InitializePSOs();
 	void InitializeRCResources();
 	void InitializeRT();
@@ -194,10 +144,6 @@ private:
 	// Will run a compute shader that samples the source and writes to dest.
 	void FullScreenCopyCompute(PixelBuffer& source, D3D12_CPU_DESCRIPTOR_HANDLE sourceSRV, ColorBuffer& dest);
 	void FullScreenCopyCompute(ColorBuffer& source, ColorBuffer& dest);
-
-	
-	void AddShaderDependency(ShaderID shaderID, std::vector<PSOIDType> psoIDs);
-	void RegisterPSO(PSOID psoID, void* psoPtr, PSOType psoType);
 
 	InternalModelInstance& AddModelInstance(ModelID modelID);
 
@@ -224,10 +170,6 @@ private:
 
 	D3D12_VIEWPORT m_mainViewport;
 	D3D12_RECT m_mainScissor;
-
-	// Tells what PSOs are dependent on what shaders.
-	std::unordered_map<UUID64, std::set<PSOIDType>> m_shaderPSODependencyMap;
-	std::array<PSOPackage, PSOIDCount> m_usedPSOs;
 
 	ComputePSO m_rcGatherPSO = ComputePSO(L"RC Gather Compute");
 	RootSignature m_computeGatherRootSig;
