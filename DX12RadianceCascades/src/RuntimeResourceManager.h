@@ -1,5 +1,11 @@
 #pragma once
 
+enum ModelID : UUID64
+{
+	ModelIDSponza = 0,
+	ModelIDSphereTest,
+};
+
 enum ShaderID : UUID64
 {
 	ShaderIDInvalid = 0,
@@ -62,16 +68,21 @@ public:
 	static void AddShaderDependency(ShaderID shaderID, std::vector<PSOIDType> psoIDs); // Not a reference so rvalues can be input.
 	static void RegisterPSO(PSOID psoID, void* psoPtr, PSOType psoType);
 
+	static std::shared_ptr<Model> GetModelPtr(ModelID modelID);
 	static D3D12_SHADER_BYTECODE GetShader(ShaderID shaderID);
 
-protected:
+private:
 	RuntimeResourceManager();
 
-	void UpdateGraphicsPSOsImpl();
+	void UpdatePSOs();
 	void AddShaderDependencyImpl(ShaderID shaderID, std::vector<PSOIDType>& psoIDs); 
 	void RegisterPSOImpl(PSOID psoID, void* psoPtr, PSOType psoType);
+
+	std::shared_ptr<Model> GetModelPtrImpl(ModelID modelID);
 
 private:
 	std::unordered_map<UUID64, std::set<PSOIDType>> m_shaderPSODependencyMap;
 	std::array<PSOPackage, PSOIDCount> m_usedPSOs;
+
+	std::unordered_map<ModelID, std::shared_ptr<Model>> m_models;
 };

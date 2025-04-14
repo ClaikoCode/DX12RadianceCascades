@@ -3,13 +3,14 @@
 #include "Core\CommandContext.h"
 #include "ShaderCompilation\ShaderCompilationManager.h"
 #include "RaytracingUtils.h"
+#include "Model\ModelLoader.h"
 #include "RuntimeResourceManager.h"
 
 static const std::set<Shader::ShaderType> s_ValidShaderTypes = { Shader::ShaderTypeCS, Shader::ShaderTypeVS, Shader::ShaderTypePS, Shader::ShaderTypeRT };
 
 void RuntimeResourceManager::UpdateGraphicsPSOs()
 {
-	RuntimeResourceManager::Get().UpdateGraphicsPSOsImpl();
+	RuntimeResourceManager::Get().UpdatePSOs();
 }
 
 void RuntimeResourceManager::AddShaderDependency(ShaderID shaderID, std::vector<PSOIDType> psoIDs)
@@ -22,15 +23,21 @@ void RuntimeResourceManager::RegisterPSO(PSOID psoID, void* psoPtr, PSOType psoT
 	RuntimeResourceManager::Get().RegisterPSOImpl(psoID, psoPtr, psoType);
 }
 
+std::shared_ptr<Model> RuntimeResourceManager::GetModelPtr(ModelID modelID)
+{
+	return RuntimeResourceManager::Get().GetModelPtrImpl(modelID);
+}
+
 D3D12_SHADER_BYTECODE RuntimeResourceManager::GetShader(ShaderID shaderID)
 {
 	return ShaderCompilationManager::Get().GetShaderByteCode(shaderID);
 }
 
-RuntimeResourceManager::RuntimeResourceManager()
+RuntimeResourceManager::RuntimeResourceManager() : m_usedPSOs({})
 {
 	auto& shaderCompManager = ShaderCompilationManager::Get();
 
+	// Initialize shaders
 	{
 		// Pixel Shaders
 		shaderCompManager.RegisterPixelShader(ShaderIDSceneRenderPS, L"SceneRenderPS.hlsl", true);
@@ -50,9 +57,15 @@ RuntimeResourceManager::RuntimeResourceManager()
 		// RT Shaders
 		shaderCompManager.RegisterRaytracingShader(ShaderIDRaytracingTestRT, L"RaytracingTest.hlsl", true);
 	}
+
+	// Initialize Models
+	{
+		m_models[ModelIDSponza]		= Renderer::LoadModel(L"models\\Sponza\\PBR\\sponza2.gltf", false);
+		m_models[ModelIDSphereTest] = Renderer::LoadModel(L"models\\Testing\\SphereTest.gltf", false);
+	}
 }
 
-void RuntimeResourceManager::UpdateGraphicsPSOsImpl()
+void RuntimeResourceManager::UpdatePSOs()
 {
 	auto& shaderCompManager = ShaderCompilationManager::Get();
 
@@ -147,4 +160,9 @@ void RuntimeResourceManager::AddShaderDependencyImpl(ShaderID shaderID, std::vec
 void RuntimeResourceManager::RegisterPSOImpl(PSOID psoID, void* psoPtr, PSOType psoType)
 {
 	m_usedPSOs[psoID] = { psoPtr, psoType };
+}
+
+inline std::shared_ptr<Model> RuntimeResourceManager::GetModelPtrImpl(ModelID modelID)
+{
+	return m_models[modelID];
 }

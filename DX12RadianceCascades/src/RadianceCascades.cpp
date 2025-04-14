@@ -7,7 +7,6 @@
 #include "Core\CommandContext.h"
 #include "Core\GameInput.h"
 
-#include "RuntimeResourceManager.h"
 #include "RadianceCascades.h"
 
 using namespace Microsoft::WRL;
@@ -74,7 +73,6 @@ void RadianceCascades::Startup()
 	Renderer::Initialize();
 	UpdateViewportAndScissor();
 
-	InitializeResources();
 	InitializeHeaps();
 	InitializeScene();
 	InitializePSOs();
@@ -165,12 +163,6 @@ void RadianceCascades::RenderScene()
 			FullScreenCopyCompute(m_rcManager.GetCascadeInterval(currentCascadeVisIndex), Graphics::g_SceneColorBuffer);
 		}
 	}
-}
-
-void RadianceCascades::InitializeResources()
-{
-	m_models[ModelIDSponza]			= Renderer::LoadModel(L"models\\Sponza\\PBR\\sponza2.gltf", false);
-	m_models[ModelIDSphereTest]		= Renderer::LoadModel(L"models\\Testing\\SphereTest.gltf", false);
 }
 
 void RadianceCascades::InitializeHeaps()
@@ -412,7 +404,10 @@ void RadianceCascades::InitializeRT()
 			auto it = m_modelBLASes.find(modelID);
 			if (it == m_modelBLASes.end())
 			{
-				m_modelBLASes[modelID].Init(GetModelPtr(modelID), m_descCopies.descHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV]);
+				m_modelBLASes[modelID].Init(
+					RuntimeResourceManager::GetModelPtr(modelID), 
+					m_descCopies.descHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV]
+				);
 			}
 		}
 	}
@@ -765,7 +760,7 @@ void RadianceCascades::FullScreenCopyCompute(ColorBuffer& source, ColorBuffer& d
 InternalModelInstance& RadianceCascades::AddModelInstance(ModelID modelID)
 {
 	ASSERT(m_sceneModels.size() < MAX_INSTANCES);
-	std::shared_ptr<Model> modelPtr = GetModelPtr(modelID);
+	std::shared_ptr<Model> modelPtr = RuntimeResourceManager::GetModelPtr(modelID);
 
 	if (modelPtr == nullptr)
 	{

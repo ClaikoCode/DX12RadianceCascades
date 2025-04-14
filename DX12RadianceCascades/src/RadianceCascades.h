@@ -7,16 +7,9 @@
 #include "Core\CameraController.h"
 #include "Model\Model.h"
 #include "RaytracingUtils.h"
+#include "RuntimeResourceManager.h"
 
 #include "RadianceCascadesManager.h"
-
-typedef uintptr_t modelhash_t;
-
-enum ModelID : UUID64
-{
-	ModelIDSponza = 0,
-	ModelIDSphereTest,
-};
 
 class InternalModelInstance : public ModelInstance
 {
@@ -123,7 +116,6 @@ public:
 
 private:
 
-	void InitializeResources();
 	void InitializeHeaps();
 	void InitializeScene();
 	void InitializePSOs();
@@ -151,11 +143,6 @@ private:
 	{
 		ASSERT(m_mainSceneModelInstanceIndex < m_sceneModels.size());
 		return m_sceneModels[m_mainSceneModelInstanceIndex];
-	}
-
-	std::shared_ptr<Model> GetModelPtr(ModelID modelID)
-	{
-		return m_models[modelID];
 	}
 
 private:
@@ -198,7 +185,6 @@ private:
 
 	DescriptorHeaps m_descCopies;
 
-	std::unordered_map<ModelID, std::shared_ptr<Model>> m_models;
 	std::unordered_map<ModelID, BLASBuffer> m_modelBLASes;
 };
 
