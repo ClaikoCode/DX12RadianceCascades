@@ -373,7 +373,7 @@ bool ShaderCompilationManager::CompileShaderPackageToBlob(Shader::ShaderCompilat
 	{
 		ComPtr<IDxcBlobEncoding> source = nullptr;
 		const std::wstring shaderPath = ::BuildShaderPath(shaderCompPackage.shaderFilename);
-		ThrowIfFailed(m_library->CreateBlobFromFile(shaderPath.c_str(), nullptr, source.GetAddressOf()));
+		ThrowIfFailed(m_library->CreateBlobFromFile(shaderPath.c_str(), nullptr, source.GetAddressOf()), L"Failed creating blob from file.");
 		comDxcBuffer = BlobEncodingToBuffer(source);
 	}
 

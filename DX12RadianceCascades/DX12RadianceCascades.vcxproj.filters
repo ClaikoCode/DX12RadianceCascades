@@ -48,6 +48,15 @@
     <ClInclude Include="src\RaytracingUtils.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="src\DebugDrawer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\RuntimeResourceManager.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\GPUStructs.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\Main.cpp">
@@ -71,10 +80,17 @@
     <ClCompile Include="src\RaytracingUtils.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\DebugDrawer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\RuntimeResourceManager.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="Assets\shaders\Common.hlsli" />
     <None Include="Assets\shaders\RCCommon.hlsli" />
+    <None Include="Assets\shaders\DebugDraw.hlsli" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Assets\shaders\DirectCopyCS.hlsl" />
@@ -86,5 +102,7 @@
     <FxCompile Include="Assets\shaders\SceneRenderPS.hlsl" />
     <FxCompile Include="Assets\shaders\SceneRenderVS.hlsl" />
     <FxCompile Include="Assets\shaders\RCRadianceFieldCS.hlsl" />
+    <FxCompile Include="Assets\shaders\DebugDrawPS.hlsl" />
+    <FxCompile Include="Assets\shaders\DebugDrawVS.hlsl" />
   </ItemGroup>
 </Project>

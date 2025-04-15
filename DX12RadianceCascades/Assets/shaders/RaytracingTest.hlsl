@@ -8,6 +8,8 @@
 // Copyright (C) Microsoft Corporation. All rights reserved.
 //--------------------------------------------------------------------------------------
 
+#include "DebugDraw.hlsli"
+
 #define BARYCENTRIC_NORMALIZATION(bary, val1, val2, val3) (bary.x * val1 + bary.y * val2 + bary.z * val3)
 
 RaytracingAccelerationStructure Scene : register(t0);
@@ -46,6 +48,9 @@ Texture2D<float4> emissiveTex   : register(t4, space1);
 Texture2D<float4> normalTex     : register(t5, space1);
 
 ConstantBuffer<GeometryOffsets> geomOffsets : register(b0, space1);
+
+#define InverseLerpClamped(a, b, val) (saturate((val - a) / (b - a)))
+#define Remap(a, b, c, d, val) (lerp(c, d, InverseLerpClamped(a, b, val)))
 
 float3 GetBarycentrics(float2 inputBarycentrics)
 {
@@ -158,7 +163,7 @@ inline void GenerateCameraRay(uint2 index, out float3 origin, out float3 directi
     screenPos.y = -screenPos.y;
 
     // Unproject the pixel coordinate into a ray.
-    float4 world = mul(float4(screenPos, 0, 1), globalInfo.invViewProjMatrix);
+    float4 world = mul(float4(screenPos, 0.0f, 1.0f), globalInfo.invViewProjMatrix);
 
     world.xyz /= world.w;
     origin = globalInfo.cameraPos.xyz;
@@ -217,8 +222,24 @@ void ClosestHitShader(inout RayPayload payload, in BuiltInTriangleIntersectionAt
     const float2 uv2 = LoadUVFromVertex(vertexByteOffsets.z, uvOffset);
     const float2 uv = BARYCENTRIC_NORMALIZATION(barycentrics, uv0, uv1, uv2);
     
-    renderOutput[DispatchRaysIndex().xy] = float4(emissiveTex.SampleLevel(sourceSampler, uv, 0).rgb, 1);
-    //renderOutput[DispatchRaysIndex().xy] = float4(uv, 0.0f, 1);
+    float3 intersectionPoint = WorldRayOrigin() + WorldRayDirection() * RayTCurrent();
+    
+    //DrawLine(WorldRayOrigin(), intersectionPoint, float3(1.0f, 0.0f, 0.0f));
+    
+    uint2 pixelIndex = DispatchRaysIndex().xy;
+    uint2 test = pixelIndex % 25;
+        
+    if (test.x == 0 && test.y == 0)
+    {
+        float radius = Remap(0.0f, 2000.0f, 5.0f, 0.2f, RayTCurrent());
+        //DrawSphere(intersectionPoint, radius, float3(1.0f, 0.0f, 0.0f));
+        DrawAxisAlignedBox(intersectionPoint, radius, float3(1.0f, 1.0f, 1.0f));
+        //DrawLine(WorldRayOrigin(), intersectionPoint, float3(1.0f, 0.0f, 0.0f));
+    }
+    
+    
+    renderOutput[DispatchRaysIndex().xy] = float4(albedoTex.SampleLevel(sourceSampler, uv, 0).rgb, 1);
+    //renderOutput[DispatchRaysIndex().xy] = float4(intersectionPoint, 1);
 }
 
 [shader("miss")]

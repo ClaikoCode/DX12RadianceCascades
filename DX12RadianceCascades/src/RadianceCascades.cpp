@@ -7,17 +7,17 @@
 #include "Core\CommandContext.h"
 #include "Core\GameInput.h"
 
-#include "ShaderCompilation\ShaderCompilationManager.h"
+#include "GPUStructs.h"
+#include "DebugDrawer.h"
+
 #include "RadianceCascades.h"
 
 using namespace Microsoft::WRL;
 
 constexpr size_t MAX_INSTANCES = 256;
-static const std::set<Shader::ShaderType> s_ValidShaderTypes = { Shader::ShaderTypeCS, Shader::ShaderTypeVS, Shader::ShaderTypePS, Shader::ShaderTypeRT };
 static const DXGI_FORMAT s_FlatlandSceneFormat = DXGI_FORMAT_R16G16B16A16_FLOAT;
 static const std::wstring s_BackupModelPath = L"models\\Testing\\SphereTest.gltf";
 static const std::wstring s_HitGroupName = L"HitGroup";
-static const std::vector<std::wstring> s_DXILExports = { L"RayGenerationShader", L"AnyHitShader", L"ClosestHitShader", L"MissShader" };
 
 #define SAMPLE_LEN_0 20.0f
 #define RAYS_PER_PROBE_0 4.0f
@@ -62,7 +62,7 @@ namespace
 }
 
 RadianceCascades::RadianceCascades()
-	: m_mainSceneModelInstanceIndex(UINT32_MAX), m_mainViewport({}), m_mainScissor({}), m_usedPSOs({})
+	: m_mainViewport({}), m_mainScissor({})
 {
 	m_sceneModels.reserve(MAX_INSTANCES);
 }
@@ -76,10 +76,8 @@ void RadianceCascades::Startup()
 	Renderer::Initialize();
 	UpdateViewportAndScissor();
 
-	InitializeResources();
 	InitializeHeaps();
 	InitializeScene();
-	InitializeShaders();
 	InitializePSOs();
 	InitializeRCResources();
 
@@ -95,11 +93,18 @@ void RadianceCascades::Startup()
 void RadianceCascades::Cleanup()
 {
 	Graphics::g_CommandManager.IdleGPU();
+
+	// TODO: It might make more sense for an outer scope to execute this as this class is not responsible for their initialization.
+	DebugDrawer::Destroy();
+	RuntimeResourceManager::Destroy();
+
 	Renderer::Shutdown();
 }
 
 void RadianceCascades::Update(float deltaT)
 {
+	RuntimeResourceManager::UpdateGraphicsPSOs();
+
 	static bool isMouseExclusive = true;
 	if (GameInput::IsFirstPressed(GameInput::kKey_f))
 	{
@@ -124,7 +129,6 @@ void RadianceCascades::Update(float deltaT)
 	gfxContext.Finish();
 
 	UpdateViewportAndScissor();
-	UpdateGraphicsPSOs();
 }
 
 void RadianceCascades::RenderScene()
@@ -139,6 +143,13 @@ void RadianceCascades::RenderScene()
 	if (m_settings.globalSettings.renderRaytracing)
 	{
 		RenderRaytracing(m_camera, Graphics::g_SceneColorBuffer);
+	}
+
+	if (m_settings.globalSettings.renderDebug)
+	{
+		DebugRenderCameraInfo camInfo;
+		camInfo.viewProjMatrix = m_camera.GetViewProjMatrix();
+		DebugDrawer::Draw(camInfo, Graphics::g_SceneColorBuffer, m_mainViewport, m_mainScissor);
 	}
 
 	if (m_settings.rcSettings.visualize2DCascades)
@@ -169,12 +180,6 @@ void RadianceCascades::RenderScene()
 	}
 }
 
-void RadianceCascades::InitializeResources()
-{
-	m_models[ModelIDSponza]			= Renderer::LoadModel(L"models\\Sponza\\PBR\\sponza2.gltf", false);
-	m_models[ModelIDSphereTest]		= Renderer::LoadModel(L"models\\Testing\\SphereTest.gltf", false);
-}
-
 void RadianceCascades::InitializeHeaps()
 {
 	m_descCopies.Init();
@@ -183,28 +188,24 @@ void RadianceCascades::InitializeHeaps()
 void RadianceCascades::InitializeScene()
 {
 	// Setup scene.
-	Math::Vector3 sceneModelCenter = {};
 	{
 		ModelInstance& modelInstance = AddModelInstance(ModelIDSponza);
-		m_mainSceneModelInstanceIndex = (uint32_t)m_sceneModels.size() - 1;
 		modelInstance.Resize(100.0f * modelInstance.GetRadius());
-
-		sceneModelCenter = modelInstance.GetBoundingBox().GetCenter();
 	}
 
 	{
-		ModelInstance& modelInstance = AddModelInstance(ModelIDSponza);
-		modelInstance.Resize(10.0f * modelInstance.GetRadius());
-
-		Math::Vector3 instanceCenter = sceneModelCenter;
-		instanceCenter.SetY(20.0f);
-		modelInstance.GetTransform().SetTranslation(instanceCenter);
+		//ModelInstance& modelInstance = AddModelInstance(ModelIDSponza);
+		//modelInstance.Resize(10.0f * modelInstance.GetRadius());
+		//
+		//Math::Vector3 instanceCenter = sceneModelCenter;
+		//instanceCenter.SetY(20.0f);
+		//modelInstance.GetTransform().SetTranslation(instanceCenter);
 	}
 
 	{
 		ModelInstance& modelInstance = AddModelInstance(ModelIDSphereTest);
 		modelInstance.Resize(100.0f * modelInstance.GetRadius());
-		modelInstance.GetTransform().SetTranslation(sceneModelCenter);
+		modelInstance.GetTransform().SetTranslation(GetMainSceneModelCenter());
 	}
 
 	// Setup camera
@@ -222,43 +223,18 @@ void RadianceCascades::InitializeScene()
 	}
 }
 
-void RadianceCascades::InitializeShaders()
-{
-	auto& shaderCompManager = ShaderCompilationManager::Get();
-
-	// Pixel Shaders
-	shaderCompManager.RegisterPixelShader(ShaderIDSceneRenderPS,		L"SceneRenderPS.hlsl",		true);
-	shaderCompManager.RegisterPixelShader(ShaderIDFullScreenCopyPS,		L"DirectWritePS.hlsl",		true);
-
-	// Vertex Shaders
-	shaderCompManager.RegisterVertexShader(ShaderIDSceneRenderVS,		L"SceneRenderVS.hlsl",		true);
-	shaderCompManager.RegisterVertexShader(ShaderIDFullScreenQuadVS,	L"FullScreenQuadVS.hlsl",	true);
-
-	// Compute Shaders
-	shaderCompManager.RegisterComputeShader(ShaderIDRCGatherCS,			L"RCGatherCS.hlsl",			true);
-	shaderCompManager.RegisterComputeShader(ShaderIDFlatlandSceneCS,	L"FlatlandSceneCS.hlsl",	true);
-	shaderCompManager.RegisterComputeShader(ShaderIDFullScreenCopyCS,	L"DirectCopyCS.hlsl",		true);
-	shaderCompManager.RegisterComputeShader(ShaderIDRCMergeCS,			L"RCMergeCS.hlsl",			true);
-	shaderCompManager.RegisterComputeShader(ShaderIDRCRadianceFieldCS,	L"RCRadianceFieldCS.hlsl",	true);
-
-	// RT Shaders
-	shaderCompManager.RegisterRaytracingShader(ShaderIDRaytracingTestRT, L"RaytracingTest.hlsl",	true);
-}
-
 void RadianceCascades::InitializePSOs()
 {
-	ShaderCompilationManager& compManager = ShaderCompilationManager::Get();
-
 	// Pointers to used PSOs
 	{
-		RegisterPSO(PSOIDFirstExternalPSO,			&Renderer::sm_PSOs[9],			PSOTypeGraphics);
-		RegisterPSO(PSOIDSecondExternalPSO,			&Renderer::sm_PSOs[11],			PSOTypeGraphics);
-		RegisterPSO(PSOIDComputeRCGatherPSO,		&m_rcGatherPSO,					PSOTypeCompute);
-		RegisterPSO(PSOIDComputeFlatlandScenePSO,	&m_flatlandScenePSO,			PSOTypeCompute);
-		RegisterPSO(PSOIDComputeFullScreenCopyPSO,	&m_fullScreenCopyComputePSO,	PSOTypeCompute);
-		RegisterPSO(PSOIDComputeRCMergePSO,			&m_rcMergePSO,					PSOTypeCompute);
-		RegisterPSO(PSOIDComputeRCRadianceFieldPSO, &m_rcRadianceFieldPSO,			PSOTypeCompute);
-		RegisterPSO(PSOIDRaytracingTestPSO,			&m_rtTestPSO,					PSOTypeRaytracing);
+		RuntimeResourceManager::RegisterPSO(PSOIDFirstExternalPSO,			&Renderer::sm_PSOs[9],			PSOTypeGraphics);
+		RuntimeResourceManager::RegisterPSO(PSOIDSecondExternalPSO,			&Renderer::sm_PSOs[11],			PSOTypeGraphics);
+		RuntimeResourceManager::RegisterPSO(PSOIDComputeRCGatherPSO,		&m_rcGatherPSO,					PSOTypeCompute);
+		RuntimeResourceManager::RegisterPSO(PSOIDComputeFlatlandScenePSO,	&m_flatlandScenePSO,			PSOTypeCompute);
+		RuntimeResourceManager::RegisterPSO(PSOIDComputeFullScreenCopyPSO,	&m_fullScreenCopyComputePSO,	PSOTypeCompute);
+		RuntimeResourceManager::RegisterPSO(PSOIDComputeRCMergePSO,			&m_rcMergePSO,					PSOTypeCompute);
+		RuntimeResourceManager::RegisterPSO(PSOIDComputeRCRadianceFieldPSO, &m_rcRadianceFieldPSO,			PSOTypeCompute);
+		RuntimeResourceManager::RegisterPSO(PSOIDRaytracingTestPSO,			&m_rtTestPSO,					PSOTypeRaytracing);
 
 	}
 
@@ -266,22 +242,22 @@ void RadianceCascades::InitializePSOs()
 	{
 		// External PSO dependencies. These were found to be the PSOs that are used by opaque objects.
 		std::vector<uint32_t> externalPSOs = { PSOIDFirstExternalPSO, PSOIDSecondExternalPSO };
-		AddShaderDependency(ShaderIDSceneRenderPS, externalPSOs);
-		AddShaderDependency(ShaderIDSceneRenderVS, externalPSOs);
+		RuntimeResourceManager::AddShaderDependency(ShaderIDSceneRenderPS, externalPSOs);
+		RuntimeResourceManager::AddShaderDependency(ShaderIDSceneRenderVS, externalPSOs);
 
 		// Internal PSO dependencies.
-		AddShaderDependency(ShaderIDRCGatherCS, { PSOIDComputeRCGatherPSO });
-		AddShaderDependency(ShaderIDFlatlandSceneCS, { PSOIDComputeFlatlandScenePSO });
-		AddShaderDependency(ShaderIDFullScreenCopyCS, { PSOIDComputeFullScreenCopyPSO });
-		AddShaderDependency(ShaderIDRCMergeCS, { PSOIDComputeRCMergePSO });
-		AddShaderDependency(ShaderIDRCRadianceFieldCS, { PSOIDComputeRCRadianceFieldPSO });
-		AddShaderDependency(ShaderIDRaytracingTestRT, { PSOIDRaytracingTestPSO });
+		RuntimeResourceManager::AddShaderDependency(ShaderIDRCGatherCS, { PSOIDComputeRCGatherPSO });
+		RuntimeResourceManager::AddShaderDependency(ShaderIDFlatlandSceneCS, { PSOIDComputeFlatlandScenePSO });
+		RuntimeResourceManager::AddShaderDependency(ShaderIDFullScreenCopyCS, { PSOIDComputeFullScreenCopyPSO });
+		RuntimeResourceManager::AddShaderDependency(ShaderIDRCMergeCS, { PSOIDComputeRCMergePSO });
+		RuntimeResourceManager::AddShaderDependency(ShaderIDRCRadianceFieldCS, { PSOIDComputeRCRadianceFieldPSO });
+		RuntimeResourceManager::AddShaderDependency(ShaderIDRaytracingTestRT, { PSOIDRaytracingTestPSO });
 		
 	}
 
 	{
 		ComputePSO& pso = m_rcGatherPSO;
-		pso.SetComputeShader(compManager.GetShaderByteCode(ShaderIDRCGatherCS));
+		pso.SetComputeShader(RuntimeResourceManager::GetShader(ShaderIDRCGatherCS));
 
 		RootSignature& rootSig = m_computeGatherRootSig;
 		rootSig.Reset(RootEntryRCGatherCount, 1);
@@ -303,7 +279,7 @@ void RadianceCascades::InitializePSOs()
 
 	{
 		ComputePSO& pso = m_fullScreenCopyComputePSO;
-		pso.SetComputeShader(compManager.GetShaderByteCode(ShaderIDFullScreenCopyCS));
+		pso.SetComputeShader(RuntimeResourceManager::GetShader(ShaderIDFullScreenCopyCS));
 
 		RootSignature& rootSig = m_fullScreenCopyComputeRootSig;
 		rootSig.Reset(RootEntryFullScreenCopyComputeCount, 2);
@@ -327,7 +303,7 @@ void RadianceCascades::InitializePSOs()
 
 	{
 		ComputePSO& pso = m_flatlandScenePSO;
-		pso.SetComputeShader(compManager.GetShaderByteCode(ShaderIDFlatlandSceneCS));
+		pso.SetComputeShader(RuntimeResourceManager::GetShader(ShaderIDFlatlandSceneCS));
 
 		RootSignature& rootSig = m_computeFlatlandSceneRootSig;
 		rootSig.Reset(RootEntryFlatlandCount, 0);
@@ -341,7 +317,7 @@ void RadianceCascades::InitializePSOs()
 
 	{
 		ComputePSO& pso = m_rcMergePSO;
-		pso.SetComputeShader(compManager.GetShaderByteCode(ShaderIDRCMergeCS));
+		pso.SetComputeShader(RuntimeResourceManager::GetShader(ShaderIDRCMergeCS));
 
 		RootSignature& rootSig = m_rcMergeRootSig;
 		rootSig.Reset(RootEntryRCMergeCount, 1);
@@ -363,7 +339,7 @@ void RadianceCascades::InitializePSOs()
 
 	{
 		ComputePSO& pso = m_rcRadianceFieldPSO;
-		pso.SetComputeShader(compManager.GetShaderByteCode(ShaderIDRCRadianceFieldCS));
+		pso.SetComputeShader(RuntimeResourceManager::GetShader(ShaderIDRCRadianceFieldCS));
 		RootSignature& rootSig = m_rcRadianceFieldRootSig;
 		rootSig.Reset(RootEntryRCRadianceFieldCount, 1);
 		rootSig[RootEntryRCRadianceFieldGlobals].InitAsConstantBuffer(0);
@@ -395,7 +371,7 @@ void RadianceCascades::InitializeRT()
 	RaytracingPSO& pso = m_rtTestPSO;
 	{
 		RootSignature1& globalRootSig = m_rtTestGlobalRootSig;
-		globalRootSig.Reset(RootEntryRTGCount, 1);
+		globalRootSig.Reset(RootEntryRTGCount, 1, true);
 		globalRootSig[RootEntryRTGSRV].InitAsShaderResourceView(0);
 		globalRootSig[RootEntryRTGUAV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 1);
 		globalRootSig[RootEntryRTGParamCB].InitAsConstantBufferView(0);
@@ -417,7 +393,7 @@ void RadianceCascades::InitializeRT()
 		localRootSig.Finalize(L"Local Root Signature", D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE);
 		pso.SetLocalRootSignature(&localRootSig);
 
-		D3D12_SHADER_BYTECODE byteCode = ShaderCompilationManager::Get().GetShaderByteCode(ShaderIDRaytracingTestRT);
+		D3D12_SHADER_BYTECODE byteCode = RuntimeResourceManager::GetShader(ShaderIDRaytracingTestRT);
 
 		pso.SetDxilLibrary(s_DXILExports, byteCode);
 		pso.SetPayloadAndAttributeSize(4, 8);
@@ -439,7 +415,10 @@ void RadianceCascades::InitializeRT()
 			auto it = m_modelBLASes.find(modelID);
 			if (it == m_modelBLASes.end())
 			{
-				m_modelBLASes[modelID].Init(GetModelPtr(modelID), m_descCopies.descHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV]);
+				m_modelBLASes[modelID].Init(
+					RuntimeResourceManager::GetModelPtr(modelID), 
+					m_descCopies.descHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV]
+				);
 			}
 		}
 	}
@@ -536,6 +515,10 @@ void RadianceCascades::RenderSceneImpl(Camera& camera, D3D12_VIEWPORT viewPort, 
 		gfxContext.SetRenderTarget(sceneColorBuffer.GetRTV(), sceneDepthBuffer.GetDSV());
 		gfxContext.SetViewportAndScissor(viewPort, scissor);
 
+#if defined(_DEBUGDRAWING)
+		DebugDrawer::BindDebugBuffers(gfxContext, Renderer::kNumRootBindings);
+#endif
+
 		meshSorter.RenderMeshes(Renderer::MeshSorter::kOpaque, gfxContext, globals);
 
 		gfxContext.Finish(true);
@@ -544,26 +527,13 @@ void RadianceCascades::RenderSceneImpl(Camera& camera, D3D12_VIEWPORT viewPort, 
 
 void RadianceCascades::RenderRaytracing(Camera& camera, ColorBuffer& colorTarget)
 {
-	__declspec(align(16)) struct RTParams
-	{
-		uint32_t dispatchWidth;
-		uint32_t dispatchHeight;
-		uint32_t rayFlags;
-		float holeSize;
-	} rtParams;
-
+	RTParams rtParams = {};
 	rtParams.dispatchHeight = colorTarget.GetHeight();
 	rtParams.dispatchWidth = colorTarget.GetWidth();
 	rtParams.rayFlags = D3D12_RAY_FLAG_CULL_BACK_FACING_TRIANGLES;
 	rtParams.holeSize = 0.0f;
 
-	__declspec(align(16)) struct GlobalInfo
-	{
-		Utils::GPUMatrix viewProjMatrix;
-		Utils::GPUMatrix invViewProjMatrix;
-		Math::Vector3 cameraPos;
-	} rtGlobalInfo;
-
+	GlobalInfo rtGlobalInfo = {};
 	Math::Matrix4 viewProjMatrix = camera.GetViewProjMatrix();
 	rtGlobalInfo.viewProjMatrix = viewProjMatrix;
 
@@ -591,6 +561,7 @@ void RadianceCascades::RenderRaytracing(Camera& camera, ColorBuffer& colorTarget
 	rtCommandList->SetComputeRootDescriptorTable(RootEntryRTGUAV, m_descCopies.sceneColorUAVHandle);
 	cmptContext.SetDynamicConstantBufferView(RootEntryRTGParamCB, sizeof(RTParams), &rtParams);
 	cmptContext.SetDynamicConstantBufferView(RootEntryRTGInfoCB, sizeof(GlobalInfo), &rtGlobalInfo);
+	DebugDrawer::BindDebugBuffers(cmptContext, RootEntryRTGCount);
 
 	D3D12_DISPATCH_RAYS_DESC rayDispatchDesc = m_testRTDispatch.BuildDispatchRaysDesc(colorTarget.GetWidth(), colorTarget.GetHeight());
 	rtCommandList->SetPipelineState1(m_rtTestPSO.GetStateObject().Get());
@@ -737,90 +708,6 @@ void RadianceCascades::UpdateViewportAndScissor()
 	m_mainScissor.bottom = (LONG)height;
 }
 
-void RadianceCascades::UpdateGraphicsPSOs()
-{
-	auto& shaderCompManager = ShaderCompilationManager::Get();
-
-	if (shaderCompManager.HasRecentCompilations())
-	{
-		// Wait for all work to be done before changing PSOs.
-		Graphics::g_CommandManager.IdleGPU();
-
-		auto compSet = shaderCompManager.GetRecentCompilations();
-
-		for (UUID64 shaderID : compSet)
-		{
-			Shader::ShaderType shaderType = shaderCompManager.GetShaderType(shaderID);
-
-			if (s_ValidShaderTypes.find(shaderType) == s_ValidShaderTypes.end())
-			{
-				LOG_INFO(L"Invalid shader type: {}. Skipping.", (uint32_t)shaderType);
-				continue;
-			}
-
-			D3D12_SHADER_BYTECODE shaderByteCode = shaderCompManager.GetShaderByteCode(shaderID);
-			
-			if (shaderByteCode.pShaderBytecode)
-			{
-				const auto& psoIds = m_shaderPSODependencyMap[shaderID];
-
-				if (!psoIds.empty())
-				{
-					for (PSOIDType psoId : psoIds)
-					{
-						const PSOPackage& package = m_usedPSOs[psoId];
-
-						if (package.psoType == PSOTypeCompute)
-						{
-							ComputePSO& pso = *(reinterpret_cast<ComputePSO*>(package.PSOPointer));
-
-							if (pso.GetPipelineStateObject() != nullptr)
-							{
-								pso.SetComputeShader(shaderByteCode);
-								pso.Finalize();
-							}
-						}
-						else if (package.psoType == PSOTypeGraphics)
-						{
-							GraphicsPSO& pso = *(reinterpret_cast<GraphicsPSO*>(package.PSOPointer));
-
-							if (pso.GetPipelineStateObject() != nullptr)
-							{
-								if (shaderType == Shader::ShaderTypePS)
-								{
-									pso.SetPixelShader(shaderByteCode);
-								}
-								else if (shaderType == Shader::ShaderTypeVS)
-								{
-									pso.SetVertexShader(shaderByteCode);
-								}
-
-								pso.Finalize();
-							}
-						}
-						else if (package.psoType == PSOTypeRaytracing)
-						{
-							//LOG_INFO(L"Raytracing PSO Reloading is not implemented yet.");
-							//continue;
-
-							RaytracingPSO& pso = *(reinterpret_cast<RaytracingPSO*>(package.PSOPointer));
-
-							if (pso.GetStateObject() != nullptr)
-							{
-								pso.SetDxilLibrary(s_DXILExports, shaderByteCode);
-							
-								pso.Finalize();
-							}
-						}
-					}
-				}
-			}
-		}
-
-		shaderCompManager.ClearRecentCompilations();
-	}
-}
-
 void RadianceCascades::ClearPixelBuffers()
 {
 	ColorBuffer& sceneColorBuffer = Graphics::g_SceneColorBuffer;
@@ -876,7 +763,7 @@ void RadianceCascades::FullScreenCopyCompute(ColorBuffer& source, ColorBuffer& d
 InternalModelInstance& RadianceCascades::AddModelInstance(ModelID modelID)
 {
 	ASSERT(m_sceneModels.size() < MAX_INSTANCES);
-	std::shared_ptr<Model> modelPtr = GetModelPtr(modelID);
+	std::shared_ptr<Model> modelPtr = RuntimeResourceManager::GetModelPtr(modelID);
 
 	if (modelPtr == nullptr)
 	{
@@ -885,19 +772,6 @@ InternalModelInstance& RadianceCascades::AddModelInstance(ModelID modelID)
 	}
 
 	return m_sceneModels.emplace_back(modelPtr, modelID);
-}
-
-void RadianceCascades::AddShaderDependency(ShaderID shaderID, std::vector<uint32_t> psoIDs)
-{
-	for (uint32_t psoID : psoIDs)
-	{
-		m_shaderPSODependencyMap[shaderID].insert(psoID);
-	}
-}
-
-void RadianceCascades::RegisterPSO(PSOID psoID, void* psoPtr, PSOType psoType)
-{
-	m_usedPSOs[psoID] = { psoPtr, psoType };
 }
 
 void DescriptorHeaps::Init()

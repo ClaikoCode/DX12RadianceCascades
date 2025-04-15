@@ -72,6 +72,7 @@
     <ClCompile>
       <MultiProcessorCompilation Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</MultiProcessorCompilation>
       <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">..\Core;%(AdditionalIncludeDirectories);$(OutDir);</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">_DEBUGDRAWING;DEBUGDRAW_REG=126;__WRL_NO_DEFAULT_LIB__;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <ClCompile>
       <MultiProcessorCompilation Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</MultiProcessorCompilation>
