@@ -7,6 +7,9 @@
 #include "Core\CommandContext.h"
 #include "Core\GameInput.h"
 
+#include "GPUStructs.h"
+#include "DebugDrawer.h"
+
 #include "RadianceCascades.h"
 
 using namespace Microsoft::WRL;
@@ -59,7 +62,7 @@ namespace
 }
 
 RadianceCascades::RadianceCascades()
-	: m_mainSceneModelInstanceIndex(UINT32_MAX), m_mainViewport({}), m_mainScissor({})
+	: m_mainViewport({}), m_mainScissor({})
 {
 	m_sceneModels.reserve(MAX_INSTANCES);
 }
@@ -90,6 +93,11 @@ void RadianceCascades::Startup()
 void RadianceCascades::Cleanup()
 {
 	Graphics::g_CommandManager.IdleGPU();
+
+	// TODO: It might make more sense for an outer scope to execute this as this class is not responsible for their initialization.
+	DebugDrawer::Destroy();
+	RuntimeResourceManager::Destroy();
+
 	Renderer::Shutdown();
 }
 
@@ -137,6 +145,13 @@ void RadianceCascades::RenderScene()
 		RenderRaytracing(m_camera, Graphics::g_SceneColorBuffer);
 	}
 
+	if (m_settings.globalSettings.renderDebug)
+	{
+		DebugRenderCameraInfo camInfo;
+		camInfo.viewProjMatrix = m_camera.GetViewProjMatrix();
+		DebugDrawer::Draw(camInfo, Graphics::g_SceneColorBuffer, m_mainViewport, m_mainScissor);
+	}
+
 	if (m_settings.rcSettings.visualize2DCascades)
 	{
 		RunComputeFlatlandScene();
@@ -173,28 +188,24 @@ void RadianceCascades::InitializeHeaps()
 void RadianceCascades::InitializeScene()
 {
 	// Setup scene.
-	Math::Vector3 sceneModelCenter = {};
 	{
 		ModelInstance& modelInstance = AddModelInstance(ModelIDSponza);
-		m_mainSceneModelInstanceIndex = (uint32_t)m_sceneModels.size() - 1;
 		modelInstance.Resize(100.0f * modelInstance.GetRadius());
-
-		sceneModelCenter = modelInstance.GetBoundingBox().GetCenter();
 	}
 
 	{
-		ModelInstance& modelInstance = AddModelInstance(ModelIDSponza);
-		modelInstance.Resize(10.0f * modelInstance.GetRadius());
-
-		Math::Vector3 instanceCenter = sceneModelCenter;
-		instanceCenter.SetY(20.0f);
-		modelInstance.GetTransform().SetTranslation(instanceCenter);
+		//ModelInstance& modelInstance = AddModelInstance(ModelIDSponza);
+		//modelInstance.Resize(10.0f * modelInstance.GetRadius());
+		//
+		//Math::Vector3 instanceCenter = sceneModelCenter;
+		//instanceCenter.SetY(20.0f);
+		//modelInstance.GetTransform().SetTranslation(instanceCenter);
 	}
 
 	{
 		ModelInstance& modelInstance = AddModelInstance(ModelIDSphereTest);
 		modelInstance.Resize(100.0f * modelInstance.GetRadius());
-		modelInstance.GetTransform().SetTranslation(sceneModelCenter);
+		modelInstance.GetTransform().SetTranslation(GetMainSceneModelCenter());
 	}
 
 	// Setup camera
@@ -360,7 +371,7 @@ void RadianceCascades::InitializeRT()
 	RaytracingPSO& pso = m_rtTestPSO;
 	{
 		RootSignature1& globalRootSig = m_rtTestGlobalRootSig;
-		globalRootSig.Reset(RootEntryRTGCount, 1);
+		globalRootSig.Reset(RootEntryRTGCount, 1, true);
 		globalRootSig[RootEntryRTGSRV].InitAsShaderResourceView(0);
 		globalRootSig[RootEntryRTGUAV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 1);
 		globalRootSig[RootEntryRTGParamCB].InitAsConstantBufferView(0);
@@ -504,6 +515,10 @@ void RadianceCascades::RenderSceneImpl(Camera& camera, D3D12_VIEWPORT viewPort, 
 		gfxContext.SetRenderTarget(sceneColorBuffer.GetRTV(), sceneDepthBuffer.GetDSV());
 		gfxContext.SetViewportAndScissor(viewPort, scissor);
 
+#if defined(_DEBUGDRAWING)
+		DebugDrawer::BindDebugBuffers(gfxContext, Renderer::kNumRootBindings);
+#endif
+
 		meshSorter.RenderMeshes(Renderer::MeshSorter::kOpaque, gfxContext, globals);
 
 		gfxContext.Finish(true);
@@ -512,26 +527,13 @@ void RadianceCascades::RenderSceneImpl(Camera& camera, D3D12_VIEWPORT viewPort, 
 
 void RadianceCascades::RenderRaytracing(Camera& camera, ColorBuffer& colorTarget)
 {
-	__declspec(align(16)) struct RTParams
-	{
-		uint32_t dispatchWidth;
-		uint32_t dispatchHeight;
-		uint32_t rayFlags;
-		float holeSize;
-	} rtParams;
-
+	RTParams rtParams = {};
 	rtParams.dispatchHeight = colorTarget.GetHeight();
 	rtParams.dispatchWidth = colorTarget.GetWidth();
 	rtParams.rayFlags = D3D12_RAY_FLAG_CULL_BACK_FACING_TRIANGLES;
 	rtParams.holeSize = 0.0f;
 
-	__declspec(align(16)) struct GlobalInfo
-	{
-		Utils::GPUMatrix viewProjMatrix;
-		Utils::GPUMatrix invViewProjMatrix;
-		Math::Vector3 cameraPos;
-	} rtGlobalInfo;
-
+	GlobalInfo rtGlobalInfo = {};
 	Math::Matrix4 viewProjMatrix = camera.GetViewProjMatrix();
 	rtGlobalInfo.viewProjMatrix = viewProjMatrix;
 
@@ -559,6 +561,7 @@ void RadianceCascades::RenderRaytracing(Camera& camera, ColorBuffer& colorTarget
 	rtCommandList->SetComputeRootDescriptorTable(RootEntryRTGUAV, m_descCopies.sceneColorUAVHandle);
 	cmptContext.SetDynamicConstantBufferView(RootEntryRTGParamCB, sizeof(RTParams), &rtParams);
 	cmptContext.SetDynamicConstantBufferView(RootEntryRTGInfoCB, sizeof(GlobalInfo), &rtGlobalInfo);
+	DebugDrawer::BindDebugBuffers(cmptContext, RootEntryRTGCount);
 
 	D3D12_DISPATCH_RAYS_DESC rayDispatchDesc = m_testRTDispatch.BuildDispatchRaysDesc(colorTarget.GetWidth(), colorTarget.GetHeight());
 	rtCommandList->SetPipelineState1(m_rtTestPSO.GetStateObject().Get());

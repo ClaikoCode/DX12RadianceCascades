@@ -42,10 +42,12 @@ RuntimeResourceManager::RuntimeResourceManager() : m_usedPSOs({})
 		// Pixel Shaders
 		shaderCompManager.RegisterPixelShader(ShaderIDSceneRenderPS, L"SceneRenderPS.hlsl", true);
 		shaderCompManager.RegisterPixelShader(ShaderIDFullScreenCopyPS, L"DirectWritePS.hlsl", true);
+		shaderCompManager.RegisterPixelShader(ShaderIDDebugDrawPS, L"DebugDrawPS.hlsl", true);
 
 		// Vertex Shaders
 		shaderCompManager.RegisterVertexShader(ShaderIDSceneRenderVS, L"SceneRenderVS.hlsl", true);
 		shaderCompManager.RegisterVertexShader(ShaderIDFullScreenQuadVS, L"FullScreenQuadVS.hlsl", true);
+		shaderCompManager.RegisterVertexShader(ShaderIDDebugDrawVS, L"DebugDrawVS.hlsl", true);
 
 		// Compute Shaders
 		shaderCompManager.RegisterComputeShader(ShaderIDRCGatherCS, L"RCGatherCS.hlsl", true);
@@ -165,4 +167,9 @@ void RuntimeResourceManager::RegisterPSOImpl(PSOID psoID, void* psoPtr, PSOType 
 inline std::shared_ptr<Model> RuntimeResourceManager::GetModelPtrImpl(ModelID modelID)
 {
 	return m_models[modelID];
+}
+
+void RuntimeResourceManager::DestroyImpl()
+{
+	m_models.clear();
 }

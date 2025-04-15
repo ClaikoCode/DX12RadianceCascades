@@ -1,5 +1,8 @@
 #pragma once
 
+// Forward declaration.
+class Model;
+
 enum ModelID : UUID64
 {
 	ModelIDSponza = 0,
@@ -19,6 +22,8 @@ enum ShaderID : UUID64
 	ShaderIDRCMergeCS,
 	ShaderIDRCRadianceFieldCS,
 	ShaderIDRaytracingTestRT,
+	ShaderIDDebugDrawPS,
+	ShaderIDDebugDrawVS,
 
 	ShaderIDNone = NULL_ID
 };
@@ -35,6 +40,7 @@ enum PSOID : PSOIDType
 	PSOIDComputeRCMergePSO,
 	PSOIDComputeRCRadianceFieldPSO,
 	PSOIDRaytracingTestPSO,
+	PSOIDDebugDrawPSO,
 
 	PSOIDCount
 };
@@ -65,11 +71,13 @@ public:
 	}
 
 	static void UpdateGraphicsPSOs();
-	static void AddShaderDependency(ShaderID shaderID, std::vector<PSOIDType> psoIDs); // Not a reference so rvalues can be input.
+	static void AddShaderDependency(ShaderID shaderID, std::vector<PSOIDType> psoIDs); // Not a reference so rvalues can be input. Inefficient but its not a hotpath.
 	static void RegisterPSO(PSOID psoID, void* psoPtr, PSOType psoType);
 
 	static std::shared_ptr<Model> GetModelPtr(ModelID modelID);
 	static D3D12_SHADER_BYTECODE GetShader(ShaderID shaderID);
+
+	static void Destroy() { Get().DestroyImpl(); }
 
 private:
 	RuntimeResourceManager();
@@ -79,6 +87,8 @@ private:
 	void RegisterPSOImpl(PSOID psoID, void* psoPtr, PSOType psoType);
 
 	std::shared_ptr<Model> GetModelPtrImpl(ModelID modelID);
+
+	void DestroyImpl();
 
 private:
 	std::unordered_map<UUID64, std::set<PSOIDType>> m_shaderPSODependencyMap;
