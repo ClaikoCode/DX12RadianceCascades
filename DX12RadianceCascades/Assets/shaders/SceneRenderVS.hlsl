@@ -13,7 +13,7 @@
 // Modified by: Jonathan Dell'Ova
 
 #include "Common.hlsli"
-
+#include "DebugDraw.hlsli"
 
 cbuffer MeshConstants : register(b0)
 {
@@ -29,15 +29,6 @@ cbuffer GlobalConstants : register(b1)
     float3 SunDirection;
     float3 SunIntensity;
 }
-
-struct DebugRenderVertex
-{
-    float3 position;
-    float3 color;
-};
-
-RWStructuredBuffer<DebugRenderVertex> debugDrawVertexData : register(u126);
-RWByteAddressBuffer debugDrawVertexCounter : register(u127);
 
 struct VSInput
 {
@@ -106,9 +97,7 @@ VSOutput main(VSInput vsInput)
 
 #endif
 
-    DebugRenderVertex test = debugDrawVertexData.Load(0);
-    uint testa = debugDrawVertexCounter.Load(0);
-    vsOutput.worldPos = mul(WorldMatrix, position).xyz + test.color - test.color + testa - testa;
+    vsOutput.worldPos = mul(WorldMatrix, position).xyz;
     vsOutput.position = mul(ViewProjMatrix, float4(vsOutput.worldPos, 1.0));
     vsOutput.sunShadowCoord = mul(SunShadowMatrix, float4(vsOutput.worldPos, 1.0)).xyz;
     vsOutput.normal = mul(WorldIT, normal);
@@ -120,5 +109,8 @@ VSOutput main(VSInput vsInput)
     vsOutput.uv1 = vsInput.uv1;
 #endif
 
+    DrawLine(vsOutput.worldPos, vsOutput.worldPos + normalize(vsOutput.normal) * 10.0f, float3(1.0f, 0.0f, 0.0f));
+    //DrawAxisAlignedBox(float3(0.0f, 0.0f, 0.0f), 10.0f, float3(1.0f, 0.0f, 0.0f));
+    
     return vsOutput;
 }

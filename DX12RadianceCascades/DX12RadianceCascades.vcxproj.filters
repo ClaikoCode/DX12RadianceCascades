@@ -54,6 +54,9 @@
     <ClInclude Include="src\RuntimeResourceManager.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="src\GPUStructs.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\Main.cpp">
@@ -87,6 +90,7 @@
   <ItemGroup>
     <None Include="Assets\shaders\Common.hlsli" />
     <None Include="Assets\shaders\RCCommon.hlsli" />
+    <None Include="Assets\shaders\DebugDraw.hlsli" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Assets\shaders\DirectCopyCS.hlsl" />
@@ -98,5 +102,7 @@
     <FxCompile Include="Assets\shaders\SceneRenderPS.hlsl" />
     <FxCompile Include="Assets\shaders\SceneRenderVS.hlsl" />
     <FxCompile Include="Assets\shaders\RCRadianceFieldCS.hlsl" />
+    <FxCompile Include="Assets\shaders\DebugDrawPS.hlsl" />
+    <FxCompile Include="Assets\shaders\DebugDrawVS.hlsl" />
   </ItemGroup>
 </Project>

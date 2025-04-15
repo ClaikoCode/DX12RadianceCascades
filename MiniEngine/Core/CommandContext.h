@@ -27,9 +27,6 @@
 #include "GraphicsCore.h"
 #include <vector>
 
-// Added by JD
-#include "../../DX12RadianceCascades/src/DebugDrawer.h"
-
 class ColorBuffer;
 class DepthBuffer;
 class Texture;
@@ -215,7 +212,7 @@ public:
     void EndQuery(ID3D12QueryHeap* QueryHeap, D3D12_QUERY_TYPE Type, UINT HeapIndex);
     void ResolveQueryData(ID3D12QueryHeap* QueryHeap, D3D12_QUERY_TYPE Type, UINT StartIndex, UINT NumQueries, ID3D12Resource* DestinationBuffer, UINT64 DestinationBufferOffset);
 
-    void SetRootSignature( const RootSignature& RootSig );
+    void SetRootSignature(const RootSignature& RootSig);
 
     void SetRenderTargets(UINT NumRTVs, const D3D12_CPU_DESCRIPTOR_HANDLE RTVs[]);
     void SetRenderTargets(UINT NumRTVs, const D3D12_CPU_DESCRIPTOR_HANDLE RTVs[], D3D12_CPU_DESCRIPTOR_HANDLE DSV);
@@ -319,24 +316,12 @@ inline void CommandContext::FlushResourceBarriers( void )
     }
 }
 
-inline void GraphicsContext::SetRootSignature( const RootSignature& RootSig )
+inline void GraphicsContext::SetRootSignature(const RootSignature& RootSig)
 {
     if (RootSig.GetSignature() == m_CurGraphicsRootSignature)
         return;
 
     m_CommandList->SetGraphicsRootSignature(m_CurGraphicsRootSignature = RootSig.GetSignature());
-
-#if defined(_DEBUGDRAWING)
-    StructuredBuffer& lineStructBuff = DebugDrawer::GetLineBuffer();
-    ByteAddressBuffer& counterBuffer = DebugDrawer::GetCounterBuffer();
-
-    TransitionResource(lineStructBuff, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-    TransitionResource(counterBuffer, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
-
-    SetBufferUAV(RootSig.GetNumParams() - 2, lineStructBuff);
-    SetBufferUAV(RootSig.GetNumParams() - 1, counterBuffer);
-#endif
-
     m_DynamicViewDescriptorHeap.ParseGraphicsRootSignature(RootSig);
     m_DynamicSamplerDescriptorHeap.ParseGraphicsRootSignature(RootSig);
 }
@@ -718,6 +703,14 @@ inline void GraphicsContext::ExecuteIndirect(CommandSignature& CommandSig,
     GpuBuffer& ArgumentBuffer, uint64_t ArgumentStartOffset,
     uint32_t MaxCommands, GpuBuffer* CommandCounterBuffer, uint64_t CounterOffset)
 {
+    // Added by JD
+    // The driver forces this transition when executing the indirect commands. 
+    // This code is only so the GpuBuffer object can update its internal resource state variable correctly.
+    if (CommandCounterBuffer != nullptr)
+    {
+        TransitionResource(*CommandCounterBuffer, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
+    }
+
     FlushResourceBarriers();
     m_DynamicViewDescriptorHeap.CommitGraphicsRootDescriptorTables(m_CommandList);
     m_DynamicSamplerDescriptorHeap.CommitGraphicsRootDescriptorTables(m_CommandList);

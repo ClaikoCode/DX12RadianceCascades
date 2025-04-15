@@ -127,10 +127,15 @@ public:
 
     static void DestroyAll(void);
 
-    void Reset( UINT NumRootParams, UINT NumStaticSamplers = 0 )
+#if defined(_DEBUGDRAWING)
+    void Reset( UINT NumRootParams, UINT NumStaticSamplers = 0, bool shouldAddDebugDrawParams = true)
+#else
+    void Reset(UINT NumRootParams, UINT NumStaticSamplers = 0)
+#endif
     {
 #if defined(_DEBUGDRAWING)
-        NumRootParams += 2;
+        if(shouldAddDebugDrawParams)
+            NumRootParams += 2;
 #endif
 
         if (NumRootParams > 0)
@@ -147,9 +152,12 @@ public:
         m_NumInitializedStaticSamplers = 0;
 
 #if defined(_DEBUGDRAWING)
-        // Bind fill two slots as buffer UAVs. One for debug line buffer and one for the counter.
-        m_ParamArray[m_NumParameters - 2].InitAsBufferUAV(DEBUGDRAW_REG);
-        m_ParamArray[m_NumParameters - 1].InitAsBufferUAV(DEBUGDRAW_REG + 1);
+        if (shouldAddDebugDrawParams)
+        {
+            // Bind fill two slots as buffer UAVs. One for debug line buffer and one for the counter.
+            m_ParamArray[m_NumParameters - 2].InitAsBufferUAV(DEBUGDRAW_REG);
+            m_ParamArray[m_NumParameters - 1].InitAsBufferUAV(DEBUGDRAW_REG + 1);
+        }
 #endif
     }
 

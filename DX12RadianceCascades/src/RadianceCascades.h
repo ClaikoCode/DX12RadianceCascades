@@ -3,6 +3,7 @@
 #include "Core\GameCore.h"
 #include "Core\ColorBuffer.h"
 #include "Core\GpuBuffer.h"
+#include "Core\ReadbackBuffer.h"
 #include "Core\Camera.h"
 #include "Core\CameraController.h"
 #include "Model\Model.h"
@@ -10,6 +11,12 @@
 #include "RuntimeResourceManager.h"
 
 #include "RadianceCascadesManager.h"
+
+#if defined(_DEBUGDRAWING)
+#define ENABLE_DEBUG_DRAW 1
+#else
+#define ENABLE_DEBUG_DRAW 0
+#endif
 
 class InternalModelInstance : public ModelInstance
 {
@@ -30,12 +37,13 @@ struct RadianceCascadesSettings
 	bool visualize2DCascades = false;
 };
 
-#define ENABLE_RT (false)
+#define ENABLE_RT (true)
 #define ENABLE_RASTER (!ENABLE_RT)
 struct GlobalSettings
 {
 	bool renderRaster = ENABLE_RASTER;
 	bool renderRaytracing = ENABLE_RT;
+	bool renderDebug = ENABLE_DEBUG_DRAW;
 };
 
 struct AppSettings
@@ -139,10 +147,16 @@ private:
 
 	InternalModelInstance& AddModelInstance(ModelID modelID);
 
+	// Main scene model instance is defined as the first instance added.
 	InternalModelInstance& GetMainSceneModelInstance()
 	{
-		ASSERT(m_mainSceneModelInstanceIndex < m_sceneModels.size());
-		return m_sceneModels[m_mainSceneModelInstanceIndex];
+		ASSERT(!m_sceneModels.empty());
+		return m_sceneModels[0];
+	}
+
+	Math::Vector3 GetMainSceneModelCenter()
+	{
+		return GetMainSceneModelInstance().GetBoundingBox().GetCenter();
 	}
 
 private:
@@ -152,7 +166,6 @@ private:
 	Camera m_camera;
 	std::unique_ptr<CameraController> m_cameraController;
 
-	uint32_t m_mainSceneModelInstanceIndex;
 	std::vector<InternalModelInstance> m_sceneModels;
 
 	D3D12_VIEWPORT m_mainViewport;
