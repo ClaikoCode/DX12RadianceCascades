@@ -3,63 +3,20 @@
 #include "Core\GameCore.h"
 #include "Core\ColorBuffer.h"
 #include "Core\GpuBuffer.h"
+#include "Core\ReadbackBuffer.h"
 #include "Core\Camera.h"
 #include "Core\CameraController.h"
 #include "Model\Model.h"
 #include "RaytracingUtils.h"
+#include "RuntimeResourceManager.h"
 
 #include "RadianceCascadesManager.h"
 
-typedef uintptr_t modelhash_t;
-
-enum ModelID : UUID64
-{
-	ModelIDSponza = 0,
-	ModelIDSphereTest,
-};
-
-enum ShaderID : UUID64
-{
-	ShaderIDInvalid = 0,
-	ShaderIDSceneRenderPS,
-	ShaderIDSceneRenderVS,
-	ShaderIDRCGatherCS,
-	ShaderIDFlatlandSceneCS,
-	ShaderIDFullScreenQuadVS,
-	ShaderIDFullScreenCopyPS,
-	ShaderIDFullScreenCopyCS,
-	ShaderIDRCMergeCS,
-	ShaderIDRCRadianceFieldCS,
-	ShaderIDRaytracingTestRT,
-
-	ShaderIDNone = NULL_ID
-};
-
-typedef uint32_t PSOIDType;
-enum PSOID : PSOIDType
-{
-	PSOIDFirstExternalPSO = 0,
-	PSOIDSecondExternalPSO,
-	PSOIDComputeTestPSO,
-	PSOIDComputeRCGatherPSO,
-	PSOIDComputeFlatlandScenePSO,
-	PSOIDComputeFullScreenCopyPSO,
-	PSOIDComputeRCMergePSO,
-	PSOIDComputeRCRadianceFieldPSO,
-	PSOIDRaytracingTestPSO,
-
-	PSOIDCount
-};
-
-enum PSOType : uint32_t
-{
-	PSOTypeCompute = 0,
-	PSOTypeGraphics,
-	PSOTypeRaytracing,
-	
-	PSOTypeCount
-};
-
+#if defined(_DEBUGDRAWING)
+#define ENABLE_DEBUG_DRAW 1
+#else
+#define ENABLE_DEBUG_DRAW 0
+#endif
 
 class InternalModelInstance : public ModelInstance
 {
@@ -86,6 +43,7 @@ struct GlobalSettings
 {
 	bool renderRaster = ENABLE_RASTER;
 	bool renderRaytracing = ENABLE_RT;
+	bool renderDebug = ENABLE_DEBUG_DRAW;
 };
 
 struct AppSettings
@@ -101,12 +59,6 @@ struct DescriptorHeaps
 	std::array<DescriptorHeap, D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES> descHeaps;
 
 	DescriptorHandle sceneColorUAVHandle;
-};
-
-struct PSOPackage
-{
-	void* PSOPointer;
-	PSOType psoType;
 };
 
 class RadianceCascades : public GameCore::IGameApp
@@ -172,10 +124,8 @@ public:
 
 private:
 
-	void InitializeResources();
 	void InitializeHeaps();
 	void InitializeScene();
-	void InitializeShaders();
 	void InitializePSOs();
 	void InitializeRCResources();
 	void InitializeRT();
@@ -195,21 +145,18 @@ private:
 	void FullScreenCopyCompute(PixelBuffer& source, D3D12_CPU_DESCRIPTOR_HANDLE sourceSRV, ColorBuffer& dest);
 	void FullScreenCopyCompute(ColorBuffer& source, ColorBuffer& dest);
 
-	
-	void AddShaderDependency(ShaderID shaderID, std::vector<PSOIDType> psoIDs);
-	void RegisterPSO(PSOID psoID, void* psoPtr, PSOType psoType);
-
 	InternalModelInstance& AddModelInstance(ModelID modelID);
 
+	// Main scene model instance is defined as the first instance added.
 	InternalModelInstance& GetMainSceneModelInstance()
 	{
-		ASSERT(m_mainSceneModelInstanceIndex < m_sceneModels.size());
-		return m_sceneModels[m_mainSceneModelInstanceIndex];
+		ASSERT(!m_sceneModels.empty());
+		return m_sceneModels[0];
 	}
 
-	std::shared_ptr<Model> GetModelPtr(ModelID modelID)
+	Math::Vector3 GetMainSceneModelCenter()
 	{
-		return m_models[modelID];
+		return GetMainSceneModelInstance().GetBoundingBox().GetCenter();
 	}
 
 private:
@@ -219,15 +166,10 @@ private:
 	Camera m_camera;
 	std::unique_ptr<CameraController> m_cameraController;
 
-	uint32_t m_mainSceneModelInstanceIndex;
 	std::vector<InternalModelInstance> m_sceneModels;
 
 	D3D12_VIEWPORT m_mainViewport;
 	D3D12_RECT m_mainScissor;
-
-	// Tells what PSOs are dependent on what shaders.
-	std::unordered_map<UUID64, std::set<PSOIDType>> m_shaderPSODependencyMap;
-	std::array<PSOPackage, PSOIDCount> m_usedPSOs;
 
 	ComputePSO m_rcGatherPSO = ComputePSO(L"RC Gather Compute");
 	RootSignature m_computeGatherRootSig;
@@ -256,7 +198,6 @@ private:
 
 	DescriptorHeaps m_descCopies;
 
-	std::unordered_map<ModelID, std::shared_ptr<Model>> m_models;
 	std::unordered_map<ModelID, BLASBuffer> m_modelBLASes;
 };
 

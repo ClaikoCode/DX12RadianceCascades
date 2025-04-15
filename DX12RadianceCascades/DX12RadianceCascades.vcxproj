@@ -110,7 +110,7 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUGDRAWING;DEBUGDRAW_REG=126;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>rcpch.h</PrecompiledHeaderFile>
@@ -170,6 +170,8 @@ if %errorlevel% leq 3 exit 0</Command>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="src\d3dx12.h" />
+    <ClInclude Include="src\DebugDrawer.h" />
+    <ClInclude Include="src\GPUStructs.h" />
     <ClInclude Include="src\Logger.h" />
     <ClInclude Include="src\RadianceCascades.h" />
     <ClInclude Include="src\RadianceCascadesManager.h" />
@@ -177,11 +179,13 @@ if %errorlevel% leq 3 exit 0</Command>
     <ClInclude Include="src\RaytracingUtils.h" />
     <ClInclude Include="src\rcpch.h" />
     <ClInclude Include="src\DirectoryWatcher.h" />
+    <ClInclude Include="src\RuntimeResourceManager.h" />
     <ClInclude Include="src\ShaderCompilation\ShaderCompilationManager.h" />
     <ClInclude Include="src\StepTimer.h" />
     <ClInclude Include="src\Utils.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="src\DebugDrawer.cpp" />
     <ClCompile Include="src\Main.cpp" />
     <ClCompile Include="src\RadianceCascades.cpp" />
     <ClCompile Include="src\RadianceCascadesManager.cpp" />
@@ -190,6 +194,7 @@ if %errorlevel% leq 3 exit 0</Command>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">rcpch.h</PrecompiledHeaderFile>
     </ClCompile>
+    <ClCompile Include="src\RuntimeResourceManager.cpp" />
     <ClCompile Include="src\ShaderCompilation\DirectoryWatcher.cpp" />
     <ClCompile Include="src\ShaderCompilation\ShaderCompilationManager.cpp" />
   </ItemGroup>
@@ -205,11 +210,28 @@ if %errorlevel% leq 3 exit 0</Command>
     <None Include="Assets\shaders\Common.hlsli">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
     </None>
+    <None Include="Assets\shaders\DebugDraw.hlsli" />
     <None Include="Assets\shaders\RCCommon.hlsli">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
     </None>
   </ItemGroup>
   <ItemGroup>
+    <FxCompile Include="Assets\shaders\DebugDrawPS.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.3</ShaderModel>
+      <AdditionalOptions Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">-Qembed_debug</AdditionalOptions>
+    </FxCompile>
+    <FxCompile Include="Assets\shaders\DebugDrawVS.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Vertex</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Vertex</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Vertex</ShaderType>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.3</ShaderModel>
+      <AdditionalOptions Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">-Qembed_debug</AdditionalOptions>
+    </FxCompile>
     <FxCompile Include="Assets\shaders\DirectCopyCS.hlsl">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
       <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.3</ShaderModel>

@@ -13,7 +13,7 @@
 // Modified by: Jonathan Dell'Ova
 
 #include "Common.hlsli"
-
+#include "DebugDraw.hlsli"
 
 cbuffer MeshConstants : register(b0)
 {
@@ -109,5 +109,8 @@ VSOutput main(VSInput vsInput)
     vsOutput.uv1 = vsInput.uv1;
 #endif
 
+    DrawLine(vsOutput.worldPos, vsOutput.worldPos + normalize(vsOutput.normal) * 10.0f, float3(1.0f, 0.0f, 0.0f));
+    //DrawAxisAlignedBox(float3(0.0f, 0.0f, 0.0f), 10.0f, float3(1.0f, 0.0f, 0.0f));
+    
     return vsOutput;
 }

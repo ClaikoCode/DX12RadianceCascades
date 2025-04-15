@@ -3,6 +3,10 @@
 #include "Core\GpuBuffer.h"
 #include "Core\PipelineState.h"
 #include "Core\RootSignature.h"
+#include "Model\Model.h"
+
+static const std::vector<std::wstring> s_DXILExports = { L"RayGenerationShader", L"AnyHitShader", L"ClosestHitShader", L"MissShader" };
+
 
 // Raytracing entry data.
 struct LocalHitData
@@ -113,9 +117,17 @@ public:
 	{
 		Reset(numParams, numSamplers);
 	}
-
+#if defined(_DEBUGDRAWING)
+	void Reset(uint32_t numParams, uint32_t numSamplers, bool shouldAddDebugDrawParams = false)
+#else
 	void Reset(uint32_t numParams, uint32_t numSamplers)
+#endif
 	{
+#if defined(_DEBUGDRAWING)
+		if (shouldAddDebugDrawParams)
+			numParams += 2;
+#endif
+
 		m_params.clear();
 		m_params.resize(numParams);
 
@@ -123,6 +135,15 @@ public:
 		m_samplers.resize(numSamplers);
 
 		m_initializedSamplers = 0;
+
+#if defined(_DEBUGDRAWING)
+		if (shouldAddDebugDrawParams)
+		{
+			// Fill two slots as buffer UAVs. One for debug line buffer and one for the counter.
+			m_params[numParams - 2].InitAsUnorderedAccessView(DEBUGDRAW_REG);
+			m_params[numParams - 1].InitAsUnorderedAccessView(DEBUGDRAW_REG + 1);
+		}
+#endif
 	}
 	
 

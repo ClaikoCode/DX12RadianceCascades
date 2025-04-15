@@ -62,10 +62,46 @@ constexpr UUID64 NULL_ID = UINT64_MAX;
 // Ineficient but has to do for now.
 static inline void ThrowIfFailed(HRESULT hr, std::wstring message = L"")
 {
-	if (FAILED(hr))
-	{
-		LOG_ERROR(L"Failed HR check: {} | Error message: {}", hr, message);
-		throw std::runtime_error("HR RUNTIME ERROR");
-	}
+    if (FAILED(hr))
+    {
+        // Get the error message from the system
+        wchar_t* errorMessage = nullptr;
+        DWORD errorMessageLength = FormatMessageW(
+            FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+            nullptr,
+            hr,
+            MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+            reinterpret_cast<LPWSTR>(&errorMessage),
+            0,
+            nullptr
+        );
+
+        std::wstring errorDesc = L"Unknown error";
+        if (errorMessage != nullptr)
+        {
+            if (errorMessageLength > 0)
+            {
+                // Remove \r\n from string.
+                errorMessageLength = errorMessageLength - 2;
+            }
+
+            errorMessage[errorMessageLength] = L'\0';
+            errorDesc = errorMessage;
+            LocalFree(errorMessage);
+        }
+
+        // Build a detailed error message
+        std::wstring detailedMessage = std::format(L"HRESULT failed (0x{:08X}): {}",
+            static_cast<unsigned int>(hr), errorDesc);
+
+        // Add additional input information.
+        if (!message.empty())
+        {
+            detailedMessage += L" | " + message;
+        }
+
+        LOG_ERROR(L"{}", detailedMessage);
+        throw std::runtime_error("HRESULT Error: " + Utils::WstringToString(detailedMessage));
+    }
 }
 
