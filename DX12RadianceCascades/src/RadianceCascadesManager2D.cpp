@@ -1,14 +1,14 @@
 #include "rcpch.h"
 #include "Core\ColorBuffer.h"
 #include "Core\CommandContext.h"
-#include "RadianceCascadesManager.h"
+#include "RadianceCascadesManager2D.h"
 
-RadianceCascadesManager::~RadianceCascadesManager()
+RadianceCascadesManager2D::~RadianceCascadesManager2D()
 {
 	Shutdown();
 }
 
-void RadianceCascadesManager::Init(float _rayLength0, float _raysPerProbe0, float _maxRayLength)
+void RadianceCascadesManager2D::Init(float _rayLength0, float _raysPerProbe0, float _maxRayLength)
 {
 	const uint16_t rayScalingFactor = scalingFactor.rayScalingFactor;
 	const uint16_t probeScalingFactor = scalingFactor.probeScalingFactor;
@@ -52,7 +52,7 @@ void RadianceCascadesManager::Init(float _rayLength0, float _raysPerProbe0, floa
 	m_radianceField.Create(L"Radiance Field", probeDim0, probeDim0, 1, DXGI_FORMAT_R16G16B16A16_FLOAT);
 }
 
-void RadianceCascadesManager::Shutdown()
+void RadianceCascadesManager2D::Shutdown()
 {
 	for (ColorBuffer& cascadeInterval : m_cascadeIntervals)
 	{
@@ -62,7 +62,7 @@ void RadianceCascadesManager::Shutdown()
 	m_radianceField.Destroy();
 }
 
-RCGlobals RadianceCascadesManager::FillRCGlobalsData(uint32_t sourceSize)
+RCGlobals RadianceCascadesManager2D::FillRCGlobalsData(uint32_t sourceSize)
 {
 	//ASSERT(Math::IsPowerOfTwo(sourceSize));
 
@@ -78,22 +78,22 @@ RCGlobals RadianceCascadesManager::FillRCGlobalsData(uint32_t sourceSize)
 	return rcGlobals;
 }
 
-uint32_t RadianceCascadesManager::GetProbePixelSize(uint32_t cascadeIndex)
+uint32_t RadianceCascadesManager2D::GetProbePixelSize(uint32_t cascadeIndex)
 {
 	return GetCascadeInterval(cascadeIndex).GetWidth() / GetProbeCount(cascadeIndex);
 }
 
-uint32_t RadianceCascadesManager::GetProbeCount(uint32_t cascadeIndex)
+uint32_t RadianceCascadesManager2D::GetProbeCount(uint32_t cascadeIndex)
 {
 	return (uint32_t)(probeDim0 / Math::Pow(scalingFactor.probeScalingFactor, (float)cascadeIndex));
 }
 
-float RadianceCascadesManager::GetProbeSpacing(uint32_t cascadeIndex)
+float RadianceCascadesManager2D::GetProbeSpacing(uint32_t cascadeIndex)
 {
 	return probeSpacing0 * Math::Pow(scalingFactor.probeScalingFactor, (float)cascadeIndex);
 }
 
-void RadianceCascadesManager::ClearBuffers(GraphicsContext& gfxContext)
+void RadianceCascadesManager2D::ClearBuffers(GraphicsContext& gfxContext)
 {
 	for (ColorBuffer& cascadeInterval : m_cascadeIntervals)
 	{

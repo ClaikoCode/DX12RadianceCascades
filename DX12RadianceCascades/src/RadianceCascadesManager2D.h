@@ -17,11 +17,11 @@ __declspec(align(16)) struct RCGlobals
 	float sourceSize;
 };
 
-class RadianceCascadesManager
+class RadianceCascadesManager2D
 {
 public:
-	RadianceCascadesManager() : probeDim0(0), rayLength0(0.0f), raysPerProbe0(0), probeSpacing0(0) {};
-	~RadianceCascadesManager();
+	RadianceCascadesManager2D() : probeDim0(0), rayLength0(0.0f), raysPerProbe0(0), probeSpacing0(0) {};
+	~RadianceCascadesManager2D();
 	void Init(float rayLength0, float _raysPerProbe0, float _maxRayLength);
 	void Shutdown();
 

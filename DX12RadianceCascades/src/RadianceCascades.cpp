@@ -153,7 +153,7 @@ void RadianceCascades::RenderScene()
 		RunComputeRCRadianceField(Graphics::g_SceneColorBuffer);
 
 		static int currentCascadeVisIndex = -1;
-		for (int i = 0; i < (int)m_rcManager.GetCascadeCount(); i++)
+		for (int i = 0; i < (int)m_rcManager2D.GetCascadeCount(); i++)
 		{
 			if (GameInput::IsFirstPressed((GameInput::DigitalInput)(i + 1)))
 			{
@@ -168,7 +168,7 @@ void RadianceCascades::RenderScene()
 
 		if (currentCascadeVisIndex != -1)
 		{
-			FullScreenCopyCompute(m_rcManager.GetCascadeInterval(currentCascadeVisIndex), Graphics::g_SceneColorBuffer);
+			FullScreenCopyCompute(m_rcManager2D.GetCascadeInterval(currentCascadeVisIndex), Graphics::g_SceneColorBuffer);
 		}
 	}
 }
@@ -351,7 +351,7 @@ void RadianceCascades::InitializeRCResources()
 	m_flatlandScene.Create(L"Flatland Scene", ::GetSceneColorWidth(), ::GetSceneColorHeight(), 1, s_FlatlandSceneFormat);
 
 	float diag = Math::Length({ (float)::GetSceneColorWidth(), (float)::GetSceneColorHeight(), 0.0f });
-	m_rcManager.Init(SAMPLE_LEN_0, RAYS_PER_PROBE_0, diag);
+	m_rcManager2D.Init(SAMPLE_LEN_0, RAYS_PER_PROBE_0, diag);
 }
 
 void RadianceCascades::InitializeRT()
@@ -563,7 +563,7 @@ void RadianceCascades::RunComputeFlatlandScene()
 void RadianceCascades::RunComputeRCGather()
 {
 	ColorBuffer& sceneBuffer = m_flatlandScene;
-	RCGlobals rcGlobals = m_rcManager.FillRCGlobalsData(sceneBuffer.GetWidth());
+	RCGlobals rcGlobals = m_rcManager2D.FillRCGlobalsData(sceneBuffer.GetWidth());
 
 	ComputeContext& cmptContext = ComputeContext::Begin(L"RC Gather Compute");
 
@@ -575,9 +575,9 @@ void RadianceCascades::RunComputeRCGather()
 	cmptContext.TransitionResource(sceneBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 	cmptContext.SetDynamicDescriptor(RootEntryRCGatherSceneSRV, 0, sceneBuffer.GetSRV());
 
-	for (uint32_t i = 0; i < m_rcManager.GetCascadeCount(); i++)
+	for (uint32_t i = 0; i < m_rcManager2D.GetCascadeCount(); i++)
 	{
-		ColorBuffer& target = m_rcManager.GetCascadeInterval(i);
+		ColorBuffer& target = m_rcManager2D.GetCascadeInterval(i);
 
 		CascadeInfo cascadeInfo = {};
 		cascadeInfo.cascadeIndex = i;
@@ -601,17 +601,17 @@ void RadianceCascades::RunComputeRCMerge()
 
 	RCGlobals rcGlobals = {};
 	{
-		ColorBuffer& cascade0 = m_rcManager.GetCascadeInterval(0);
-		rcGlobals = m_rcManager.FillRCGlobalsData(cascade0.GetWidth());
+		ColorBuffer& cascade0 = m_rcManager2D.GetCascadeInterval(0);
+		rcGlobals = m_rcManager2D.FillRCGlobalsData(cascade0.GetWidth());
 	}
 	 
 	cmptContext.SetDynamicConstantBufferView(RootEntryRCMergeGlobals, sizeof(rcGlobals), &rcGlobals);
 
 	// Start loop at second last cascade and go down to the first cascade.
-	for (int i = m_rcManager.GetCascadeCount() - 2; i >= 0; i--)
+	for (int i = m_rcManager2D.GetCascadeCount() - 2; i >= 0; i--)
 	{
-		ColorBuffer& target = m_rcManager.GetCascadeInterval(i);
-		ColorBuffer& source = m_rcManager.GetCascadeInterval(i + 1);
+		ColorBuffer& target = m_rcManager2D.GetCascadeInterval(i);
+		ColorBuffer& source = m_rcManager2D.GetCascadeInterval(i + 1);
 		CascadeInfo cascadeInfo = {};
 		cascadeInfo.cascadeIndex = i;
 		cmptContext.SetDynamicConstantBufferView(RootEntryRCMergeCascadeInfo, sizeof(cascadeInfo), &cascadeInfo);
@@ -634,10 +634,10 @@ void RadianceCascades::RunComputeRCRadianceField(ColorBuffer& outputBuffer)
 	cmptContext.SetRootSignature(m_rcRadianceFieldRootSig);
 	cmptContext.SetPipelineState(m_rcRadianceFieldPSO);
 
-	ColorBuffer& radianceField = m_rcManager.GetRadianceField();
-	ColorBuffer& targetCascade = m_rcManager.GetCascadeInterval(0);
+	ColorBuffer& radianceField = m_rcManager2D.GetRadianceField();
+	ColorBuffer& targetCascade = m_rcManager2D.GetCascadeInterval(0);
 
-	RCGlobals rcGlobals = m_rcManager.FillRCGlobalsData(targetCascade.GetWidth());
+	RCGlobals rcGlobals = m_rcManager2D.FillRCGlobalsData(targetCascade.GetWidth());
 	cmptContext.SetDynamicConstantBufferView(RootEntryRCRadianceFieldGlobals, sizeof(rcGlobals), &rcGlobals);
 
 	{
@@ -699,7 +699,7 @@ void RadianceCascades::ClearPixelBuffers()
 		gfxContext.ClearColor(m_flatlandScene);
 	}
 	
-	m_rcManager.ClearBuffers(gfxContext);
+	m_rcManager2D.ClearBuffers(gfxContext);
 
 	gfxContext.Finish(true);
 }
