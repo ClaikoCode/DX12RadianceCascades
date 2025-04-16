@@ -7,7 +7,9 @@
 #include "Core\Camera.h"
 #include "Core\CameraController.h"
 #include "Model\Model.h"
-#include "RaytracingUtils.h"
+#include "RaytracingPSO.h"
+#include "ShaderTable.h"
+#include "RaytracingDispatchRayInputs.h"
 #include "RuntimeResourceManager.h"
 
 #include "RadianceCascadesManager.h"
@@ -17,6 +19,7 @@
 #else
 #define ENABLE_DEBUG_DRAW 0
 #endif
+
 
 class InternalModelInstance : public ModelInstance
 {
@@ -50,15 +53,6 @@ struct AppSettings
 {
 	GlobalSettings globalSettings;
 	RadianceCascadesSettings rcSettings;
-};
-
-struct DescriptorHeaps
-{
-	void Init();
-
-	std::array<DescriptorHeap, D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES> descHeaps;
-
-	DescriptorHandle sceneColorUAVHandle;
 };
 
 class RadianceCascades : public GameCore::IGameApp
@@ -123,21 +117,18 @@ public:
 	virtual bool RequiresRaytracingSupport() const override { return true; }
 
 private:
-
-	void InitializeHeaps();
 	void InitializeScene();
 	void InitializePSOs();
 	void InitializeRCResources();
 	void InitializeRT();
 
 	void RenderSceneImpl(Camera& camera, D3D12_VIEWPORT viewPort, D3D12_RECT scissor);
-	void RenderRaytracing(Camera& camera, ColorBuffer& colorTarget);
+	void RenderRaytracing(Camera& camera);
 	void RunComputeFlatlandScene();
 	void RunComputeRCGather();
 	void RunComputeRCMerge();
 	void RunComputeRCRadianceField(ColorBuffer& outputBuffer);
 	void UpdateViewportAndScissor();
-	void UpdateGraphicsPSOs();
 
 	void ClearPixelBuffers();
 
@@ -189,15 +180,10 @@ private:
 	RaytracingPSO m_rtTestPSO = RaytracingPSO(L"RT Test PSO");
 	RootSignature1 m_rtTestGlobalRootSig;
 	RootSignature1 m_rtTestLocalRootSig;
-	RaytracingDispatchRayInputs m_testRTDispatch;
 	TLASBuffers m_sceneModelTLASInstance;
 
 	ColorBuffer m_flatlandScene = ColorBuffer({ 0.0f, 0.0f, 0.0f, 100000.0f });
 
 	RadianceCascadesManager m_rcManager;
-
-	DescriptorHeaps m_descCopies;
-
-	std::unordered_map<ModelID, BLASBuffer> m_modelBLASes;
 };
 

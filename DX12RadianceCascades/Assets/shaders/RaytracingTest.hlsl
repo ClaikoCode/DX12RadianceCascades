@@ -57,57 +57,6 @@ float3 GetBarycentrics(float2 inputBarycentrics)
     return float3(1.0 - inputBarycentrics.x - inputBarycentrics.y, inputBarycentrics.x, inputBarycentrics.y);
 }
 
-uint2 Load2x16BitValues(uint offsetBytes)
-{
-    // Find the 4-byte aligned address
-    uint dwordAlignedOffset = offsetBytes & ~3;
-    
-    // Load a single 32-bit value
-    uint dwordValue = geometryData.Load(dwordAlignedOffset);
-    
-    // Extract the 16-bit values based on alignment
-    uint2 result;
-    
-    if (dwordAlignedOffset == offsetBytes)
-    {
-        // Aligned case: first two 16-bit values in the dword
-        result.x = dwordValue & 0xffff;
-        result.y = (dwordValue >> 16) & 0xffff;
-    }
-    else if (offsetBytes - dwordAlignedOffset == 2)
-    {
-        // Offset by 2 bytes: second 16-bit value in this dword and 
-        // first 16-bit value in next dword
-        result.x = (dwordValue >> 16) & 0xffff;
-        
-        // Need to load next dword for the second 16-bit value
-        uint nextDword = geometryData.Load(dwordAlignedOffset + 4);
-        result.y = nextDword & 0xffff;
-    }
-    else
-    {
-        // Load next dword for values that cross boundaries
-        uint nextDword = geometryData.Load(dwordAlignedOffset + 4);
-        
-        if (offsetBytes - dwordAlignedOffset == 1)
-        {
-            // Offset by 1 byte - first value spans bytes 1-2 of first dword
-            result.x = ((dwordValue >> 8) & 0xffff);
-            // Second value spans byte 3 of first dword and byte 0 of second dword
-            result.y = ((dwordValue >> 24) & 0xff) | ((nextDword & 0xff) << 8);
-        }
-        else // offset by 3 bytes
-        {
-            // First value spans byte 3 of first dword and byte 0 of second dword
-            result.x = ((dwordValue >> 24) & 0xff) | ((nextDword & 0xff) << 8);
-            // Second value spans bytes 1-2 of second dword
-            result.y = (nextDword >> 8) & 0xffff;
-        }
-    }
-    
-    return result;
-}
-
 uint3 Load3x16BitIndices(uint offsetBytes)
 {
     const uint dwordAlignedOffset = offsetBytes & ~3;
@@ -142,9 +91,6 @@ float2 Load32BitIntTo16BitFloats(uint val)
 
 float2 LoadUVFromVertex(uint vertexByteOffset, uint uvOffsetInBytes)
 {
-    //uint2 uvs = Load2x16BitValues(vertexByteOffset + uvOffsetInBytes);
-    //return float2(f16tof32(uvs.x), f16tof32(uvs.y));
-    
     uint uvs = geometryData.Load(vertexByteOffset + uvOffsetInBytes);
     return Load32BitIntTo16BitFloats(uvs);
 }
@@ -224,22 +170,28 @@ void ClosestHitShader(inout RayPayload payload, in BuiltInTriangleIntersectionAt
     
     float3 intersectionPoint = WorldRayOrigin() + WorldRayDirection() * RayTCurrent();
     
-    //DrawLine(WorldRayOrigin(), intersectionPoint, float3(1.0f, 0.0f, 0.0f));
-    
     uint2 pixelIndex = DispatchRaysIndex().xy;
-    uint2 test = pixelIndex % 25;
-        
-    if (test.x == 0 && test.y == 0)
+    
+    if(true)
     {
-        float radius = Remap(0.0f, 2000.0f, 5.0f, 0.2f, RayTCurrent());
-        //DrawSphere(intersectionPoint, radius, float3(1.0f, 0.0f, 0.0f));
-        DrawAxisAlignedBox(intersectionPoint, radius, float3(1.0f, 1.0f, 1.0f));
-        //DrawLine(WorldRayOrigin(), intersectionPoint, float3(1.0f, 0.0f, 0.0f));
+        uint2 pixelIndexSubset = ((pixelIndex + 15) % 40);
+        
+        if (pixelIndexSubset.x == 0 && pixelIndexSubset.y == 0)
+        {
+            float radius = Remap(0.0f, 2000.0f, 5.0f, 0.2f, RayTCurrent());
+            float3 minColor = float3(1.0f, 0.0f, 0.0f);
+            float3 maxColor = float3(1.0f, 1.0f, 1.0f);
+            float3 visColor = Remap(0.0f, 1000.0f, minColor, maxColor, RayTCurrent());
+            DrawSphere(intersectionPoint, 1.0f, visColor);
+            //DrawAxisAlignedBox(intersectionPoint, radius, float3(1.0f, 1.0f, 1.0f));
+            //DrawLine(WorldRayOrigin(), intersectionPoint, float3(1.0f, 0.0f, 0.0f));
+        }
     }
     
     
-    renderOutput[DispatchRaysIndex().xy] = float4(albedoTex.SampleLevel(sourceSampler, uv, 0).rgb, 1);
-    //renderOutput[DispatchRaysIndex().xy] = float4(intersectionPoint, 1);
+    
+    renderOutput[pixelIndex] = float4(albedoTex.SampleLevel(sourceSampler, uv, 0).rgb, 1);
+    //renderOutput[pixelIndex] = float4(intersectionPoint, 1);
 }
 
 [shader("miss")]

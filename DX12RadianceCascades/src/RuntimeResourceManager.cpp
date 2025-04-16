@@ -2,30 +2,46 @@
 #include "Core\BufferManager.h"
 #include "Core\CommandContext.h"
 #include "ShaderCompilation\ShaderCompilationManager.h"
-#include "RaytracingUtils.h"
+#include "RaytracingPSO.h"
 #include "Model\ModelLoader.h"
+#include "Model\Renderer.h"
 #include "RuntimeResourceManager.h"
 
 static const std::set<Shader::ShaderType> s_ValidShaderTypes = { Shader::ShaderTypeCS, Shader::ShaderTypeVS, Shader::ShaderTypePS, Shader::ShaderTypeRT };
 
 void RuntimeResourceManager::UpdateGraphicsPSOs()
 {
-	RuntimeResourceManager::Get().UpdatePSOs();
+	Get().UpdatePSOs();
 }
 
-void RuntimeResourceManager::AddShaderDependency(ShaderID shaderID, std::vector<PSOIDType> psoIDs)
+void RuntimeResourceManager::AddShaderDependency(ShaderID shaderID, std::vector<psoid_t> psoIDs)
 {
-	RuntimeResourceManager::Get().AddShaderDependencyImpl(shaderID, psoIDs);
+	Get().AddShaderDependencyImpl(shaderID, psoIDs);
 }
 
 void RuntimeResourceManager::RegisterPSO(PSOID psoID, void* psoPtr, PSOType psoType)
 {
-	RuntimeResourceManager::Get().RegisterPSOImpl(psoID, psoPtr, psoType);
+	Get().RegisterPSOImpl(psoID, psoPtr, psoType);
+}
+
+void RuntimeResourceManager::AddModel(ModelID modelID, const std::wstring& modelPath, bool createBLAS)
+{
+	Get().AddModelImpl(modelID, modelPath, createBLAS);
+}
+
+InternalModel& RuntimeResourceManager::GetInternalModel(ModelID modelID)
+{
+	return Get().GetInternalModelImpl(modelID);
 }
 
 std::shared_ptr<Model> RuntimeResourceManager::GetModelPtr(ModelID modelID)
 {
-	return RuntimeResourceManager::Get().GetModelPtrImpl(modelID);
+	return Get().GetModelPtrImpl(modelID);
+}
+
+BLASBuffer& RuntimeResourceManager::GetModelBLAS(ModelID modelID)
+{
+	return Get().GetModelBLASImpl(modelID);
 }
 
 D3D12_SHADER_BYTECODE RuntimeResourceManager::GetShader(ShaderID shaderID)
@@ -33,50 +49,93 @@ D3D12_SHADER_BYTECODE RuntimeResourceManager::GetShader(ShaderID shaderID)
 	return ShaderCompilationManager::Get().GetShaderByteCode(shaderID);
 }
 
+void RuntimeResourceManager::BuildCombinedShaderTable(PSOID psoID, std::set<ModelID> models, ShaderTable<LocalHitData>& outShaderTable)
+{
+	outShaderTable.clear();
+
+	std::unordered_map<ModelID, HitShaderTablePackage>& psoHitPackages = m_shaderTablePSOMap[psoID];
+
+	if (psoHitPackages.empty())
+	{
+		LOG_INFO(L"No hit packages could be found for PSOID {}.", (psoid_t)psoID);
+		return;
+	}
+
+	for (ModelID modelID : models)
+	{
+		const ShaderTable<LocalHitData>& modelHitTable = psoHitPackages[modelID].hitShaderTable;
+
+		outShaderTable.insert(outShaderTable.end(), modelHitTable.begin(), modelHitTable.end());
+	}
+}
+
+RaytracingDispatchRayInputs& RuntimeResourceManager::GetRaytracingDispatch(RayDispatchID rayDispatchID)
+{
+	return Get().GetRaytracingDispatchImpl(rayDispatchID);
+}
+
+void RuntimeResourceManager::BuildRaytracingDispatch(PSOID psoID, std::set<ModelID>& models, RayDispatchID rayDispatchID)
+{
+	Get().BuildRaytracingDispatchInputsImpl(psoID, models, rayDispatchID);
+}
+
+void RuntimeResourceManager::BuildHitShaderTables(PSOID psoID)
+{
+	Get().BuildHitShaderTablesImpl(psoID);
+}
+
 RuntimeResourceManager::RuntimeResourceManager() : m_usedPSOs({})
 {
-	auto& shaderCompManager = ShaderCompilationManager::Get();
+	m_descHeap.Create(L"Runtime Resource Manager Desc Heap", D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 2048);
+	m_sceneColorDescHande = m_descHeap.Alloc();
+	Graphics::g_Device->CopyDescriptorsSimple(1, m_sceneColorDescHande, Graphics::g_SceneColorBuffer.GetUAV(), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+	auto& shaderCM = ShaderCompilationManager::Get();
 
 	// Initialize shaders
 	{
 		// Pixel Shaders
-		shaderCompManager.RegisterPixelShader(ShaderIDSceneRenderPS, L"SceneRenderPS.hlsl", true);
-		shaderCompManager.RegisterPixelShader(ShaderIDFullScreenCopyPS, L"DirectWritePS.hlsl", true);
-		shaderCompManager.RegisterPixelShader(ShaderIDDebugDrawPS, L"DebugDrawPS.hlsl", true);
+		shaderCM.RegisterPixelShader(ShaderIDSceneRenderPS, L"SceneRenderPS.hlsl", true);
+		shaderCM.RegisterPixelShader(ShaderIDFullScreenCopyPS, L"DirectWritePS.hlsl", true);
+		shaderCM.RegisterPixelShader(ShaderIDDebugDrawPS, L"DebugDrawPS.hlsl", true);
 
 		// Vertex Shaders
-		shaderCompManager.RegisterVertexShader(ShaderIDSceneRenderVS, L"SceneRenderVS.hlsl", true);
-		shaderCompManager.RegisterVertexShader(ShaderIDFullScreenQuadVS, L"FullScreenQuadVS.hlsl", true);
-		shaderCompManager.RegisterVertexShader(ShaderIDDebugDrawVS, L"DebugDrawVS.hlsl", true);
+		shaderCM.RegisterVertexShader(ShaderIDSceneRenderVS, L"SceneRenderVS.hlsl", true);
+		shaderCM.RegisterVertexShader(ShaderIDFullScreenQuadVS, L"FullScreenQuadVS.hlsl", true);
+		shaderCM.RegisterVertexShader(ShaderIDDebugDrawVS, L"DebugDrawVS.hlsl", true);
 
 		// Compute Shaders
-		shaderCompManager.RegisterComputeShader(ShaderIDRCGatherCS, L"RCGatherCS.hlsl", true);
-		shaderCompManager.RegisterComputeShader(ShaderIDFlatlandSceneCS, L"FlatlandSceneCS.hlsl", true);
-		shaderCompManager.RegisterComputeShader(ShaderIDFullScreenCopyCS, L"DirectCopyCS.hlsl", true);
-		shaderCompManager.RegisterComputeShader(ShaderIDRCMergeCS, L"RCMergeCS.hlsl", true);
-		shaderCompManager.RegisterComputeShader(ShaderIDRCRadianceFieldCS, L"RCRadianceFieldCS.hlsl", true);
+		shaderCM.RegisterComputeShader(ShaderIDRCGatherCS, L"RCGatherCS.hlsl", true);
+		shaderCM.RegisterComputeShader(ShaderIDFlatlandSceneCS, L"FlatlandSceneCS.hlsl", true);
+		shaderCM.RegisterComputeShader(ShaderIDFullScreenCopyCS, L"DirectCopyCS.hlsl", true);
+		shaderCM.RegisterComputeShader(ShaderIDRCMergeCS, L"RCMergeCS.hlsl", true);
+		shaderCM.RegisterComputeShader(ShaderIDRCRadianceFieldCS, L"RCRadianceFieldCS.hlsl", true);
 
 		// RT Shaders
-		shaderCompManager.RegisterRaytracingShader(ShaderIDRaytracingTestRT, L"RaytracingTest.hlsl", true);
+		shaderCM.RegisterRaytracingShader(ShaderIDRaytracingTestRT, L"RaytracingTest.hlsl", true);
 	}
 
 	// Initialize Models
 	{
-		m_models[ModelIDSponza]		= Renderer::LoadModel(L"models\\Sponza\\PBR\\sponza2.gltf", false);
-		m_models[ModelIDSphereTest] = Renderer::LoadModel(L"models\\Testing\\SphereTest.gltf", false);
+		AddModelImpl(ModelIDSponza, L"models\\Sponza\\PBR\\sponza2.gltf", true);
+		AddModelImpl(ModelIDSphereTest, L"models\\Testing\\SphereTest.gltf", true);
 	}
+
+	// TODO: This should happen automatically.
+	m_shaderTablePSOMap[PSOIDRaytracingTestPSO][ModelIDSponza] = {};
+	m_shaderTablePSOMap[PSOIDRaytracingTestPSO][ModelIDSphereTest] = {};
 }
 
 void RuntimeResourceManager::UpdatePSOs()
 {
 	auto& shaderCompManager = ShaderCompilationManager::Get();
 
-	if (shaderCompManager.HasRecentCompilations())
+	if (shaderCompManager.HasRecentReCompilations())
 	{
 		// Wait for all work to be done before changing PSOs.
 		Graphics::g_CommandManager.IdleGPU();
 
-		auto compSet = shaderCompManager.GetRecentCompilations();
+		auto& compSet = shaderCompManager.GetRecentReCompilations();
 
 		for (UUID64 shaderID : compSet)
 		{
@@ -96,9 +155,9 @@ void RuntimeResourceManager::UpdatePSOs()
 
 				if (!psoIds.empty())
 				{
-					for (PSOIDType psoId : psoIds)
+					for (psoid_t psoID : psoIds)
 					{
-						const PSOPackage& package = m_usedPSOs[psoId];
+						const PSOPackage& package = m_usedPSOs[psoID];
 
 						if (package.psoType == PSOTypeCompute)
 						{
@@ -130,16 +189,30 @@ void RuntimeResourceManager::UpdatePSOs()
 						}
 						else if (package.psoType == PSOTypeRaytracing)
 						{
-							//LOG_INFO(L"Raytracing PSO Reloading is not implemented yet.");
-							//continue;
-
 							RaytracingPSO& pso = *(reinterpret_cast<RaytracingPSO*>(package.PSOPointer));
 
+							LOG_DEBUG(L"Updating RT PSO {}.", psoID);
 							if (pso.GetStateObject() != nullptr)
 							{
 								pso.SetDxilLibrary(s_DXILExports, shaderByteCode);
 
 								pso.Finalize();
+							}
+
+							PSOID rtPSOID = (PSOID)psoID;
+							LOG_DEBUG(L"Updating all hit shader tables with new shader identifier data.");
+							BuildHitShaderTablesImpl(rtPSOID);
+
+							std::set<ModelID> dependantModels = {};
+							for (auto& [modelID, _] : m_shaderTablePSOMap[rtPSOID])
+							{
+								dependantModels.insert(modelID);
+							}
+
+							LOG_DEBUG(L"Updating all raytracing dispatch inputs with new shader tables.");
+							for (const RayDispatchID rayDispatchID : m_psoRayDispatchDependencyMap[rtPSOID])
+							{
+								BuildRaytracingDispatchInputsImpl(rtPSOID, dependantModels, rayDispatchID);
 							}
 						}
 					}
@@ -147,11 +220,52 @@ void RuntimeResourceManager::UpdatePSOs()
 			}
 		}
 
-		shaderCompManager.ClearRecentCompilations();
+		shaderCompManager.ClearRecentReCompilations();
 	}
 }
 
-void RuntimeResourceManager::AddShaderDependencyImpl(ShaderID shaderID, std::vector<PSOIDType>& psoIDs)
+void RuntimeResourceManager::BuildHitShaderTablesImpl(PSOID psoID)
+{
+	RaytracingPSO& rtPSO = GetRaytracingPSOImpl(psoID);
+
+	auto& hitShaderTableModelMap = m_shaderTablePSOMap[psoID];
+	
+	if (hitShaderTableModelMap.empty())
+	{
+		LOG_INFO(L"PSO does not have any associated models for shader tables.");
+		return;
+	}
+
+	for (auto& [rtModelID, hitShaderTablePackage] : hitShaderTableModelMap)
+	{
+		InternalModel& internalModel = GetInternalModelImpl(rtModelID);
+		ASSERT(internalModel.IsValid());
+
+		const Model& model = *internalModel.modelPtr;
+
+		ShaderTable<LocalHitData>& hitShaderTable = hitShaderTablePackage.hitShaderTable;
+		hitShaderTable.clear();
+		hitShaderTable.resize(model.m_NumMeshes);
+
+		const Mesh* meshPtr = (const Mesh*)model.m_MeshData.get();
+		void* shaderIdentifier = rtPSO.GetShaderIdentifier(hitShaderTablePackage.hitGroupShaderExport);
+		for (int i = 0; i < (int)model.m_NumMeshes; i++)
+		{
+			const Mesh& mesh = meshPtr[i];
+			ASSERT(mesh.numDraws == 1);
+
+			auto& entry = hitShaderTable[i];
+			entry.entryData.materialSRVs = Renderer::s_TextureHeap[mesh.srvTable]; // Start of descriptor table.
+			entry.entryData.geometrySRV = internalModel.geometryDataSRVHandle;
+			entry.entryData.indexByteOffset = mesh.ibOffset;
+			entry.entryData.vertexByteOffset = mesh.vbOffset;
+
+			entry.SetShaderIdentifier(shaderIdentifier);
+		}
+	}
+}
+
+void RuntimeResourceManager::AddShaderDependencyImpl(ShaderID shaderID, std::vector<psoid_t>& psoIDs)
 {
 	for (uint32_t psoID : psoIDs)
 	{
@@ -164,12 +278,84 @@ void RuntimeResourceManager::RegisterPSOImpl(PSOID psoID, void* psoPtr, PSOType 
 	m_usedPSOs[psoID] = { psoPtr, psoType };
 }
 
+PSOPackage& RuntimeResourceManager::GetPSOImpl(PSOID psoID)
+{
+	return m_usedPSOs[psoID];
+}
+
+void RuntimeResourceManager::AddModelImpl(ModelID modelID, const std::wstring& modelPath, bool createBLAS)
+{
+	std::shared_ptr<Model> modelPtr = Renderer::LoadModel(modelPath, false);
+	ASSERT(modelPtr != nullptr);
+
+	// Will overwrite any existing internal models.
+	InternalModel& internalModel = GetInternalModelImpl(modelID);
+	internalModel.modelPtr = modelPtr;
+
+	// Copy the SRV handle to geometry data for binding in shader table. 
+	// If the handle already exists it will be overwritten instead.
+	{
+		DescriptorHandle& descHandle = internalModel.geometryDataSRVHandle;
+		if (descHandle.IsNull())
+		{
+			descHandle = m_descHeap.Alloc();
+		}
+
+		Model& model = *modelPtr;
+		Graphics::g_Device->CopyDescriptorsSimple(1, descHandle, model.m_DataBuffer.GetSRV(), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+	}
+
+	if (createBLAS)
+	{
+		internalModel.modelBLAS.Init(modelPtr);
+	}
+}
+
+InternalModel& RuntimeResourceManager::GetInternalModelImpl(ModelID modelID)
+{
+	return m_internalModels[modelID];
+}
+
 inline std::shared_ptr<Model> RuntimeResourceManager::GetModelPtrImpl(ModelID modelID)
 {
-	return m_models[modelID];
+	return GetInternalModelImpl(modelID).modelPtr;
+}
+
+BLASBuffer& RuntimeResourceManager::GetModelBLASImpl(ModelID modelID)
+{
+	return GetInternalModelImpl(modelID).modelBLAS;
+}
+
+RaytracingPSO& RuntimeResourceManager::GetRaytracingPSOImpl(PSOID rtPSOID)
+{
+	const PSOPackage& psoPackage = GetPSOImpl(rtPSOID);
+	ASSERT(psoPackage.psoType == PSOTypeRaytracing && psoPackage.PSOPointer != nullptr);
+
+	return *reinterpret_cast<RaytracingPSO*>(psoPackage.PSOPointer);
+}
+
+void RuntimeResourceManager::BuildRaytracingDispatchInputsImpl(PSOID psoID, std::set<ModelID>& models, RayDispatchID rayDispatchID)
+{
+	ShaderTable<LocalHitData> combinedShaderTable = {};
+	BuildCombinedShaderTable(psoID, models, combinedShaderTable);
+
+	RaytracingDispatchRayInputs& rayDispatchInputs = m_rayDispatchInputs[rayDispatchID];
+	rayDispatchInputs.Init(GetRaytracingPSOImpl(psoID), combinedShaderTable, L"RayGenerationShader", L"MissShader");
+
+	// Add dependency.
+	m_psoRayDispatchDependencyMap[psoID].insert(rayDispatchID);
+}
+
+RaytracingDispatchRayInputs& RuntimeResourceManager::GetRaytracingDispatchImpl(RayDispatchID rayDispatchID)
+{
+	return m_rayDispatchInputs[rayDispatchID];
 }
 
 void RuntimeResourceManager::DestroyImpl()
 {
-	m_models.clear();
+	Graphics::g_CommandManager.IdleGPU();
+
+	m_internalModels.clear();
+	m_rayDispatchInputs.clear();
+	m_descHeap.Destroy();
 }
