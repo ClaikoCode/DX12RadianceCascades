@@ -185,7 +185,7 @@ void RadianceCascades::InitializeScene()
 		//ModelInstance& modelInstance = AddModelInstance(ModelIDSponza);
 		//modelInstance.Resize(10.0f * modelInstance.GetRadius());
 		//
-		//Math::Vector3 instanceCenter = sceneModelCenter;
+		//Math::Vector3 instanceCenter = GetMainSceneModelCenter();
 		//instanceCenter.SetY(20.0f);
 		//modelInstance.GetTransform().SetTranslation(instanceCenter);
 	}
@@ -417,8 +417,7 @@ void RadianceCascades::InitializeRT()
 		m_sceneModelTLASInstance.Init(instanceGroups);
 	}
 
-	// Initialize shader tables.
-	// Will append a shader table for each unique BLAS in the order of the rendered instances.
+	// Initialize RT dispatch inputs.
 	{
 		std::set<ModelID> modelIDs = {};
 		for (auto& [key, _] : blasInstances)
@@ -426,8 +425,7 @@ void RadianceCascades::InitializeRT()
 			modelIDs.insert(key);
 		}
 
-		RuntimeResourceManager::BuildHitShaderTables(PSOIDRaytracingTestPSO);
-		RuntimeResourceManager::BuildRaytracingDispatch(PSOIDRaytracingTestPSO, modelIDs, RayDispatchIDTest);
+		RuntimeResourceManager::BuildRaytracingDispatchInputs(PSOIDRaytracingTestPSO, modelIDs, RayDispatchIDTest);
 	}
 }
 

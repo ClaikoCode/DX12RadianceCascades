@@ -53,18 +53,11 @@ void RuntimeResourceManager::BuildCombinedShaderTable(PSOID psoID, std::set<Mode
 {
 	outShaderTable.clear();
 
-	std::unordered_map<ModelID, HitShaderTablePackage>& psoHitPackages = m_shaderTablePSOMap[psoID];
-
-	if (psoHitPackages.empty())
-	{
-		LOG_INFO(L"No hit packages could be found for PSOID {}.", (psoid_t)psoID);
-		return;
-	}
-
 	for (ModelID modelID : models)
 	{
-		const ShaderTable<LocalHitData>& modelHitTable = psoHitPackages[modelID].hitShaderTable;
+		HitShaderTablePackage& hitShaderTablePackage = GetOrCreateHitShaderTablePackage(psoID, modelID);
 
+		const ShaderTable<LocalHitData>& modelHitTable = hitShaderTablePackage.hitShaderTable;
 		outShaderTable.insert(outShaderTable.end(), modelHitTable.begin(), modelHitTable.end());
 	}
 }
@@ -74,14 +67,9 @@ RaytracingDispatchRayInputs& RuntimeResourceManager::GetRaytracingDispatch(RayDi
 	return Get().GetRaytracingDispatchImpl(rayDispatchID);
 }
 
-void RuntimeResourceManager::BuildRaytracingDispatch(PSOID psoID, std::set<ModelID>& models, RayDispatchID rayDispatchID)
+void RuntimeResourceManager::BuildRaytracingDispatchInputs(PSOID psoID, std::set<ModelID>& models, RayDispatchID rayDispatchID)
 {
 	Get().BuildRaytracingDispatchInputsImpl(psoID, models, rayDispatchID);
-}
-
-void RuntimeResourceManager::BuildHitShaderTables(PSOID psoID)
-{
-	Get().BuildHitShaderTablesImpl(psoID);
 }
 
 RuntimeResourceManager::RuntimeResourceManager() : m_usedPSOs({})
@@ -120,10 +108,6 @@ RuntimeResourceManager::RuntimeResourceManager() : m_usedPSOs({})
 		AddModelImpl(ModelIDSponza, L"models\\Sponza\\PBR\\sponza2.gltf", true);
 		AddModelImpl(ModelIDSphereTest, L"models\\Testing\\SphereTest.gltf", true);
 	}
-
-	// TODO: This should happen automatically.
-	m_shaderTablePSOMap[PSOIDRaytracingTestPSO][ModelIDSponza] = {};
-	m_shaderTablePSOMap[PSOIDRaytracingTestPSO][ModelIDSphereTest] = {};
 }
 
 void RuntimeResourceManager::UpdatePSOs()
@@ -201,7 +185,7 @@ void RuntimeResourceManager::UpdatePSOs()
 
 							PSOID rtPSOID = (PSOID)psoID;
 							LOG_DEBUG(L"Updating all hit shader tables with new shader identifier data.");
-							BuildHitShaderTablesImpl(rtPSOID);
+							ForceBuildHitShaderTables(rtPSOID);
 
 							std::set<ModelID> dependantModels = {};
 							for (auto& [modelID, _] : m_shaderTablePSOMap[rtPSOID])
@@ -224,7 +208,49 @@ void RuntimeResourceManager::UpdatePSOs()
 	}
 }
 
-void RuntimeResourceManager::BuildHitShaderTablesImpl(PSOID psoID)
+HitShaderTablePackage& RuntimeResourceManager::GetOrCreateHitShaderTablePackage(PSOID psoID, ModelID modelID)
+{
+	HitShaderTablePackage& package = m_shaderTablePSOMap[psoID][modelID];
+
+	if (package.hitShaderTable.empty())
+	{
+		BuildHitShaderTablePackage(psoID, modelID, package);
+	}
+
+	return package;
+}
+
+void RuntimeResourceManager::BuildHitShaderTablePackage(PSOID psoID, ModelID modelID, HitShaderTablePackage& outPackage)
+{
+	RaytracingPSO& rtPSO = GetRaytracingPSOImpl(psoID);
+
+	InternalModel& internalModel = GetInternalModelImpl(modelID);
+	ASSERT(internalModel.IsValid());
+
+	const Model& model = *internalModel.modelPtr;
+
+	ShaderTable<LocalHitData>& hitShaderTable = outPackage.hitShaderTable;
+	hitShaderTable.clear();
+	hitShaderTable.resize(model.m_NumMeshes);
+
+	const Mesh* meshPtr = (const Mesh*)model.m_MeshData.get();
+	void* shaderIdentifier = rtPSO.GetShaderIdentifier(outPackage.hitGroupShaderExport);
+	for (int i = 0; i < (int)model.m_NumMeshes; i++)
+	{
+		const Mesh& mesh = meshPtr[i];
+		ASSERT(mesh.numDraws == 1);
+
+		auto& entry = hitShaderTable[i];
+		entry.entryData.materialSRVs = Renderer::s_TextureHeap[mesh.srvTable]; // Start of descriptor table.
+		entry.entryData.geometrySRV = internalModel.geometryDataSRVHandle;
+		entry.entryData.indexByteOffset = mesh.ibOffset;
+		entry.entryData.vertexByteOffset = mesh.vbOffset;
+
+		entry.SetShaderIdentifier(shaderIdentifier);
+	}
+}
+
+void RuntimeResourceManager::ForceBuildHitShaderTables(PSOID psoID)
 {
 	RaytracingPSO& rtPSO = GetRaytracingPSOImpl(psoID);
 
@@ -238,30 +264,7 @@ void RuntimeResourceManager::BuildHitShaderTablesImpl(PSOID psoID)
 
 	for (auto& [rtModelID, hitShaderTablePackage] : hitShaderTableModelMap)
 	{
-		InternalModel& internalModel = GetInternalModelImpl(rtModelID);
-		ASSERT(internalModel.IsValid());
-
-		const Model& model = *internalModel.modelPtr;
-
-		ShaderTable<LocalHitData>& hitShaderTable = hitShaderTablePackage.hitShaderTable;
-		hitShaderTable.clear();
-		hitShaderTable.resize(model.m_NumMeshes);
-
-		const Mesh* meshPtr = (const Mesh*)model.m_MeshData.get();
-		void* shaderIdentifier = rtPSO.GetShaderIdentifier(hitShaderTablePackage.hitGroupShaderExport);
-		for (int i = 0; i < (int)model.m_NumMeshes; i++)
-		{
-			const Mesh& mesh = meshPtr[i];
-			ASSERT(mesh.numDraws == 1);
-
-			auto& entry = hitShaderTable[i];
-			entry.entryData.materialSRVs = Renderer::s_TextureHeap[mesh.srvTable]; // Start of descriptor table.
-			entry.entryData.geometrySRV = internalModel.geometryDataSRVHandle;
-			entry.entryData.indexByteOffset = mesh.ibOffset;
-			entry.entryData.vertexByteOffset = mesh.vbOffset;
-
-			entry.SetShaderIdentifier(shaderIdentifier);
-		}
+		BuildHitShaderTablePackage(psoID, rtModelID, hitShaderTablePackage);
 	}
 }
 

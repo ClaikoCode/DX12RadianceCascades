@@ -178,8 +178,8 @@ void ClosestHitShader(inout RayPayload payload, in BuiltInTriangleIntersectionAt
         
         if (pixelIndexSubset.x == 0 && pixelIndexSubset.y == 0)
         {
-            float radius = Remap(0.0f, 2000.0f, 5.0f, 0.2f, RayTCurrent());
-            float3 minColor = float3(1.0f, 0.0f, 0.0f);
+            float radius = Remap(0.0f, 1000.0f, 5.0f, 0.2f, RayTCurrent());
+            float3 minColor = float3(1.0f, .0f, 0.0f);
             float3 maxColor = float3(1.0f, 1.0f, 1.0f);
             float3 visColor = Remap(0.0f, 1000.0f, minColor, maxColor, RayTCurrent());
             DrawSphere(intersectionPoint, 1.0f, visColor);
