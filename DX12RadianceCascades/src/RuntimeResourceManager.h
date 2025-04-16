@@ -97,7 +97,8 @@ public:
 	}
 
 	static void UpdateGraphicsPSOs();
-	static void AddShaderDependency(ShaderID shaderID, std::vector<psoid_t> psoIDs); // Not a reference so rvalues can be input. Inefficient but its not a hotpath.
+	// Not a reference so rvalues can be input. Inefficient but its not a hotpath.
+	static void AddShaderDependency(ShaderID shaderID, std::vector<psoid_t> psoIDs); 
 	static void RegisterPSO(PSOID psoID, void* psoPtr, PSOType psoType);
 
 	static void AddModel(ModelID modelID, const std::wstring& modelPath, bool createBLAS = false);
@@ -110,20 +111,20 @@ public:
 	static DescriptorHandle GetSceneColorDescHandle() { return Get().m_sceneColorDescHande; }
 
 	static RaytracingDispatchRayInputs& GetRaytracingDispatch(RayDispatchID rayDispatchID);
-	static void BuildRaytracingDispatch(PSOID psoID, std::set<ModelID>& models, RayDispatchID rayDispatchID);
+	static void BuildRaytracingDispatchInputs(PSOID psoID, std::set<ModelID>& models, RayDispatchID rayDispatchID);
 
 	static void Destroy() { Get().DestroyImpl(); }
-
-	// TODO: Should be moved to RT utils probably.
-	void BuildCombinedShaderTable(PSOID psoID, std::set<ModelID> models, ShaderTable<LocalHitData>& outShaderTable);
-
-	static void BuildHitShaderTables(PSOID psoID);
 
 private: 
 	RuntimeResourceManager();
 	void UpdatePSOs();
 
-	void BuildHitShaderTablesImpl(PSOID psoID);
+	// Will create the shader table if it doesnt exist.
+	HitShaderTablePackage& GetOrCreateHitShaderTablePackage(PSOID psoID, ModelID modelID);
+
+	void ForceBuildHitShaderTables(PSOID psoID);
+	void BuildHitShaderTablePackage(PSOID psoID, ModelID modelID, HitShaderTablePackage& outPackage);
+	void BuildCombinedShaderTable(PSOID psoID, std::set<ModelID> models, ShaderTable<LocalHitData>& outShaderTable);
 
 private:
 	void AddShaderDependencyImpl(ShaderID shaderID, std::vector<psoid_t>& psoIDs); 
