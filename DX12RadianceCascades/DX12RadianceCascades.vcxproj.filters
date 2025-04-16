@@ -39,7 +39,7 @@
     <ClInclude Include="src\RayTracingHlslCompat.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\RadianceCascadesManager.h">
+    <ClInclude Include="src\RadianceCascadesManager2D.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\Utils.h">
@@ -83,7 +83,7 @@
     <ClCompile Include="src\RadianceCascades.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\RadianceCascadesManager.cpp">
+    <ClCompile Include="src\RadianceCascadesManager2D.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\RaytracingPSO.cpp">

@@ -12,7 +12,7 @@
 #include "RaytracingDispatchRayInputs.h"
 #include "RuntimeResourceManager.h"
 
-#include "RadianceCascadesManager.h"
+#include "RadianceCascadesManager2D.h"
 
 #if defined(_DEBUGDRAWING)
 #define ENABLE_DEBUG_DRAW 1
@@ -184,6 +184,6 @@ private:
 
 	ColorBuffer m_flatlandScene = ColorBuffer({ 0.0f, 0.0f, 0.0f, 100000.0f });
 
-	RadianceCascadesManager m_rcManager;
+	RadianceCascadesManager2D m_rcManager2D;
 };
 
