@@ -321,6 +321,8 @@ void ShaderCompilationManager::CompileShader(UUID64 shaderID)
 
 	if (shaderData)
 	{
+		bool isFirstCompilation = shaderData->shaderBlob == nullptr;
+
 		if (CompileShaderPackageToBlob(shaderData->shaderCompPackage, shaderData->shaderBlob.GetAddressOf()))
 		{
 			// Add include files to dependency map.
@@ -333,7 +335,10 @@ void ShaderCompilationManager::CompileShader(UUID64 shaderID)
 				AddShaderDependency(includeFile, shaderID);
 			}
 
-			AddRecentCompilation(shaderID);
+			if (!isFirstCompilation)
+			{
+				AddRecentReCompilation(shaderID);
+			}
 		}
 	}	
 }
@@ -414,9 +419,7 @@ bool ShaderCompilationManager::CompileShaderPackageToBlob(Shader::ShaderCompilat
 		// Overwrite any previous include files.
 		shaderCompPackage.includeFiles = includeHandler.GetIncludedFiles();
 
-#if defined(_DEBUG)
 		LOG_DEBUG(L"Sucessfully compiled '{}'.", ::BuildShaderPath(shaderCompPackage.shaderFilename));
-#endif
 	}
 
 	return true;
@@ -530,28 +533,28 @@ Shader::ShaderType ShaderCompilationManager::GetShaderType(UUID64 shaderID)
 	return Shader::ShaderTypeNone;
 }
 
-void ShaderCompilationManager::AddRecentCompilation(UUID64 shaderID)
+void ShaderCompilationManager::AddRecentReCompilation(UUID64 shaderID)
 {
 	MUTEX_LOCK();
-	m_recentCompilations.insert(shaderID);
+	m_recentReCompilations.insert(shaderID);
 }
 
-const std::set<UUID64>& ShaderCompilationManager::GetRecentCompilations()
+const std::set<UUID64>& ShaderCompilationManager::GetRecentReCompilations()
 {
 	MUTEX_LOCK();
-	return m_recentCompilations;
+	return m_recentReCompilations;
 }
 
-bool ShaderCompilationManager::HasRecentCompilations()
+bool ShaderCompilationManager::HasRecentReCompilations()
 {
 	MUTEX_LOCK();
-	return !m_recentCompilations.empty();
+	return !m_recentReCompilations.empty();
 }
 
-void ShaderCompilationManager::ClearRecentCompilations()
+void ShaderCompilationManager::ClearRecentReCompilations()
 {
 	MUTEX_LOCK();
-	m_recentCompilations.clear();
+	m_recentReCompilations.clear();
 }
 
 ShaderCompilationManager& ShaderCompilationManager::Get()

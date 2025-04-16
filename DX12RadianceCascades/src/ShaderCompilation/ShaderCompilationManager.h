@@ -101,10 +101,10 @@ public:
     D3D12_SHADER_BYTECODE GetShaderByteCode(UUID64 shaderID);
     Shader::ShaderType GetShaderType(UUID64 shaderID);
 
-    void AddRecentCompilation(UUID64 shaderID);
-    const std::set<UUID64>& GetRecentCompilations();
-    bool HasRecentCompilations();
-    void ClearRecentCompilations();
+    void AddRecentReCompilation(UUID64 shaderID);
+    const std::set<UUID64>& GetRecentReCompilations();
+    bool HasRecentReCompilations();
+    void ClearRecentReCompilations();
 
 private:
 
@@ -129,8 +129,8 @@ private:
     // (maybe)TODO: Add capability to use path so that files with the same filename but in different dirs can be used.
     std::unordered_map<std::wstring, std::set<UUID64>> m_shaderDependencyMap;
 
-    // New IDs are added every time compilation of a shader is successful. Needs to be cleared manually.
-    std::set<UUID64> m_recentCompilations;
+    // New IDs are added every time a re-compilation of a shader is successful. Needs to be cleared manually.
+    std::set<UUID64> m_recentReCompilations;
 
     DirectoryWatcher m_shaderDirWatcher;
 };
