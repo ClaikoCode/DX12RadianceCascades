@@ -91,11 +91,16 @@ public:
 			filename = filename.substr(2);
 		}
 
-		// Add to our tracking set
-		m_includedFiles.insert(filename);
-
 		// Delegate to the default handler
-		return m_defaultIncludeHandler->LoadSource(filename.c_str(), ppIncludeSource);
+		HRESULT hr = m_defaultIncludeHandler->LoadSource(filename.c_str(), ppIncludeSource);
+
+		if (SUCCEEDED(hr))
+		{
+			// Add to our tracking set if everything was ok.
+			m_includedFiles.insert(filename);
+		}
+
+		return hr;
 	}
 
 	const std::unordered_set<std::wstring>& GetIncludedFiles() const 
@@ -476,7 +481,8 @@ void ShaderCompilationManager::RegisterShader(UUID64 shaderID, const Shader::Sha
 
 	{
 		const std::wstring& shaderFilename = compPackage.shaderFilename;
-		AddShaderDependency(shaderFilename, shaderID);
+		const std::wstring shaderPath = ::BuildShaderPath(shaderFilename);
+		AddShaderDependency(shaderPath, shaderID);
 	}
 	
 	if (compile)

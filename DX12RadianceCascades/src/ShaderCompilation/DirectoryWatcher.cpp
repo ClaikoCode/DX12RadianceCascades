@@ -21,8 +21,8 @@ void DirectoryWatcher::PollingLoop()
 
 			if (previousWriteTime.count() < currentWriteTime.count())
 			{
-				LOG_DEBUG(L"File '{}' was updated. Triggering callback.", file.path().filename().wstring());
-				m_callback(file.path().filename().string());
+				LOG_DEBUG(L"File '{}' was updated. Triggering callback.", file.path().wstring());
+				m_callback(file.path().string());
 				previousWriteTime = currentWriteTime;
 			}
 		}
