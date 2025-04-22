@@ -98,6 +98,7 @@ RuntimeResourceManager::RuntimeResourceManager() : m_usedPSOs({})
 		shaderCM.RegisterComputeShader(ShaderIDFullScreenCopyCS, L"DirectCopyCS.hlsl", true);
 		shaderCM.RegisterComputeShader(ShaderIDRCMergeCS, L"RCMergeCS.hlsl", true);
 		shaderCM.RegisterComputeShader(ShaderIDRCRadianceFieldCS, L"RCRadianceFieldCS.hlsl", true);
+		shaderCM.RegisterComputeShader(ShaderIDMinMaxDepthCS, L"MinMaxDepthCS.hlsl", true);
 
 		// RT Shaders
 		shaderCM.RegisterRaytracingShader(ShaderIDRaytracingTestRT, L"RaytracingTest.hlsl", true);
@@ -335,6 +336,22 @@ RaytracingPSO& RuntimeResourceManager::GetRaytracingPSOImpl(PSOID rtPSOID)
 	ASSERT(psoPackage.psoType == PSOTypeRaytracing && psoPackage.PSOPointer != nullptr);
 
 	return *reinterpret_cast<RaytracingPSO*>(psoPackage.PSOPointer);
+}
+
+GraphicsPSO& RuntimeResourceManager::GetGraphicsPSOImpl(PSOID gfxPSOID)
+{
+	const PSOPackage& psoPackage = GetPSOImpl(gfxPSOID);
+	ASSERT(psoPackage.psoType == PSOTypeGraphics && psoPackage.PSOPointer != nullptr);
+
+	return *reinterpret_cast<GraphicsPSO*>(psoPackage.PSOPointer);
+}
+
+ComputePSO& RuntimeResourceManager::GetComputePSOImpl(PSOID cmptPSOID)
+{
+	const PSOPackage& psoPackage = GetPSOImpl(cmptPSOID);
+	ASSERT(psoPackage.psoType == PSOTypeCompute && psoPackage.PSOPointer != nullptr);
+
+	return *reinterpret_cast<ComputePSO*>(psoPackage.PSOPointer);
 }
 
 void RuntimeResourceManager::BuildRaytracingDispatchInputsImpl(PSOID psoID, std::set<ModelID>& models, RayDispatchID rayDispatchID)

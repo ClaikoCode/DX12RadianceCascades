@@ -21,3 +21,10 @@ __declspec(align(16)) struct RTParams
 	uint32_t rayFlags;
 	float holeSize;
 };
+
+__declspec(align(16)) struct SourceInfo
+{
+	bool isFirstDepth;
+	uint32_t sourceWidth;
+	uint32_t sourceHeight;
+};

@@ -40,7 +40,7 @@ struct RadianceCascadesSettings
 	bool visualize2DCascades = false;
 };
 
-#define ENABLE_RT (true)
+#define ENABLE_RT (false)
 #define ENABLE_RASTER (!ENABLE_RT)
 struct GlobalSettings
 {
@@ -102,6 +102,11 @@ private:
 		RootEntryRTLTextureSRV,
 		RootEntryRTLOffsetConstants,
 		RootEntryRTLCount,
+
+		RootEntryMinMaxDepthSourceInfo = 0,
+		RootEntryMinMaxDepthSourceDepthUAV,
+		RootEntryMinMaxDepthTargetDepthUAV,
+		RootEntryMinMaxDepthCount,
 	};
 
 public:
@@ -124,6 +129,7 @@ private:
 
 	void RenderSceneImpl(Camera& camera, D3D12_VIEWPORT viewPort, D3D12_RECT scissor);
 	void RenderRaytracing(Camera& camera);
+	void RunMinMaxDepth();
 	void RunComputeFlatlandScene();
 	void RunComputeRCGather();
 	void RunComputeRCMerge();
@@ -182,8 +188,14 @@ private:
 	RootSignature1 m_rtTestLocalRootSig;
 	TLASBuffers m_sceneModelTLASInstance;
 
+	ComputePSO m_minMaxDepthPSO = ComputePSO(L"Min Max Depth Compute");
+	RootSignature m_minMaxDepthrootSig;
+
 	ColorBuffer m_flatlandScene = ColorBuffer({ 0.0f, 0.0f, 0.0f, 100000.0f });
 
 	RadianceCascadesManager2D m_rcManager2D;
+
+	ColorBuffer m_minMaxDepthCopy;
+	ColorBuffer m_minMaxDepthMips;
 };
 

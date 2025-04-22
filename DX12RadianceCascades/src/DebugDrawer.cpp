@@ -77,8 +77,9 @@ void DebugDrawer::DrawImpl(DebugRenderCameraInfo& cameraInfo, ColorBuffer& targe
 		count = DEBUGDRAW_MAX_LINES;
 	}
 
-	gfxContext.TransitionResource(m_cameraBuffer, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER, true);
+	gfxContext.TransitionResource(m_cameraBuffer, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
 	gfxContext.TransitionResource(target, D3D12_RESOURCE_STATE_RENDER_TARGET);
+	gfxContext.TransitionResource(Graphics::g_SceneDepthBuffer, D3D12_RESOURCE_STATE_DEPTH_READ, true);
 
 	D3D12_VERTEX_BUFFER_VIEW vbView = {};
 	vbView.BufferLocation = m_lineStructBuffer.GetGpuVirtualAddress();

@@ -34,6 +34,7 @@ enum ShaderID : UUID64
 	ShaderIDRaytracingTestRT,
 	ShaderIDDebugDrawPS,
 	ShaderIDDebugDrawVS,
+	ShaderIDMinMaxDepthCS,
 
 	ShaderIDNone = NULL_ID
 };
@@ -51,6 +52,7 @@ enum PSOID : psoid_t
 	PSOIDComputeRCRadianceFieldPSO,
 	PSOIDRaytracingTestPSO,
 	PSOIDDebugDrawPSO,
+	PSOIDComputeMinMaxDepthPSO,
 
 	PSOIDCount
 };
@@ -113,6 +115,10 @@ public:
 	static RaytracingDispatchRayInputs& GetRaytracingDispatch(RayDispatchID rayDispatchID);
 	static void BuildRaytracingDispatchInputs(PSOID psoID, std::set<ModelID>& models, RayDispatchID rayDispatchID);
 
+	static RaytracingPSO& GetRaytracingPSO(PSOID rtPSOID) { return Get().GetRaytracingPSOImpl(rtPSOID); }
+	static GraphicsPSO& GetGraphicsPSO(PSOID gfxPSOID) { return Get().GetGraphicsPSOImpl(gfxPSOID); }
+	static ComputePSO& GetComputePSO(PSOID cmptPSOID) { return Get().GetComputePSOImpl(cmptPSOID); }
+
 	static void Destroy() { Get().DestroyImpl(); }
 
 private: 
@@ -137,6 +143,8 @@ private:
 	BLASBuffer& GetModelBLASImpl(ModelID modelID);
 
 	RaytracingPSO& GetRaytracingPSOImpl(PSOID rtPSOID);
+	GraphicsPSO& GetGraphicsPSOImpl(PSOID gfxPSOID);
+	ComputePSO& GetComputePSOImpl(PSOID cmptPSOID);
 
 	void BuildRaytracingDispatchInputsImpl(PSOID psoID, std::set<ModelID>& models, RayDispatchID rayDispatchID);
 	RaytracingDispatchRayInputs& GetRaytracingDispatchImpl(RayDispatchID rayDispatchID);
