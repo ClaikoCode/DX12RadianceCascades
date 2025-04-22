@@ -173,6 +173,7 @@ if %errorlevel% leq 3 exit 0</Command>
     <ClInclude Include="src\DebugDrawer.h" />
     <ClInclude Include="src\GPUStructs.h" />
     <ClInclude Include="src\Logger.h" />
+    <ClInclude Include="src\RadianceCascadeManager3D.h" />
     <ClInclude Include="src\RadianceCascades.h" />
     <ClInclude Include="src\RadianceCascadesManager2D.h" />
     <ClInclude Include="src\RaytracingBuffers.h" />
@@ -190,6 +191,7 @@ if %errorlevel% leq 3 exit 0</Command>
   <ItemGroup>
     <ClCompile Include="src\DebugDrawer.cpp" />
     <ClCompile Include="src\Main.cpp" />
+    <ClCompile Include="src\RadianceCascadeManager3d.cpp" />
     <ClCompile Include="src\RadianceCascades.cpp" />
     <ClCompile Include="src\RadianceCascadesManager2D.cpp" />
     <ClCompile Include="src\RaytracingBuffers.cpp" />
@@ -220,6 +222,7 @@ if %errorlevel% leq 3 exit 0</Command>
     <None Include="Assets\shaders\RCCommon.hlsli">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
     </None>
+    <None Include="Assets\shaders\RCCommon3D.hlsli" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Assets\shaders\DebugDrawPS.hlsl">
@@ -229,6 +232,7 @@ if %errorlevel% leq 3 exit 0</Command>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
       <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.3</ShaderModel>
       <AdditionalOptions Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">-Qembed_debug</AdditionalOptions>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Release|x64'">6.3</ShaderModel>
     </FxCompile>
     <FxCompile Include="Assets\shaders\DebugDrawVS.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
@@ -237,6 +241,7 @@ if %errorlevel% leq 3 exit 0</Command>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Vertex</ShaderType>
       <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.3</ShaderModel>
       <AdditionalOptions Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">-Qembed_debug</AdditionalOptions>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Release|x64'">6.3</ShaderModel>
     </FxCompile>
     <FxCompile Include="Assets\shaders\DirectCopyCS.hlsl">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
@@ -269,6 +274,16 @@ if %errorlevel% leq 3 exit 0</Command>
       <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Release|x64'">6.3</ShaderModel>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Vertex</ShaderType>
       <AdditionalOptions Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">-Qembed_debug %(AdditionalOptions)</AdditionalOptions>
+    </FxCompile>
+    <FxCompile Include="Assets\shaders\MinMaxDepthCS.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Compute</ShaderType>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.3</ShaderModel>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Compute</ShaderType>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">4.0</ShaderModel>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Compute</ShaderType>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">4.0</ShaderModel>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Compute</ShaderType>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Release|x64'">6.3</ShaderModel>
     </FxCompile>
     <FxCompile Include="Assets\shaders\RCGatherCS.hlsl">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>

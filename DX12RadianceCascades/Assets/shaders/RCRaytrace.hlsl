@@ -10,6 +10,7 @@
 
 #include "Common.hlsli"
 #include "DebugDraw.hlsli"
+#include "RCCommon3D.hlsli"
 
 #define BARYCENTRIC_NORMALIZATION(bary, val1, val2, val3) (bary.x * val1 + bary.y * val2 + bary.z * val3)
 
@@ -30,6 +31,10 @@ struct GlobalInfo
     matrix viewProjMatrix;
     matrix invViewProjMatrix;
     float3 cameraPos;
+    matrix invViewMatrix;
+    matrix invProjMatrix;
+    float nearPlane;
+    float farPlane;
 };
 
 ConstantBuffer<GlobalInfo> globalInfo : register(b1);
@@ -49,6 +54,13 @@ Texture2D<float4> emissiveTex   : register(t4, space1);
 Texture2D<float4> normalTex     : register(t5, space1);
 
 ConstantBuffer<GeometryOffsets> geomOffsets : register(b0, space1);
+
+// RC Related Buffers
+ConstantBuffer<RCGlobals> rcGlobals : register(b2);
+ConstantBuffer<CascadeInfo> cascadeInfo : register(b3);
+
+Texture2D<float4> depthTex : register(t1);
+
 
 float3 GetBarycentrics(float2 inputBarycentrics)
 {
@@ -114,22 +126,45 @@ inline void GenerateCameraRay(uint2 index, out float3 origin, out float3 directi
     direction = normalize(world.xyz - origin);
 }
 
+inline void GenerateProbeRay(uint2 index, out RayDesc ray)
+{
+    ProbeInfo3D probeInfo3D = BuildProbeInfo3DDirFirst(index, cascadeInfo.cascadeIndex, rcGlobals);
+
+    float3 rayDir = GetRCRayDir(probeInfo3D.rayIndex, cascadeInfo.cascadeIndex);
+
+    float3 rayOrigin;
+    int cascadeOffset = 0; // Each cascade corresponds to a given MipMap in the depth texture.
+    {
+        uint cascadeIndex = cascadeInfo.cascadeIndex + cascadeOffset;
+        int2 pixelPos = probeInfo3D.probeIndex;
+        float depthVal = depthTex.Load(int3(pixelPos, cascadeIndex)).r; // Only load R.
+        
+        uint width;
+        uint height;
+        uint _;
+        depthTex.GetDimensions(cascadeIndex, width, height, _);
+        
+        float2 texelSize = 1.0f / float2(width, height);
+        float3 worldPos = WorldPosFromDepth(depthVal, (float2(pixelPos) + 0.5f) * texelSize,  globalInfo.invProjMatrix, globalInfo.invViewMatrix);
+        
+        rayOrigin = worldPos;
+    }
+    
+    ray.Direction = rayDir;
+    ray.Origin = rayOrigin;
+    ray.TMax = probeInfo3D.range + probeInfo3D.startDistance;
+    ray.TMin = probeInfo3D.startDistance;
+}
+
 [shader("raygeneration")]
 void RayGenerationShader()
 {
-    float3 rayOrigin;
-    float3 rayDir;
-    
-    GenerateCameraRay(DispatchRaysIndex().xy, rayOrigin, rayDir);
-    
     RayDesc ray;
-    ray.Origin = rayOrigin;
-    ray.Direction = rayDir;
-    ray.TMax = 100000.0f;
-    ray.TMin = 0.001f;
+    GenerateProbeRay(DispatchRaysIndex().xy, ray);
     
     RayPayload payload = { 0.0f };
 
+    DrawLine(ray.Origin, ray.Origin + ray.Direction, float3(1.0f, 0.0f, 0.0f));
     TraceRay(Scene, rayFlags, ~0, 0, 1, 0, ray, payload);
 }
 
@@ -154,7 +189,7 @@ void ClosestHitShader(inout RayPayload payload, in BuiltInTriangleIntersectionAt
     // NORMAL: 32 bits (unorm)
     // TANGENT: 32 bits (unorm)
     // TEXCOORD: 2 x 16 bits (float)
-    const uint vertexSizeInBytes = 3 * 4 + 4 + 4 + 2 * 2;
+    const uint vertexSizeInBytes = (3 * 4) + (4) + (4) + (2 * 2);
     
     const uint indexSizeInBytes = 2;
     const uint3 vertexIndices = Load3x16BitIndices(geomOffsets.indexByteOffset + PrimitiveIndex() * 3 * indexSizeInBytes);
@@ -166,30 +201,8 @@ void ClosestHitShader(inout RayPayload payload, in BuiltInTriangleIntersectionAt
     const float2 uv2 = LoadUVFromVertex(vertexByteOffsets.z, uvOffset);
     const float2 uv = BARYCENTRIC_NORMALIZATION(barycentrics, uv0, uv1, uv2);
     
-    float3 intersectionPoint = WorldRayOrigin() + WorldRayDirection() * RayTCurrent();
-    
-    uint2 pixelIndex = DispatchRaysIndex().xy;
-    
-    if(true)
-    {
-        uint2 pixelIndexSubset = ((pixelIndex + 15) % 40);
-        
-        if (pixelIndexSubset.x == 0 && pixelIndexSubset.y == 0)
-        {
-            float radius = Remap(0.0f, 1000.0f, 5.0f, 0.2f, RayTCurrent());
-            float3 minColor = float3(1.0f, .0f, 0.0f);
-            float3 maxColor = float3(1.0f, 1.0f, 1.0f);
-            float3 visColor = Remap(0.0f, 1000.0f, minColor, maxColor, RayTCurrent());
-            DrawSphere(intersectionPoint, 1.0f, visColor);
-            //DrawAxisAlignedBox(intersectionPoint, radius, float3(1.0f, 1.0f, 1.0f));
-            //DrawLine(WorldRayOrigin(), intersectionPoint, float3(1.0f, 0.0f, 0.0f));
-        }
-    }
-    
-    
-    
-    renderOutput[pixelIndex] = float4(albedoTex.SampleLevel(sourceSampler, uv, 0).rgb, 1);
-    //renderOutput[pixelIndex] = float4(intersectionPoint, 1);
+    uint2 pixelIndex = DispatchRaysIndex().xy;      
+    renderOutput[pixelIndex] = float4(emissiveTex.SampleLevel(sourceSampler, uv, 0).rgb, 1);
 }
 
 [shader("miss")]

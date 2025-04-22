@@ -72,6 +72,9 @@ public:
 
     Color GetClearColor(void) const { return m_ClearColor; }
 
+    // Added by JD
+    uint32_t GetNumMipMaps(void) const { return m_NumMipMaps; }
+
     // This will work for all texture sizes, but it's recommended for speed and quality
     // that you use dimensions with powers of two (but not necessarily square.)  Pass
     // 0 for ArrayCount to reserve space for mips at creation time.

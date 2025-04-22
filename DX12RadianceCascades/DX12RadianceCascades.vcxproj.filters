@@ -66,6 +66,9 @@
     <ClInclude Include="src\RaytracingDispatchRayInputs.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="src\RadianceCascadeManager3D.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\Main.cpp">
@@ -104,11 +107,15 @@
     <ClCompile Include="src\RaytracingDispatchRayInputs.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\RadianceCascadeManager3d.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="Assets\shaders\Common.hlsli" />
     <None Include="Assets\shaders\RCCommon.hlsli" />
     <None Include="Assets\shaders\DebugDraw.hlsli" />
+    <None Include="Assets\shaders\RCCommon3D.hlsli" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Assets\shaders\DirectCopyCS.hlsl" />
@@ -122,5 +129,6 @@
     <FxCompile Include="Assets\shaders\RCRadianceFieldCS.hlsl" />
     <FxCompile Include="Assets\shaders\DebugDrawPS.hlsl" />
     <FxCompile Include="Assets\shaders\DebugDrawVS.hlsl" />
+    <FxCompile Include="Assets\shaders\MinMaxDepthCS.hlsl" />
   </ItemGroup>
 </Project>

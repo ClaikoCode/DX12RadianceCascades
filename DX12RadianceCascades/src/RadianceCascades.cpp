@@ -10,6 +10,7 @@
 #include "Core\DynamicDescriptorHeap.h"
 #include "GPUStructs.h"
 #include "DebugDrawer.h"
+#include "ShaderCompilation\ShaderCompilationManager.h"
 
 #include "RadianceCascades.h"
 
@@ -81,6 +82,13 @@ void RadianceCascades::Startup()
 	InitializeRCResources();
 
 	InitializeRT();
+
+	{
+		DepthBuffer& sceneDepthBuff = Graphics::g_SceneDepthBuffer;
+
+		m_minMaxDepthCopy.Create(L"Min Max Depth Copy", sceneDepthBuff.GetWidth(), sceneDepthBuff.GetHeight(), 1, DXGI_FORMAT_R32_FLOAT);
+		m_minMaxDepthMips.Create(L"Min Max Depth Mips", sceneDepthBuff.GetWidth() / 2, sceneDepthBuff.GetHeight() / 2, 0, DXGI_FORMAT_R32G32_FLOAT);
+	}
 }
 
 void RadianceCascades::Cleanup()
@@ -131,6 +139,7 @@ void RadianceCascades::RenderScene()
 	if (m_settings.globalSettings.renderRaster)
 	{
 		RenderSceneImpl(m_camera, m_mainViewport, m_mainScissor);
+		RunMinMaxDepth();
 	}
 
 	if (m_settings.globalSettings.renderRaytracing)
@@ -204,7 +213,7 @@ void RadianceCascades::InitializeScene()
 		float modelRadius = Length(obb.GetDimensions()) * 0.5f;
 		const Vector3 eye = obb.GetCenter() + Vector3(modelRadius * 0.5f, 0.0f, 0.0f);
 		m_camera.SetEyeAtUp(eye, Vector3(kZero), Vector3(kYUnitVector));
-		m_camera.SetZRange(0.5f, 10000.0f);
+		m_camera.SetZRange(0.5f, 5000.0f);
 		
 		
 		m_cameraController.reset(new FlyingFPSCamera(m_camera, Vector3(kYUnitVector)));
@@ -223,7 +232,7 @@ void RadianceCascades::InitializePSOs()
 		RuntimeResourceManager::RegisterPSO(PSOIDComputeRCMergePSO,			&m_rcMergePSO,					PSOTypeCompute);
 		RuntimeResourceManager::RegisterPSO(PSOIDComputeRCRadianceFieldPSO, &m_rcRadianceFieldPSO,			PSOTypeCompute);
 		RuntimeResourceManager::RegisterPSO(PSOIDRaytracingTestPSO,			&m_rtTestPSO,					PSOTypeRaytracing);
-
+		RuntimeResourceManager::RegisterPSO(PSOIDComputeMinMaxDepthPSO,		&m_minMaxDepthPSO,				PSOTypeCompute);
 	}
 
 	// Bind shader ids to specific PSOs for recompilation purposes.
@@ -233,6 +242,14 @@ void RadianceCascades::InitializePSOs()
 		RuntimeResourceManager::AddShaderDependency(ShaderIDSceneRenderPS, externalPSOs);
 		RuntimeResourceManager::AddShaderDependency(ShaderIDSceneRenderVS, externalPSOs);
 
+		// This is a hack to rebuild the external PSOs instantly.
+		// TODO: Make it so this hack does not have to be done :)
+		{
+			ShaderCompilationManager::Get().AddRecentReCompilation(ShaderIDSceneRenderPS);
+			ShaderCompilationManager::Get().AddRecentReCompilation(ShaderIDSceneRenderVS);
+		}
+		
+
 		// Internal PSO dependencies.
 		RuntimeResourceManager::AddShaderDependency(ShaderIDRCGatherCS, { PSOIDComputeRCGatherPSO });
 		RuntimeResourceManager::AddShaderDependency(ShaderIDFlatlandSceneCS, { PSOIDComputeFlatlandScenePSO });
@@ -240,7 +257,7 @@ void RadianceCascades::InitializePSOs()
 		RuntimeResourceManager::AddShaderDependency(ShaderIDRCMergeCS, { PSOIDComputeRCMergePSO });
 		RuntimeResourceManager::AddShaderDependency(ShaderIDRCRadianceFieldCS, { PSOIDComputeRCRadianceFieldPSO });
 		RuntimeResourceManager::AddShaderDependency(ShaderIDRaytracingTestRT, { PSOIDRaytracingTestPSO });
-		
+		RuntimeResourceManager::AddShaderDependency(ShaderIDMinMaxDepthCS, { PSOIDComputeMinMaxDepthPSO });
 	}
 
 	{
@@ -340,6 +357,21 @@ void RadianceCascades::InitializePSOs()
 			rootSig.InitStaticSampler(0, sampler);
 		}
 		rootSig.Finalize(L"Compute RC Radiance Field");
+
+		pso.SetRootSignature(rootSig);
+		pso.Finalize();
+	}
+
+	{
+		ComputePSO& pso = m_minMaxDepthPSO;
+		pso.SetComputeShader(RuntimeResourceManager::GetShader(ShaderIDMinMaxDepthCS));
+
+		RootSignature& rootSig = m_minMaxDepthrootSig;
+		rootSig.Reset(RootEntryMinMaxDepthCount);
+		rootSig[RootEntryMinMaxDepthSourceInfo].InitAsConstantBuffer(0);
+		rootSig[RootEntryMinMaxDepthSourceDepthUAV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 1);
+		rootSig[RootEntryMinMaxDepthTargetDepthUAV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 1);
+		rootSig.Finalize(L"Min Max Depth");
 
 		pso.SetRootSignature(rootSig);
 		pso.Finalize();
@@ -537,6 +569,61 @@ void RadianceCascades::RenderRaytracing(Camera& camera)
 	D3D12_DISPATCH_RAYS_DESC rayDispatchDesc = rayDispatch.BuildDispatchRaysDesc(colorTarget.GetWidth(), colorTarget.GetHeight());
 	rtCommandList->SetPipelineState1(m_rtTestPSO.GetStateObject().Get());
 	rtCommandList->DispatchRays(&rayDispatchDesc);
+
+	cmptContext.Finish(true);
+}
+
+void RadianceCascades::RunMinMaxDepth()
+{
+	DepthBuffer& inputDepthBuffer = Graphics::g_SceneDepthBuffer;
+	ColorBuffer& minMaxDepthCopy = m_minMaxDepthCopy;
+	ColorBuffer& minMaxMipMaps = m_minMaxDepthMips;
+
+	ComputeContext& cmptContext = ComputeContext::Begin(L"Min Max Depth");
+
+	const ComputePSO& cmptPSO = RuntimeResourceManager::GetComputePSO(PSOIDComputeMinMaxDepthPSO);
+	cmptContext.SetPipelineState(cmptPSO);
+	cmptContext.SetRootSignature(cmptPSO.GetRootSignature());
+
+	// Copy the depth buffer to a color buffer that can be read from as a UAV.
+	{
+		cmptContext.TransitionResource(inputDepthBuffer, D3D12_RESOURCE_STATE_COPY_SOURCE);
+		cmptContext.TransitionResource(minMaxDepthCopy, D3D12_RESOURCE_STATE_COPY_DEST);
+		cmptContext.CopySubresource(minMaxDepthCopy, 0, inputDepthBuffer, 0);
+	}
+	
+	cmptContext.TransitionResource(minMaxMipMaps, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+	cmptContext.TransitionResource(minMaxDepthCopy, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
+
+	// The first pass of min max depth uses the full resolution copy and writes to the first mip. 
+	{
+		SourceInfo depthSourceInfo = {};
+		depthSourceInfo.isFirstDepth = true;
+		depthSourceInfo.sourceWidth = minMaxDepthCopy.GetWidth();
+		depthSourceInfo.sourceHeight = minMaxDepthCopy.GetHeight();
+
+		cmptContext.SetDynamicConstantBufferView(RootEntryMinMaxDepthSourceInfo, sizeof(depthSourceInfo), &depthSourceInfo);
+		cmptContext.SetDynamicDescriptors(RootEntryMinMaxDepthSourceDepthUAV, 0, 1, &minMaxDepthCopy.GetUAV());
+		cmptContext.SetDynamicDescriptors(RootEntryMinMaxDepthTargetDepthUAV, 0, 1, &m_minMaxDepthMips.GetUAV());
+
+		cmptContext.Dispatch2D(depthSourceInfo.sourceWidth >> 1, depthSourceInfo.sourceHeight >> 1);
+	}
+
+	const D3D12_CPU_DESCRIPTOR_HANDLE* startUAV = &m_minMaxDepthMips.GetUAV();
+	const uint32_t numMipMaps = minMaxMipMaps.GetNumMipMaps();
+	for (uint32_t i = 0; i < numMipMaps; i++)
+	{
+		SourceInfo depthSourceInfo = {};
+		depthSourceInfo.isFirstDepth = false;
+		depthSourceInfo.sourceWidth = minMaxMipMaps.GetWidth() >> i;
+		depthSourceInfo.sourceHeight = minMaxMipMaps.GetHeight() >> i;
+
+		cmptContext.SetDynamicConstantBufferView(RootEntryMinMaxDepthSourceInfo, sizeof(depthSourceInfo), &depthSourceInfo);
+		cmptContext.SetDynamicDescriptors(RootEntryMinMaxDepthSourceDepthUAV, 0, 1, startUAV + i);
+		cmptContext.SetDynamicDescriptors(RootEntryMinMaxDepthTargetDepthUAV, 0, 1, startUAV + i + 1);
+
+		cmptContext.Dispatch2D(depthSourceInfo.sourceWidth >> 1, depthSourceInfo.sourceHeight >> 1);
+	}
 
 	cmptContext.Finish(true);
 }
