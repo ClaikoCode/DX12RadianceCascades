@@ -36,7 +36,7 @@ void DrawLine(float3 position0, float3 position1, float3 color)
     // Draw the line
     DebugRenderVertex v;
     v.position = position0;
-    v.color = color;
+    v.color = float3(1.0f, 1.0f, 1.0f);
     debugDrawVertexData[offset_in_vertex_buffer + 0] = v;
     
     v.position = position1;

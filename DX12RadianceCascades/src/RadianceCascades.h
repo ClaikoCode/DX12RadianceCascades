@@ -41,6 +41,8 @@ struct RadianceCascadesSettings
 {
 	bool visualize2DCascades = false;
 	bool renderRC3D = true;
+	bool visualizeRC3DCascades = false;
+	int cascadeVisIndex = 0;
 };
 
 #define ENABLE_RT (false)

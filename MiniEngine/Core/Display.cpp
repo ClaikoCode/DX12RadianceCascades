@@ -95,8 +95,8 @@ namespace Graphics
 
     uint32_t g_NativeWidth = 0;
     uint32_t g_NativeHeight = 0;
-    uint32_t g_DisplayWidth = 1024;
-    uint32_t g_DisplayHeight = 1024;
+    uint32_t g_DisplayWidth = 1024 * 2;
+    uint32_t g_DisplayHeight = 1024 * 2;
     ColorBuffer g_PreDisplayBuffer;
 
     void ResolutionToUINT(eResolution res, uint32_t& width, uint32_t& height)
@@ -129,7 +129,7 @@ namespace Graphics
             height = 2160;
             break;
         case k1024x2:
-            width = 1024;
+            width = 1024 * 2;
             height = width;
             break;
         }
