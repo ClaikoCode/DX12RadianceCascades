@@ -75,8 +75,6 @@ void RuntimeResourceManager::BuildRaytracingDispatchInputs(PSOID psoID, std::set
 RuntimeResourceManager::RuntimeResourceManager() : m_usedPSOs({})
 {
 	m_descHeap.Create(L"Runtime Resource Manager Desc Heap", D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 2048);
-	m_sceneColorDescHande = m_descHeap.Alloc();
-	Graphics::g_Device->CopyDescriptorsSimple(1, m_sceneColorDescHande, Graphics::g_SceneColorBuffer.GetUAV(), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
 	auto& shaderCM = ShaderCompilationManager::Get();
 
@@ -102,6 +100,7 @@ RuntimeResourceManager::RuntimeResourceManager() : m_usedPSOs({})
 
 		// RT Shaders
 		shaderCM.RegisterRaytracingShader(ShaderIDRaytracingTestRT, L"RaytracingTest.hlsl", true);
+		shaderCM.RegisterRaytracingShader(ShaderIDRCRaytraceRT, L"RCRaytrace.hlsl", true);
 	}
 
 	// Initialize Models
@@ -369,6 +368,27 @@ void RuntimeResourceManager::BuildRaytracingDispatchInputsImpl(PSOID psoID, std:
 RaytracingDispatchRayInputs& RuntimeResourceManager::GetRaytracingDispatchImpl(RayDispatchID rayDispatchID)
 {
 	return m_rayDispatchInputs[rayDispatchID];
+}
+
+void RuntimeResourceManager::CopyDescriptorImpl(const D3D12_CPU_DESCRIPTOR_HANDLE& handle)
+{
+	ASSERT(handle.ptr != D3D12_GPU_VIRTUAL_ADDRESS_NULL);
+
+	DescriptorHandle& destDescHandle = m_descriptorCopiedCBVSRVUAV[handle.ptr];
+	destDescHandle = m_descHeap.Alloc(1);
+
+	Graphics::g_Device->CopyDescriptorsSimple(1, destDescHandle, handle, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+}
+
+const DescriptorHandle& RuntimeResourceManager::GetDescCopyImpl(const D3D12_CPU_DESCRIPTOR_HANDLE& handle)
+{
+	auto it = m_descriptorCopiedCBVSRVUAV.find(handle.ptr);
+	if (it == m_descriptorCopiedCBVSRVUAV.end())
+	{
+		CopyDescriptorImpl(handle);
+	}
+
+	return m_descriptorCopiedCBVSRVUAV.at(handle.ptr);
 }
 
 void RuntimeResourceManager::DestroyImpl()

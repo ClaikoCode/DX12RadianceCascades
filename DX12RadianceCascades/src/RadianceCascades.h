@@ -7,12 +7,14 @@
 #include "Core\Camera.h"
 #include "Core\CameraController.h"
 #include "Model\Model.h"
+
 #include "RaytracingPSO.h"
 #include "ShaderTable.h"
 #include "RaytracingDispatchRayInputs.h"
 #include "RuntimeResourceManager.h"
 
 #include "RadianceCascadesManager2D.h"
+#include "RadianceCascadeManager3D.h"
 
 #if defined(_DEBUGDRAWING)
 #define ENABLE_DEBUG_DRAW 1
@@ -38,6 +40,7 @@ public:
 struct RadianceCascadesSettings
 {
 	bool visualize2DCascades = false;
+	bool renderRC3D = true;
 };
 
 #define ENABLE_RT (false)
@@ -47,6 +50,7 @@ struct GlobalSettings
 	bool renderRaster = ENABLE_RASTER;
 	bool renderRaytracing = ENABLE_RT;
 	bool renderDebug = ENABLE_DEBUG_DRAW;
+	bool useDebugCam = false;
 };
 
 struct AppSettings
@@ -107,6 +111,19 @@ private:
 		RootEntryMinMaxDepthSourceDepthUAV,
 		RootEntryMinMaxDepthTargetDepthUAV,
 		RootEntryMinMaxDepthCount,
+
+		RootEntryRCRaytracingRTGSceneSRV = 0,
+		RootEntryRCRaytracingRTGOutputUAV,
+		RootEntryRCRaytracingRTGGlobalInfoCB,
+		RootEntryRCRaytracingRTGRCGlobalsCB,
+		RootEntryRCRaytracingRTGCascadeInfoCB,
+		RootEntryRCRaytracingRTGDepthTextureUAV,
+		RootEntryRCRaytracingRTGCount,
+
+		RootEntryRCRaytracingRTLGeomDataSRV = 0,
+		RootEntryRCRaytracingRTLTexturesSRV,
+		RootEntryRCRaytracingRTLGeomOffsetsCB,
+		RootEntryRCRaytracingRTLCount,
 	};
 
 public:
@@ -127,9 +144,11 @@ private:
 	void InitializeRCResources();
 	void InitializeRT();
 
-	void RenderSceneImpl(Camera& camera, D3D12_VIEWPORT viewPort, D3D12_RECT scissor);
+	void RenderRaster(Camera& camera, D3D12_VIEWPORT viewPort, D3D12_RECT scissor);
 	void RenderRaytracing(Camera& camera);
-	void RunMinMaxDepth();
+	void RenderRCRaytracing(Camera& camera);
+	void RenderDepthOnly(Camera& camera, DepthBuffer& targetDepth, D3D12_VIEWPORT viewPort, D3D12_RECT scissor, bool clearDepth = false);
+	void RunMinMaxDepth(DepthBuffer& sourceDepthBuffer);
 	void RunComputeFlatlandScene();
 	void RunComputeRCGather();
 	void RunComputeRCMerge();
@@ -186,14 +205,19 @@ private:
 	RaytracingPSO m_rtTestPSO = RaytracingPSO(L"RT Test PSO");
 	RootSignature1 m_rtTestGlobalRootSig;
 	RootSignature1 m_rtTestLocalRootSig;
-	TLASBuffers m_sceneModelTLASInstance;
+	TLASBuffers m_sceneTLAS;
 
 	ComputePSO m_minMaxDepthPSO = ComputePSO(L"Min Max Depth Compute");
 	RootSignature m_minMaxDepthrootSig;
 
+	RaytracingPSO m_rcRaytracePSO = RaytracingPSO(L"RC Raytrace PSO");
+	RootSignature1 m_rcRaytraceGlobalRootSig;
+	RootSignature1 m_rcRaytraceLocalRootSig;
+
 	ColorBuffer m_flatlandScene = ColorBuffer({ 0.0f, 0.0f, 0.0f, 100000.0f });
 
 	RadianceCascadesManager2D m_rcManager2D;
+	RadianceCascadeManager3D m_rcManager3D;
 
 	ColorBuffer m_minMaxDepthCopy;
 	ColorBuffer m_minMaxDepthMips;

@@ -8,7 +8,6 @@
 // Copyright (C) Microsoft Corporation. All rights reserved.
 //--------------------------------------------------------------------------------------
 
-#include "Common.hlsli"
 #include "DebugDraw.hlsli"
 
 #define BARYCENTRIC_NORMALIZATION(bary, val1, val2, val3) (bary.x * val1 + bary.y * val2 + bary.z * val3)

@@ -15,6 +15,8 @@ struct IndirectCommand
 	D3D12_DRAW_ARGUMENTS drawArgs;
 };
 
+#define ENABLE_DEPTH 0
+
 DebugDrawer::DebugDrawer() : m_debugDrawPSO(L"Debug Draw PSO"), m_debugDrawRootSig(std::make_shared<RootSignature>())
 {
 	m_lineStructBuffer.Create(L"Debug Drawer Line Buffer", DEBUGDRAW_MAX_LINES * 2, sizeof(DebugRenderVertex));
@@ -40,10 +42,15 @@ DebugDrawer::DebugDrawer() : m_debugDrawPSO(L"Debug Draw PSO"), m_debugDrawRootS
 		pso.SetPixelShader(RuntimeResourceManager::GetShader(ShaderIDDebugDrawPS));
 		pso.SetRasterizerState(Graphics::RasterizerTwoSided);
 		pso.SetBlendState(Graphics::BlendAdditive);
+#if ENABLE_DEPTH
 		pso.SetDepthStencilState(Graphics::DepthStateReadOnly);
+		pso.SetRenderTargetFormat(Graphics::g_SceneColorBuffer.GetFormat(), Graphics::g_SceneDepthBuffer.GetFormat());
+#else
+		pso.SetDepthStencilState(Graphics::DepthStateDisabled);
+		pso.SetRenderTargetFormat(Graphics::g_SceneColorBuffer.GetFormat(), DXGI_FORMAT_UNKNOWN);
+#endif
 		pso.SetInputLayout((UINT)inputLayout.size(), inputLayout.data());
 		pso.SetPrimitiveTopologyType(D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE);
-		pso.SetRenderTargetFormat(Graphics::g_SceneColorBuffer.GetFormat(), Graphics::g_SceneDepthBuffer.GetFormat());
 		
 		pso.Finalize();
 	}
@@ -60,7 +67,7 @@ DebugDrawer::DebugDrawer() : m_debugDrawPSO(L"Debug Draw PSO"), m_debugDrawRootS
 	RuntimeResourceManager::AddShaderDependency(ShaderIDDebugDrawVS, { PSOIDDebugDrawPSO });
 }
 
-void DebugDrawer::DrawImpl(DebugRenderCameraInfo& cameraInfo, ColorBuffer& target, D3D12_VIEWPORT viewPort, D3D12_RECT scissor)
+void DebugDrawer::DrawImpl(DebugRenderCameraInfo& cameraInfo, ColorBuffer& targetColor, DepthBuffer& targetDepth, D3D12_VIEWPORT viewPort, D3D12_RECT scissor)
 {
 	GraphicsContext& gfxContext = GraphicsContext::Begin(L"Debug Draw Context");
 
@@ -78,8 +85,8 @@ void DebugDrawer::DrawImpl(DebugRenderCameraInfo& cameraInfo, ColorBuffer& targe
 	}
 
 	gfxContext.TransitionResource(m_cameraBuffer, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
-	gfxContext.TransitionResource(target, D3D12_RESOURCE_STATE_RENDER_TARGET);
-	gfxContext.TransitionResource(Graphics::g_SceneDepthBuffer, D3D12_RESOURCE_STATE_DEPTH_READ, true);
+	gfxContext.TransitionResource(targetColor, D3D12_RESOURCE_STATE_RENDER_TARGET);
+	gfxContext.TransitionResource(targetDepth, D3D12_RESOURCE_STATE_DEPTH_READ, true);
 
 	D3D12_VERTEX_BUFFER_VIEW vbView = {};
 	vbView.BufferLocation = m_lineStructBuffer.GetGpuVirtualAddress();
@@ -91,7 +98,7 @@ void DebugDrawer::DrawImpl(DebugRenderCameraInfo& cameraInfo, ColorBuffer& targe
 	gfxContext.SetVertexBuffer(0, vbView);
 	gfxContext.SetViewportAndScissor(viewPort, scissor);
 	gfxContext.SetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_LINELIST);
-	gfxContext.SetRenderTarget(target.GetRTV(), Graphics::g_SceneDepthBuffer.GetDSV());
+	gfxContext.SetRenderTarget(targetColor.GetRTV(), targetDepth.GetDSV());
 	gfxContext.SetDynamicConstantBufferView(0, sizeof(cameraInfo), &cameraInfo);
 	gfxContext.Draw(count * 2);
 

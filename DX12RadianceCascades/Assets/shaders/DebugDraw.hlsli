@@ -1,5 +1,10 @@
+#ifndef DEBUGDRAW_H
+#define DEBUGDRAW_H
+
 // THIS FILE WAS ADAPTED FROM: 
 // https://github.com/krupitskas/Yasno/blob/0e14e793807aa0115543a572ad95485b86ac6647/shaders/include/debug_renderer.hlsl 
+
+#include "Common.hlsli"
 
 struct DebugRenderVertex
 {
@@ -102,3 +107,5 @@ void DrawSphere(float3 center, float radius, float3 color)
         }
     }
 }
+
+#endif // DEBUGDRAW_H

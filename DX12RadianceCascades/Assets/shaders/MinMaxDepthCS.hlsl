@@ -41,11 +41,13 @@ void main(uint3 DTid : SV_DispatchThreadID)
                     sourceMinMax = sourceDepth.Load(int3(sourceSamplingPixel, 0)).rg;
                 }
 
+                // Red channel is min.
                 if(sourceMinMax.r < min)
                 {
                     min = sourceMinMax.r;
                 }
                 
+                // Green channel is max.
                 if(sourceMinMax.g > max)
                 {
                     max = sourceMinMax.g;

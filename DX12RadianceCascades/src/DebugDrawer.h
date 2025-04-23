@@ -34,9 +34,9 @@ public:
 		return GetLineBuffer().GetCounterBuffer();
 	}
 
-	static void Draw(DebugRenderCameraInfo& cameraInfo, ColorBuffer& target, D3D12_VIEWPORT viewPort, D3D12_RECT scissor)
+	static void Draw(DebugRenderCameraInfo& cameraInfo, ColorBuffer& targetColor, DepthBuffer& targetDepth, D3D12_VIEWPORT viewPort, D3D12_RECT scissor)
 	{
-		Get().DrawImpl(cameraInfo, target, viewPort, scissor);
+		Get().DrawImpl(cameraInfo, targetColor, targetDepth, viewPort, scissor);
 	}
 
 	static void Destroy()
@@ -57,7 +57,7 @@ public:
 private:
 	DebugDrawer();
 
-	void DrawImpl(DebugRenderCameraInfo& cameraInfo, ColorBuffer& target, D3D12_VIEWPORT viewPort, D3D12_RECT scissor);
+	void DrawImpl(DebugRenderCameraInfo& cameraInfo, ColorBuffer & targetColor, DepthBuffer& targetDepth, D3D12_VIEWPORT viewPort, D3D12_RECT scissor);
 	void DestroyImpl();
 	void BindDebugBuffersImpl(GraphicsContext& gfxContext, UINT startRootIndex);
 	void BindDebugBuffersImpl(ComputeContext& cmptContext, UINT startRootIndex);

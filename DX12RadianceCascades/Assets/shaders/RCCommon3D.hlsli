@@ -1,4 +1,7 @@
-#pragma once
+#ifndef RCCOMMON_H
+#define RCCOMMON_H
+
+#include "Common.hlsli"
 
 #define RAYS_PER_PROBE(cascadeIndex, scalingFactor, rayCount0) (rayCount0 * pow(scalingFactor, cascadeIndex))
 #define PROBES_PER_DIM(cascadeIndex, scalingFactor, probeDim0) (probeDim0 / pow(scalingFactor, cascadeIndex))
@@ -69,6 +72,23 @@ float3 OctToFloat3(in float2 e)
     return normalize(v);
 }
 
+/* Decode UV coordinates with interval [-1, 1] into a direction (point on a sphere). */
+float3 OctToFloat3EqualArea(float2 e)
+{
+    /* Equal-Area Mapping <https://pbr-book.org/4ed/Geometry_and_Transformations/Spherical_Geometry#x3-Equal-AreaMapping> */
+    float2 v = abs(e);
+    float sdist = 1.0f - (v.x + v.y);
+    float r = 1.0f - abs(sdist);
+    float phi = ((v.y - v.x) / r + 1.0) * 0.785398f; // Magic number is PI / 4
+    float r_sqr = r * r;
+    float z = sign(sdist) * (1.0 - r_sqr);
+    float cos_phi = sign(e.x) * cos(phi);
+    float sin_phi = sign(e.y) * sin(phi);
+    float r_scl = r * sqrt(2.0 - r_sqr);
+    
+    return float3(cos_phi * r_scl, sin_phi * r_scl, z);
+}
+
 ProbeInfo BuildProbeInfo(uint2 pixelPos, uint cascadeIndex, RCGlobals rcGlobals)
 {
     ProbeInfo probeInfo;
@@ -104,16 +124,20 @@ ProbeInfo3D BuildProbeInfo3DDirFirst(uint2 pixelPos, uint cascadeIndex, RCGlobal
     probeInfo3D.probeIndex = pixelPos % probeInfo3D.sideLength;
     probeInfo3D.rayIndex = floor(pixelPos / probeInfo3D.sideLength);
     
-    probeInfo3D.startDistance = sign(cascadeIndex) * GeometricSeriesSum(rcGlobals.rayLength0, rcGlobals.rayScalingFactor, cascadeIndex);
+    probeInfo3D.startDistance = abs(GeometricSeriesSum(rcGlobals.rayLength0, rcGlobals.rayScalingFactor, cascadeIndex));
     probeInfo3D.range = rcGlobals.rayLength0 * pow(rcGlobals.rayScalingFactor, cascadeIndex);
     
     return probeInfo3D;
 }
 
-float3 GetRCRayDir(int2 rayIndex, uint cascadeIndex)
+float3 GetRCRayDir(int2 rayIndex, int raysPerDim)
 {
-    float3 dirVec = float3(1.0f, 1.0f, 1.0f);
+    float2 rayIndexFloat = rayIndex;
+    rayIndexFloat += 0.5f;
     
-    return normalize(dirVec);
+    float2 uvCoord = Remap(int2(0, 0), int2(raysPerDim, raysPerDim), -1.0f, 1.0f, rayIndexFloat);
+    
+    return normalize(OctToFloat3EqualArea(uvCoord));
 }
 
+#endif // RCCOMMON_H
