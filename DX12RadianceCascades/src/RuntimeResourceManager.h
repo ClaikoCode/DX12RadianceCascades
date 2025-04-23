@@ -9,6 +9,7 @@ enum ModelID : UUID64
 {
 	ModelIDSponza = 0,
 	ModelIDSphereTest,
+	ModelIDPlane,
 };
 
 enum RayDispatchID : uint32_t

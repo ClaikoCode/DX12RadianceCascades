@@ -120,16 +120,44 @@ void RadianceCascades::Update(float deltaT)
 {
 	RuntimeResourceManager::UpdateGraphicsPSOs();
 
-	static bool isMouseExclusive = true;
-	if (GameInput::IsFirstPressed(GameInput::kKey_f))
+	// Mouse update
 	{
-		isMouseExclusive = !isMouseExclusive;
-		GameInput::SetMouseExclusiveMode(isMouseExclusive);
-	}
+		static bool isMouseExclusive = true;
+		if (GameInput::IsFirstPressed(GameInput::kKey_f))
+		{
+			isMouseExclusive = !isMouseExclusive;
+			GameInput::SetMouseExclusiveMode(isMouseExclusive);
+		}
 
-	if (isMouseExclusive)
+		if (isMouseExclusive)
+		{
+			m_cameraController->Update(deltaT);
+		}
+	}
+	
 	{
-		m_cameraController->Update(deltaT);
+		if (GameInput::IsFirstPressed(GameInput::kKey_v))
+		{
+			m_settings.rcSettings.visualizeRC3DCascades = !m_settings.rcSettings.visualizeRC3DCascades;
+
+			
+		}
+
+		if (m_settings.rcSettings.visualizeRC3DCascades)
+		{
+			int& cascadeVisIndex = m_settings.rcSettings.cascadeVisIndex;
+
+			if (GameInput::IsFirstPressed(GameInput::kKey_up))
+			{
+				cascadeVisIndex++;
+			}
+			else if (GameInput::IsFirstPressed(GameInput::kKey_down))
+			{
+				cascadeVisIndex--;
+			}
+
+			cascadeVisIndex = (int)Math::Clamp((float)cascadeVisIndex, 0.0f, (float)m_rcManager3D.GetCascadeIntervalCount() - 1.0f);
+		}
 	}
 
 	GraphicsContext& gfxContext = GraphicsContext::Begin(L"Scene Update");
@@ -204,9 +232,11 @@ void RadianceCascades::RenderScene()
 			FullScreenCopyCompute(m_rcManager2D.GetCascadeInterval(currentCascadeVisIndex), Graphics::g_SceneColorBuffer);
 		}
 	}
-
-	// Keep render debug last in pipeline.
-	if (m_settings.globalSettings.renderDebug)
+	else if (m_settings.rcSettings.visualizeRC3DCascades)
+	{
+		FullScreenCopyCompute(m_rcManager3D.GetCascadeIntervalBuffer(m_settings.rcSettings.cascadeVisIndex), Graphics::g_SceneColorBuffer);
+	}
+	else if (m_settings.globalSettings.renderDebug) // Keep render debug last in pipeline.
 	{
 		DebugRenderCameraInfo camInfo;
 		camInfo.viewProjMatrix = m_camera.GetViewProjMatrix();
@@ -232,10 +262,18 @@ void RadianceCascades::InitializeScene()
 	}
 
 	{
-		//ModelInstance& modelInstance = AddModelInstance(ModelIDSphereTest);
-		//modelInstance.Resize(100.0f * modelInstance.GetRadius());
-		//modelInstance.GetTransform().SetTranslation(GetMainSceneModelCenter());
+		//ModelInstance& modelInstance = AddModelInstance(ModelIDPlane);
+		//modelInstance.Resize(10.0f * modelInstance.GetRadius());
+		
 	}
+
+	{
+		ModelInstance& modelInstance = AddModelInstance(ModelIDSphereTest);
+		modelInstance.Resize(100.0f * modelInstance.GetRadius());
+		modelInstance.GetTransform().SetTranslation(GetMainSceneModelCenter() - Math::Vector3(0.0f, 550.0f, 0.0f));
+	}
+
+	
 
 	// Setup camera
 	{
@@ -243,7 +281,7 @@ void RadianceCascades::InitializeScene()
 
 		OrientedBox obb = GetMainSceneModelInstance().GetBoundingBox();
 		float modelRadius = Length(obb.GetDimensions()) * 0.5f;
-		const Vector3 eye = obb.GetCenter() + Vector3(modelRadius * 0.5f, 0.0f, 0.0f);
+		const Vector3 eye = obb.GetCenter() + Vector3(modelRadius * 0.5f, 10.0f, 0.0f);
 		m_camera.SetEyeAtUp(eye, Vector3(kZero), Vector3(kYUnitVector));
 		m_camera.SetZRange(0.5f, 5000.0f);
 		
@@ -419,7 +457,7 @@ void RadianceCascades::InitializeRCResources()
 	float diag = Math::Length({ (float)::GetSceneColorWidth(), (float)::GetSceneColorHeight(), 0.0f });
 	m_rcManager2D.Init(SAMPLE_LEN_0, RAYS_PER_PROBE_0, diag);
 
-	m_rcManager3D.Init(1.0f, 16u);
+	m_rcManager3D.Init(10.0f, 16u);
 }
 
 void RadianceCascades::InitializeRT()
@@ -494,7 +532,7 @@ void RadianceCascades::InitializeRT()
 		pso.SetLocalRootSignature(&localRootSig);
 
 		pso.SetDxilLibrary(s_DXILExports, RuntimeResourceManager::GetShader(ShaderIDRCRaytraceRT));
-		pso.SetPayloadAndAttributeSize(4, 8);
+		pso.SetPayloadAndAttributeSize(8, 8);
 
 		pso.SetHitGroup(s_HitGroupName, D3D12_HIT_GROUP_TYPE_TRIANGLES);
 		pso.SetClosestHitShader(L"ClosestHitShader");
@@ -654,13 +692,31 @@ void RadianceCascades::RenderRCRaytracing(Camera& camera)
 		rtCommandList->SetComputeRootShaderResourceView(RootEntryRCRaytracingRTGSceneSRV, m_sceneTLAS.GetBVH());
 		rtContext.SetDynamicConstantBufferView(RootEntryRCRaytracingRTGGlobalInfoCB, sizeof(GlobalInfo), &globalInfo);
 		rtContext.SetDynamicConstantBufferView(RootEntryRCRaytracingRTGRCGlobalsCB, sizeof(RCGlobalInfo), &rcGlobalInfo);
-	}
 
-	DebugDrawer::BindDebugBuffers(rtContext, RootEntryRCRaytracingRTGCount);
+		DebugDrawer::BindDebugBuffers(rtContext, RootEntryRCRaytracingRTGCount);
+	}
 
 	// Transition resources
 	{
 		rtContext.TransitionResource(m_minMaxDepthMips, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
+	}
+
+	// Will offset the target UAV to start at the minmax depth resolution that is correct.
+	// Each texel in the depth needs to correspond to a probe.
+	uint32_t depthIndexOffset = 0;
+	{
+		const uint32_t probePerDim0 = (uint32_t)Math::Sqrt((float)m_rcManager3D.GetProbeCount(0));
+		const uint32_t probeScalingFactor = m_rcManager3D.GetProbeScalingFactor();
+
+		uint32_t depthTopWidth = m_minMaxDepthMips.GetWidth();
+		while (depthTopWidth != probePerDim0)
+		{
+			depthTopWidth /= probeScalingFactor;
+			depthIndexOffset++;
+
+			// If this occurs, some dimension is wrong. Either adjust depth min max dimensions or probe scaling.
+			ASSERT(depthTopWidth != 1);
+		}
 	}
 
 	const D3D12_CPU_DESCRIPTOR_HANDLE* depthUAVStart = &m_minMaxDepthMips.GetUAV();
@@ -677,12 +733,12 @@ void RadianceCascades::RenderRCRaytracing(Camera& camera)
 		const DescriptorHandle& rcBufferUAV = RuntimeResourceManager::GetDescCopy(cascadeBuffer.GetUAV());
 		rtCommandList->SetComputeRootDescriptorTable(RootEntryRCRaytracingRTGOutputUAV, rcBufferUAV);
 
-		const DescriptorHandle& depthCascadeUAV = RuntimeResourceManager::GetDescCopy(*(depthUAVStart + cascadeIndex + 4));
+		const DescriptorHandle& depthCascadeUAV = RuntimeResourceManager::GetDescCopy(*(depthUAVStart + cascadeIndex + depthIndexOffset));
 		rtCommandList->SetComputeRootDescriptorTable(RootEntryRCRaytracingRTGDepthTextureUAV, depthCascadeUAV);
 
 		uint32_t raysPerProbe = m_rcManager3D.GetRaysPerProbe(cascadeIndex);
 		uint32_t probeCount = m_rcManager3D.GetProbeCount(cascadeIndex);
-		uint32_t dispatchDims = Math::Sqrt(raysPerProbe) * Math::Sqrt(probeCount);
+		uint32_t dispatchDims = (uint32_t)(Math::Sqrt((float)raysPerProbe) * Math::Sqrt((float)probeCount));
 		::DispatchRays(
 			RayDispatchIDRCRaytracing, 
 			dispatchDims,
@@ -784,6 +840,8 @@ void RadianceCascades::RunMinMaxDepth(DepthBuffer& sourceDepthBuffer)
 		cmptContext.SetDynamicDescriptors(RootEntryMinMaxDepthSourceDepthUAV, 0, 1, startUAV + i);
 		cmptContext.SetDynamicDescriptors(RootEntryMinMaxDepthTargetDepthUAV, 0, 1, startUAV + i + 1);
 
+		// Must insert resource barrier between each dispatch as the output will otherwise be undefined.
+		// TODO: Find why this is necessary when the same resource is being used? Each dispatch needs to be executed before the next can start, no?
 		cmptContext.InsertUAVBarrier(m_minMaxDepthMips);
 		cmptContext.Dispatch2D(depthSourceInfo.sourceWidth >> 1, depthSourceInfo.sourceHeight >> 1);
 	}

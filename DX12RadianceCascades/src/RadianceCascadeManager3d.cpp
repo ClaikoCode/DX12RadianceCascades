@@ -7,14 +7,15 @@ void RadianceCascadeManager3D::Init(float rayLength0, uint32_t raysPerProbe0)
 {
 	ASSERT(Math::IsPowerOfTwo(raysPerProbe0) && raysPerProbe0 > 8u);
 
-	const uint32_t cascadeCount = 1;
-	const uint32_t probeCountPerDim0 = 32;
+	const uint32_t cascadeCount = 7;
+	const uint32_t probeCountPerDim0 = 128;
 	
 	if (m_cascadeIntervals.size() < cascadeCount)
 	{
 		m_cascadeIntervals.resize(cascadeCount);
 	}
 
+	uint32_t actualCascadeCount = cascadeCount;
 	uint32_t probeCount = probeCountPerDim0 * probeCountPerDim0;
 	uint32_t raysPerProbe = raysPerProbe0;
 	for (uint32_t i = 0; i < cascadeCount; i++)
@@ -24,8 +25,20 @@ void RadianceCascadeManager3D::Init(float rayLength0, uint32_t raysPerProbe0)
 		uint32_t textureSideLength = (uint32_t)Math::Sqrt((float)(probeCount * raysPerProbe));
 		m_cascadeIntervals[i].Create(cascadeName, textureSideLength, textureSideLength, 1, DXGI_FORMAT_R16G16B16A16_FLOAT);
 
+		// If we have reached the maximum depth that we can subdivide probes, we stop and save over the new value.
+		if (probeCount == 1)
+		{
+			actualCascadeCount = i + 1;
+			break;
+		}
+
 		probeCount /= m_scalingFactor.probeScalingFactor * m_scalingFactor.probeScalingFactor;
 		raysPerProbe *= m_scalingFactor.rayScalingFactor;
+	}
+
+	if (actualCascadeCount != cascadeCount)
+	{
+		m_cascadeIntervals.resize(actualCascadeCount);
 	}
 
 	m_rayLength0 = rayLength0;

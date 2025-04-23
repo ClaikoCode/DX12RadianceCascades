@@ -13,6 +13,8 @@
 #include "RCCommon3D.hlsli"
 
 #define BARYCENTRIC_NORMALIZATION(bary, val1, val2, val3) (bary.x * val1 + bary.y * val2 + bary.z * val3)
+#define CASCADE_VIS 0
+#define PROBE_SUBSET 1
 
 RaytracingAccelerationStructure Scene : register(t0);
 RWTexture2D<float4> renderOutput : register(u0);
@@ -95,9 +97,36 @@ float2 LoadUVFromVertex(uint vertexByteOffset, uint uvOffsetInBytes)
     return Load32BitIntTo16BitFloats(uvs);
 }
 
+void DrawCascadeRay(float3 color, float tOffset, int2 probeIndex)
+{
+    int2 probeSubset = probeIndex % PROBE_SUBSET;
+    
+    if (cascadeInfo.cascadeIndex == CASCADE_VIS && length(probeSubset) == 0)
+    {
+        float3 cascadeRayStart = WorldRayOrigin() + WorldRayDirection() * RayTMin();
+        float3 cascadeRayEnd = WorldRayOrigin() + WorldRayDirection() * (RayTCurrent() + tOffset);
+        
+        DrawLine(cascadeRayStart, cascadeRayEnd, color);
+    }
+}
+
+void DrawProbe(int2 probeIndex, float3 probeOrigin, float probeRadius)
+{
+    int2 probeSubset = probeIndex % PROBE_SUBSET;
+    
+    if (cascadeInfo.cascadeIndex == CASCADE_VIS && length(probeSubset) == 0)
+    {
+        if(probeRadius > EPSILON)
+        {
+            DrawSphere(probeOrigin, probeRadius, float3(1.0f, 1.0f, 1.0f));
+        }
+    }
+}
+
+// Minimum of 4 bytes required for payloads.
 struct RayPayload
 {
-    float dummy; // Minimum of 4 bytes required for payloads.
+    int2 probeIndex;
 };
 
 inline void GenerateCameraRay(uint2 index, out float3 origin, out float3 direction)
@@ -116,11 +145,9 @@ inline void GenerateCameraRay(uint2 index, out float3 origin, out float3 directi
     direction = normalize(world.xyz - origin);
 }
 
-inline RayDesc GenerateProbeRay(uint2 index)
+inline RayDesc GenerateProbeRay(ProbeInfo3D probeInfo3D)
 {
     RayDesc ray;
-    
-    ProbeInfo3D probeInfo3D = BuildProbeInfo3DDirFirst(index, cascadeInfo.cascadeIndex, rcGlobals);
 
     float3 rayDir = GetRCRayDir(probeInfo3D.rayIndex, sqrt(probeInfo3D.rayCount));
 
@@ -143,15 +170,11 @@ inline RayDesc GenerateProbeRay(uint2 index)
         rayOrigin = worldPos;
     }
     
-    // FOR SOME REASON SETTING THE VALUES MANUALLY GIVES OK BUT 
-    // IF SET WITH PROBE INFO, IT JUST DIES. THIS IS EVEN THOUGH
-    // THE VALUES FOR TMIN AND TMAX ARE CONSISTENT UP UNTIL TRACE RAY CALL.
-    
     ray.Direction = rayDir;
     ray.Origin = rayOrigin;
-    ray.TMax = 10.0f;
+    ray.TMax = probeInfo3D.startDistance + probeInfo3D.range;
     ray.TMin = probeInfo3D.startDistance;
-    
+   
     //DrawSphere(rayOrigin, 3.0f, float3(1.0f, 0.0f, 0.0f));
     //DrawLine(rayOrigin, rayOrigin + rayDir * ray.TMax, float3(1.0f, 0.0f, 0.0f));
 
@@ -161,17 +184,13 @@ inline RayDesc GenerateProbeRay(uint2 index)
 [shader("raygeneration")]
 void RayGenerationShader()
 {
-    RayDesc ray = GenerateProbeRay(DispatchRaysIndex().xy);
+    ProbeInfo3D probeInfo3D = BuildProbeInfo3DDirFirst(DispatchRaysIndex().xy, cascadeInfo.cascadeIndex, rcGlobals);
+    RayDesc ray = GenerateProbeRay(probeInfo3D);
     
-    RayPayload payload = { 0.0f };
-
-    //uint2 res = (DispatchRaysIndex().xy % 4);
-    //if (length(res) == 0)
-    //{
-    //    //DrawLine(ray.Origin, ray.Origin + ray.Direction, float3(1.0f, 0.0f, 0.0f));
-    //}
+    RayPayload payload = { probeInfo3D.probeIndex };
     
-    //ray.TMin = 0.0f;
+    DrawProbe(probeInfo3D.probeIndex, ray.Origin, ray.TMin);
+    
     TraceRay(Scene, 0, ~0, 0, 1, 0, ray, payload);
 }
 
@@ -209,13 +228,14 @@ void ClosestHitShader(inout RayPayload payload, in BuiltInTriangleIntersectionAt
     const float2 uv = BARYCENTRIC_NORMALIZATION(barycentrics, uv0, uv1, uv2);
     
     uint2 pixelIndex = DispatchRaysIndex().xy;
-    DrawLine(WorldRayOrigin(), WorldRayOrigin() + WorldRayDirection() * 2.0f, float3(1.0f, 0.0f, 0.0f));
-    renderOutput[pixelIndex] = float4(albedoTex.SampleLevel(sourceSampler, uv, 0).rgb, 1);
+    //DrawCascadeRay(float3(1.0f, 0.0f, 0.0f), 0.5f, payload.probeIndex);
+    renderOutput[pixelIndex] = float4(emissiveTex.SampleLevel(sourceSampler, uv, 0).rgb, 1);
+    //renderOutput[pixelIndex] = float4(float3(0.0f, 0.0f, 1.0f), 1.0f);
 }
 
 [shader("miss")]
 void MissShader(inout RayPayload payload)
 {
-    //DrawLine(WorldRayOrigin(), WorldRayOrigin() + WorldRayDirection() * 2.0f, float3(0.0f, 1.0f, 0.0f));
-    renderOutput[DispatchRaysIndex().xy] = float4(1, 1, 0, 1);
+    //DrawCascadeRay(float3(0.0f, 1.0f, 0.0f), 0.0f, payload.probeIndex);
+    renderOutput[DispatchRaysIndex().xy] = float4(1.0f, 0.0f, 0.0f, 1.0f);
 }

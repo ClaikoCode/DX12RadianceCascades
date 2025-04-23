@@ -107,6 +107,7 @@ RuntimeResourceManager::RuntimeResourceManager() : m_usedPSOs({})
 	{
 		AddModelImpl(ModelIDSponza, L"models\\Sponza\\PBR\\sponza2.gltf", true);
 		AddModelImpl(ModelIDSphereTest, L"models\\Testing\\SphereTest.gltf", true);
+		AddModelImpl(ModelIDPlane, L"models\\Testing\\Plane.gltf", true);
 	}
 }
 

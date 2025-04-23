@@ -16,6 +16,7 @@ public:
 	uint32_t GetProbeCount(uint32_t cascadeIndex);
 	uint32_t GetCascadeIntervalCount() { return (uint32_t)m_cascadeIntervals.size(); }
 	ColorBuffer& GetCascadeIntervalBuffer(uint32_t cascadeIndex) { return m_cascadeIntervals[cascadeIndex]; }
+	uint32_t GetProbeScalingFactor() const { return m_scalingFactor.probeScalingFactor; }
 
 private:
 	struct ScalingFactor
