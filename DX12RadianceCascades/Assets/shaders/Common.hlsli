@@ -1,4 +1,5 @@
-#pragma once
+#ifndef COMMON_H
+#define COMMON_H
 
 #define NO_SECOND_UV 1
 
@@ -24,11 +25,13 @@ float3 WorldPosFromDepth(float depthVal, float2 uv, matrix invProjMatrix, matrix
     clipSpacePos.y = -clipSpacePos.y;
 	
 	// Convert the clip space to view space
-    float4 viewSpacePos = mul(invProjMatrix, clipSpacePos);
+    float4 viewSpacePos = mul(clipSpacePos, invProjMatrix);
     viewSpacePos /= viewSpacePos.w;
 	
 	// Convert the view space to world space
-    float4 worldPosition = mul(invViewMatrix, viewSpacePos);
+    float4 worldPosition = mul(viewSpacePos, invViewMatrix);
 	
     return worldPosition.xyz;
 }
+
+#endif // COMMON_H

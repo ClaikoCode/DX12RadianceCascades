@@ -47,7 +47,7 @@ struct RaytracingDispatchRayInputs
 
 	}
 
-	D3D12_DISPATCH_RAYS_DESC BuildDispatchRaysDesc(UINT width, UINT height)
+	D3D12_DISPATCH_RAYS_DESC BuildDispatchRaysDesc(UINT width, UINT height) const
 	{
 		D3D12_DISPATCH_RAYS_DESC desc = {};
 

@@ -1,7 +1,7 @@
 #include "rcpch.h"
 
-#include "Model\Renderer.h"
 #include "Model\ModelLoader.h"
+#include "Model\Renderer.h"
 
 #include "Core\BufferManager.h"
 #include "Core\CommandContext.h"
@@ -23,6 +23,8 @@ static const std::wstring s_BackupModelPath = L"models\\Testing\\SphereTest.gltf
 #define SAMPLE_LEN_0 20.0f
 #define RAYS_PER_PROBE_0 4.0f
 
+typedef ComputeContext RaytracingContext;
+
 namespace
 {
 	uint32_t GetSceneColorWidth()
@@ -35,30 +37,42 @@ namespace
 		return Graphics::g_SceneColorBuffer.GetHeight();
 	}
 
-	ShaderTable<LocalHitData> CreateModelShaderTable(const std::wstring& exportName, const InternalModel& internalModel, RaytracingPSO& rtPSO)
+	void FillCameraInfo(GlobalInfo& globalInfo, const Camera& camera)
 	{
-		ASSERT(internalModel.modelPtr != nullptr);
+		globalInfo.viewProjMatrix = camera.GetViewProjMatrix();
 
-		ShaderTable<LocalHitData> hitShaderTable = {};
-		
-		const Model& model = *internalModel.modelPtr;
-		const Mesh* meshPtr = (const Mesh*)model.m_MeshData.get();
-		void* shaderIdentifier = rtPSO.GetShaderIdentifier(exportName);
-		for (int i = 0; i < (int)model.m_NumMeshes; i++)
+		globalInfo.invViewProjMatrix = Math::Matrix4(DirectX::XMMatrixInverse(nullptr, camera.GetViewProjMatrix()));
+		globalInfo.invProjMatrix = Math::Matrix4(DirectX::XMMatrixInverse(nullptr, camera.GetProjMatrix()));
+		globalInfo.invViewMatrix = Math::Matrix4(DirectX::XMMatrixInverse(nullptr, camera.GetViewMatrix()));
+
+		globalInfo.cameraPos = camera.GetPosition();
+	}
+
+	RaytracingContext& BeginRaytracingContext(const std::wstring& name, ComPtr<ID3D12GraphicsCommandList4>& rtCommandList)
+	{
+		ComputeContext& cmptContext = ComputeContext::Begin(name);
+
+		ThrowIfFailed(cmptContext.GetCommandList()->QueryInterface(rtCommandList.GetAddressOf()));
+
+		return cmptContext;
+	}
+
+	void DispatchRays(RayDispatchID rayDispatchID, uint32_t width, uint32_t height, ComPtr<ID3D12GraphicsCommandList4>& rtCommandList)
+	{
+		const RaytracingDispatchRayInputs& rayDispatch = RuntimeResourceManager::GetRaytracingDispatch(rayDispatchID);
+		D3D12_DISPATCH_RAYS_DESC rayDispatchDesc = rayDispatch.BuildDispatchRaysDesc(width, height);
+		rtCommandList->SetPipelineState1(rayDispatch.m_stateObject.Get());
+		rtCommandList->DispatchRays(&rayDispatchDesc);
+	}
+
+	void AddModels(std::vector<InternalModelInstance>& modelInstances, Renderer::MeshSorter& meshSorter)
+	{
+		for (auto& modelInstance : modelInstances)
 		{
-			const Mesh& mesh = meshPtr[i];
-			ASSERT(mesh.numDraws == 1);
-
-			auto& entry = hitShaderTable.emplace_back();
-			entry.entryData.materialSRVs		= Renderer::s_TextureHeap[mesh.srvTable]; // Start of descriptor table.
-			entry.entryData.geometrySRV			= internalModel.geometryDataSRVHandle;
-			entry.entryData.indexByteOffset		= mesh.ibOffset;
-			entry.entryData.vertexByteOffset	= mesh.vbOffset;
-
-			entry.SetShaderIdentifier(shaderIdentifier);
+			modelInstance.Render(meshSorter);
 		}
 
-		return hitShaderTable;
+		meshSorter.Sort();
 	}
 }
 
@@ -138,8 +152,8 @@ void RadianceCascades::RenderScene()
 
 	if (m_settings.globalSettings.renderRaster)
 	{
-		RenderSceneImpl(m_camera, m_mainViewport, m_mainScissor);
-		RunMinMaxDepth();
+		RenderRaster(m_camera, m_mainViewport, m_mainScissor);
+		RunMinMaxDepth(Graphics::g_SceneDepthBuffer);
 	}
 
 	if (m_settings.globalSettings.renderRaytracing)
@@ -147,11 +161,21 @@ void RadianceCascades::RenderScene()
 		RenderRaytracing(m_camera);
 	}
 
-	if (m_settings.globalSettings.renderDebug)
+	if (m_settings.rcSettings.renderRC3D)
 	{
-		DebugRenderCameraInfo camInfo;
-		camInfo.viewProjMatrix = m_camera.GetViewProjMatrix();
-		DebugDrawer::Draw(camInfo, Graphics::g_SceneColorBuffer, m_mainViewport, m_mainScissor);
+		Camera cam = m_camera;
+
+		if (m_settings.globalSettings.useDebugCam)
+		{
+			cam.SetPosition(GetMainSceneModelCenter());
+			cam.SetRotation(Math::Quaternion(Math::Vector3(0.0f, 1.0f, 0.0f), Math::XM_PI));
+			cam.Update();
+
+			RenderDepthOnly(cam, Graphics::g_SceneDepthBuffer, m_mainViewport, m_mainScissor, true);
+			RunMinMaxDepth(Graphics::g_SceneDepthBuffer);
+		}
+
+		RenderRCRaytracing(cam);
 	}
 
 	if (m_settings.rcSettings.visualize2DCascades)
@@ -180,6 +204,14 @@ void RadianceCascades::RenderScene()
 			FullScreenCopyCompute(m_rcManager2D.GetCascadeInterval(currentCascadeVisIndex), Graphics::g_SceneColorBuffer);
 		}
 	}
+
+	// Keep render debug last in pipeline.
+	if (m_settings.globalSettings.renderDebug)
+	{
+		DebugRenderCameraInfo camInfo;
+		camInfo.viewProjMatrix = m_camera.GetViewProjMatrix();
+		DebugDrawer::Draw(camInfo, Graphics::g_SceneColorBuffer, Graphics::g_SceneDepthBuffer, m_mainViewport, m_mainScissor);
+	}
 }
 
 void RadianceCascades::InitializeScene()
@@ -200,9 +232,9 @@ void RadianceCascades::InitializeScene()
 	}
 
 	{
-		ModelInstance& modelInstance = AddModelInstance(ModelIDSphereTest);
-		modelInstance.Resize(100.0f * modelInstance.GetRadius());
-		modelInstance.GetTransform().SetTranslation(GetMainSceneModelCenter());
+		//ModelInstance& modelInstance = AddModelInstance(ModelIDSphereTest);
+		//modelInstance.Resize(100.0f * modelInstance.GetRadius());
+		//modelInstance.GetTransform().SetTranslation(GetMainSceneModelCenter());
 	}
 
 	// Setup camera
@@ -233,6 +265,7 @@ void RadianceCascades::InitializePSOs()
 		RuntimeResourceManager::RegisterPSO(PSOIDComputeRCRadianceFieldPSO, &m_rcRadianceFieldPSO,			PSOTypeCompute);
 		RuntimeResourceManager::RegisterPSO(PSOIDRaytracingTestPSO,			&m_rtTestPSO,					PSOTypeRaytracing);
 		RuntimeResourceManager::RegisterPSO(PSOIDComputeMinMaxDepthPSO,		&m_minMaxDepthPSO,				PSOTypeCompute);
+		RuntimeResourceManager::RegisterPSO(PSOIDRCRaytracingPSO,			&m_rcRaytracePSO,				PSOTypeRaytracing);
 	}
 
 	// Bind shader ids to specific PSOs for recompilation purposes.
@@ -258,6 +291,7 @@ void RadianceCascades::InitializePSOs()
 		RuntimeResourceManager::AddShaderDependency(ShaderIDRCRadianceFieldCS, { PSOIDComputeRCRadianceFieldPSO });
 		RuntimeResourceManager::AddShaderDependency(ShaderIDRaytracingTestRT, { PSOIDRaytracingTestPSO });
 		RuntimeResourceManager::AddShaderDependency(ShaderIDMinMaxDepthCS, { PSOIDComputeMinMaxDepthPSO });
+		RuntimeResourceManager::AddShaderDependency(ShaderIDRCRaytraceRT, { PSOIDRCRaytracingPSO });
 	}
 
 	{
@@ -384,12 +418,15 @@ void RadianceCascades::InitializeRCResources()
 
 	float diag = Math::Length({ (float)::GetSceneColorWidth(), (float)::GetSceneColorHeight(), 0.0f });
 	m_rcManager2D.Init(SAMPLE_LEN_0, RAYS_PER_PROBE_0, diag);
+
+	m_rcManager3D.Init(1.0f, 16u);
 }
 
 void RadianceCascades::InitializeRT()
 {
-	RaytracingPSO& pso = m_rtTestPSO;
 	{
+		RaytracingPSO& pso = m_rtTestPSO;
+
 		RootSignature1& globalRootSig = m_rtTestGlobalRootSig;
 		globalRootSig.Reset(RootEntryRTGCount, 1, true);
 		globalRootSig[RootEntryRTGSRV].InitAsShaderResourceView(0);
@@ -420,11 +457,53 @@ void RadianceCascades::InitializeRT()
 
 		pso.SetHitGroup(s_HitGroupName, D3D12_HIT_GROUP_TYPE_TRIANGLES);
 		pso.SetClosestHitShader(L"ClosestHitShader");
-		
+
 		pso.SetMaxRayRecursionDepth(1);
 
 		pso.Finalize();
 	}
+
+	{
+		RaytracingPSO& pso = m_rcRaytracePSO;
+
+		RootSignature1& globalRootSig = m_rcRaytraceGlobalRootSig;
+		globalRootSig.Reset(RootEntryRCRaytracingRTGCount, 1, true);
+		globalRootSig[RootEntryRCRaytracingRTGSceneSRV].InitAsShaderResourceView(0);
+		globalRootSig[RootEntryRCRaytracingRTGOutputUAV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 1);
+		globalRootSig[RootEntryRCRaytracingRTGGlobalInfoCB].InitAsConstantBufferView(0);
+		globalRootSig[RootEntryRCRaytracingRTGRCGlobalsCB].InitAsConstantBufferView(1);
+		globalRootSig[RootEntryRCRaytracingRTGCascadeInfoCB].InitAsConstantBufferView(2);
+		globalRootSig[RootEntryRCRaytracingRTGDepthTextureUAV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 1);
+		{
+			SamplerDesc sampler = Graphics::SamplerLinearWrapDesc;
+			globalRootSig.InitStaticSampler(0, sampler);
+		}
+
+		globalRootSig.Finalize(L"Global Root Signature");
+		pso.SetGlobalRootSignature(&globalRootSig);
+
+		RootSignature1& localRootSig = m_rcRaytraceLocalRootSig;
+		localRootSig.Reset(RootEntryRCRaytracingRTLCount, 0);
+		const uint32_t localRootSigSpace = 1;
+		localRootSig.Reset(RootEntryRCRaytracingRTLCount, 0); 
+		localRootSig[RootEntryRCRaytracingRTLGeomDataSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 0, 1, D3D12_SHADER_VISIBILITY_ALL, localRootSigSpace);
+		localRootSig[RootEntryRCRaytracingRTLTexturesSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 5, D3D12_SHADER_VISIBILITY_ALL, localRootSigSpace);
+		localRootSig[RootEntryRCRaytracingRTLGeomOffsetsCB].InitAsConstants(2, 0, localRootSigSpace, D3D12_SHADER_VISIBILITY_ALL);
+
+		localRootSig.Finalize(L"Local Root Signature", D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE);
+		pso.SetLocalRootSignature(&localRootSig);
+
+		pso.SetDxilLibrary(s_DXILExports, RuntimeResourceManager::GetShader(ShaderIDRCRaytraceRT));
+		pso.SetPayloadAndAttributeSize(4, 8);
+
+		pso.SetHitGroup(s_HitGroupName, D3D12_HIT_GROUP_TYPE_TRIANGLES);
+		pso.SetClosestHitShader(L"ClosestHitShader");
+
+		pso.SetMaxRayRecursionDepth(1);
+
+		pso.Finalize();
+	}
+	
 
 	// Initialize TLASes.
 	std::vector<TLASInstanceGroup> instanceGroups = {};
@@ -446,7 +525,7 @@ void RadianceCascades::InitializeRT()
 			instanceGroups.push_back(instanceGroup);
 		}
 
-		m_sceneModelTLASInstance.Init(instanceGroups);
+		m_sceneTLAS.Init(instanceGroups);
 	}
 
 	// Initialize RT dispatch inputs.
@@ -458,10 +537,11 @@ void RadianceCascades::InitializeRT()
 		}
 
 		RuntimeResourceManager::BuildRaytracingDispatchInputs(PSOIDRaytracingTestPSO, modelIDs, RayDispatchIDTest);
+		RuntimeResourceManager::BuildRaytracingDispatchInputs(PSOIDRCRaytracingPSO, modelIDs, RayDispatchIDRCRaytracing);
 	}
 }
 
-void RadianceCascades::RenderSceneImpl(Camera& camera, D3D12_VIEWPORT viewPort, D3D12_RECT scissor)
+void RadianceCascades::RenderRaster(Camera& camera, D3D12_VIEWPORT viewPort, D3D12_RECT scissor)
 {
 	ColorBuffer& sceneColorBuffer = Graphics::g_SceneColorBuffer;
 	DepthBuffer& sceneDepthBuffer = Graphics::g_SceneDepthBuffer;
@@ -490,14 +570,7 @@ void RadianceCascades::RenderSceneImpl(Camera& camera, D3D12_VIEWPORT viewPort, 
 	meshSorter.AddRenderTarget(sceneColorBuffer);
 
 	// Add models
-	{
-		for (ModelInstance& modelInstance : m_sceneModels)
-		{
-			modelInstance.Render(meshSorter);
-		}
-
-		meshSorter.Sort();
-	}
+	::AddModels(m_sceneModels, meshSorter);
 
 	GraphicsContext& gfxContext = GraphicsContext::Begin(L"Scene Render");
 
@@ -527,7 +600,7 @@ void RadianceCascades::RenderRaytracing(Camera& camera)
 {
 	// TODO: Make any target viable. This would require a more sophisticated descriptor copy methodology.
 	ColorBuffer& colorTarget = Graphics::g_SceneColorBuffer;
-	DescriptorHandle colorDescriptorHandle = RuntimeResourceManager::GetSceneColorDescHandle();
+	DescriptorHandle colorDescriptorHandle = RuntimeResourceManager::GetDescCopy(Graphics::g_SceneColorBuffer.GetSRV());
 
 	RTParams rtParams = {};
 	rtParams.dispatchHeight = colorTarget.GetHeight();
@@ -536,46 +609,132 @@ void RadianceCascades::RenderRaytracing(Camera& camera)
 	rtParams.holeSize = 0.0f;
 
 	GlobalInfo rtGlobalInfo = {};
-	Math::Matrix4 viewProjMatrix = camera.GetViewProjMatrix();
-	rtGlobalInfo.viewProjMatrix = viewProjMatrix;
+	::FillCameraInfo(rtGlobalInfo, camera);
 
-	Math::Matrix4 invViewProjMatrix = Math::Matrix4(DirectX::XMMatrixInverse(nullptr, viewProjMatrix));
-	rtGlobalInfo.invViewProjMatrix = invViewProjMatrix;
-
-	rtGlobalInfo.cameraPos = camera.GetPosition();
-
-	ComputeContext& cmptContext = ComputeContext::Begin(L"Render Raytracing");
 	ComPtr<ID3D12GraphicsCommandList4> rtCommandList = nullptr;
-	ThrowIfFailed(cmptContext.GetCommandList()->QueryInterface(rtCommandList.GetAddressOf()));
+	RaytracingContext& rtContext = ::BeginRaytracingContext(L"Render Raytracing", rtCommandList);
 
 	// Transition resources
 	{
-		cmptContext.TransitionResource(colorTarget, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-		cmptContext.FlushResourceBarriers();
+		rtContext.TransitionResource(colorTarget, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
 	}
-
-	cmptContext.SetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, Renderer::s_TextureHeap.GetHeapPointer());
 
 	ID3D12DescriptorHeap* pDescriptorHeaps[] = { RuntimeResourceManager::GetDescriptorHeapPtr() };
 	rtCommandList->SetDescriptorHeaps(1, pDescriptorHeaps);
 	rtCommandList->SetComputeRootSignature(m_rtTestGlobalRootSig.GetSignature());
-	rtCommandList->SetComputeRootShaderResourceView(RootEntryRTGSRV, m_sceneModelTLASInstance.GetBVH());
+	rtCommandList->SetComputeRootShaderResourceView(RootEntryRTGSRV, m_sceneTLAS.GetBVH());
 	rtCommandList->SetComputeRootDescriptorTable(RootEntryRTGUAV, colorDescriptorHandle);
-	cmptContext.SetDynamicConstantBufferView(RootEntryRTGParamCB, sizeof(RTParams), &rtParams);
-	cmptContext.SetDynamicConstantBufferView(RootEntryRTGInfoCB, sizeof(GlobalInfo), &rtGlobalInfo);
-	DebugDrawer::BindDebugBuffers(cmptContext, RootEntryRTGCount);
+	rtContext.SetDynamicConstantBufferView(RootEntryRTGParamCB, sizeof(RTParams), &rtParams);
+	rtContext.SetDynamicConstantBufferView(RootEntryRTGInfoCB, sizeof(GlobalInfo), &rtGlobalInfo);
+	DebugDrawer::BindDebugBuffers(rtContext, RootEntryRTGCount);
 
-	RaytracingDispatchRayInputs& rayDispatch = RuntimeResourceManager::GetRaytracingDispatch(RayDispatchIDTest);
-	D3D12_DISPATCH_RAYS_DESC rayDispatchDesc = rayDispatch.BuildDispatchRaysDesc(colorTarget.GetWidth(), colorTarget.GetHeight());
-	rtCommandList->SetPipelineState1(m_rtTestPSO.GetStateObject().Get());
-	rtCommandList->DispatchRays(&rayDispatchDesc);
+	::DispatchRays(RayDispatchIDTest, colorTarget.GetWidth(), colorTarget.GetHeight(), rtCommandList);
 
-	cmptContext.Finish(true);
+	rtContext.Finish(true);
 }
 
-void RadianceCascades::RunMinMaxDepth()
+void RadianceCascades::RenderRCRaytracing(Camera& camera)
 {
-	DepthBuffer& inputDepthBuffer = Graphics::g_SceneDepthBuffer;
+	GlobalInfo globalInfo = {};
+	::FillCameraInfo(globalInfo, camera);
+
+	RCGlobalInfo rcGlobalInfo = {};
+	m_rcManager3D.FillRCGlobalInfo(rcGlobalInfo);
+
+	ComPtr<ID3D12GraphicsCommandList4> rtCommandList = nullptr;
+	RaytracingContext& rtContext = ::BeginRaytracingContext(L"Render RC Raytracing", rtCommandList);
+	
+	ID3D12DescriptorHeap* pDescriptorHeaps[] = { RuntimeResourceManager::GetDescriptorHeapPtr() };
+	rtCommandList->SetDescriptorHeaps(1, pDescriptorHeaps);
+
+	// TODO: Add this to ::DispatchRays() by saving the global root sig with a specific PSO so they can be fetched together.
+	rtCommandList->SetComputeRootSignature(m_rcRaytraceGlobalRootSig.GetSignature());
+
+	{
+		rtCommandList->SetComputeRootShaderResourceView(RootEntryRCRaytracingRTGSceneSRV, m_sceneTLAS.GetBVH());
+		rtContext.SetDynamicConstantBufferView(RootEntryRCRaytracingRTGGlobalInfoCB, sizeof(GlobalInfo), &globalInfo);
+		rtContext.SetDynamicConstantBufferView(RootEntryRCRaytracingRTGRCGlobalsCB, sizeof(RCGlobalInfo), &rcGlobalInfo);
+	}
+
+	DebugDrawer::BindDebugBuffers(rtContext, RootEntryRCRaytracingRTGCount);
+
+	// Transition resources
+	{
+		rtContext.TransitionResource(m_minMaxDepthMips, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
+	}
+
+	const D3D12_CPU_DESCRIPTOR_HANDLE* depthUAVStart = &m_minMaxDepthMips.GetUAV();
+	for (uint32_t cascadeIndex = 0; cascadeIndex < m_rcManager3D.GetCascadeIntervalCount(); cascadeIndex++)
+	{
+		CascadeInfo cascadeInfo = {};
+		cascadeInfo.cascadeIndex = cascadeIndex;
+
+		rtContext.SetDynamicConstantBufferView(RootEntryRCRaytracingRTGCascadeInfoCB, sizeof(CascadeInfo), &cascadeInfo);
+		
+		ColorBuffer& cascadeBuffer = m_rcManager3D.GetCascadeIntervalBuffer(cascadeIndex);
+		rtContext.TransitionResource(cascadeBuffer, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
+
+		const DescriptorHandle& rcBufferUAV = RuntimeResourceManager::GetDescCopy(cascadeBuffer.GetUAV());
+		rtCommandList->SetComputeRootDescriptorTable(RootEntryRCRaytracingRTGOutputUAV, rcBufferUAV);
+
+		const DescriptorHandle& depthCascadeUAV = RuntimeResourceManager::GetDescCopy(*(depthUAVStart + cascadeIndex + 4));
+		rtCommandList->SetComputeRootDescriptorTable(RootEntryRCRaytracingRTGDepthTextureUAV, depthCascadeUAV);
+
+		uint32_t raysPerProbe = m_rcManager3D.GetRaysPerProbe(cascadeIndex);
+		uint32_t probeCount = m_rcManager3D.GetProbeCount(cascadeIndex);
+		uint32_t dispatchDims = Math::Sqrt(raysPerProbe) * Math::Sqrt(probeCount);
+		::DispatchRays(
+			RayDispatchIDRCRaytracing, 
+			dispatchDims,
+			dispatchDims,
+			rtCommandList
+		);
+	}
+
+	rtContext.Finish(true);
+}
+
+void RadianceCascades::RenderDepthOnly(Camera& camera, DepthBuffer& targetDepth, D3D12_VIEWPORT viewPort, D3D12_RECT scissor, bool clearDepth)
+{
+	GlobalConstants globals = {};
+	{
+		// Update global constants
+		float sunOriantation = -0.5f;
+		float sunInclination = 0.75f;
+		float costheta = cosf(sunOriantation);
+		float sintheta = sinf(sunOriantation);
+		float cosphi = cosf(sunInclination * 3.14159f * 0.5f);
+		float sinphi = sinf(sunInclination * 3.14159f * 0.5f);
+
+		Vector3 SunDirection = Normalize(Vector3(costheta * cosphi, sinphi, sintheta * cosphi));
+
+		globals.SunDirection = SunDirection;
+		globals.SunIntensity = Vector3(Scalar(0.5f));
+	}
+
+	Renderer::MeshSorter meshSorter = Renderer::MeshSorter(Renderer::MeshSorter::kDefault);
+	meshSorter.SetCamera(camera);
+	meshSorter.SetViewport(viewPort);
+	meshSorter.SetScissor(scissor);
+	meshSorter.SetDepthStencilTarget(targetDepth);
+
+	::AddModels(m_sceneModels, meshSorter);
+
+	GraphicsContext& gfxContext = GraphicsContext::Begin(L"Scene Render");
+
+	if (clearDepth)
+	{
+		gfxContext.TransitionResource(targetDepth, D3D12_RESOURCE_STATE_DEPTH_WRITE);
+		gfxContext.ClearDepth(targetDepth);
+	}
+
+	meshSorter.RenderMeshes(Renderer::MeshSorter::kZPass, gfxContext, globals);
+
+	gfxContext.Finish(true);
+}
+
+void RadianceCascades::RunMinMaxDepth(DepthBuffer& sourceDepthBuffer)
+{
 	ColorBuffer& minMaxDepthCopy = m_minMaxDepthCopy;
 	ColorBuffer& minMaxMipMaps = m_minMaxDepthMips;
 
@@ -587,14 +746,15 @@ void RadianceCascades::RunMinMaxDepth()
 
 	// Copy the depth buffer to a color buffer that can be read from as a UAV.
 	{
-		cmptContext.TransitionResource(inputDepthBuffer, D3D12_RESOURCE_STATE_COPY_SOURCE);
+		cmptContext.TransitionResource(sourceDepthBuffer, D3D12_RESOURCE_STATE_COPY_SOURCE);
 		cmptContext.TransitionResource(minMaxDepthCopy, D3D12_RESOURCE_STATE_COPY_DEST);
-		cmptContext.CopySubresource(minMaxDepthCopy, 0, inputDepthBuffer, 0);
+		cmptContext.CopySubresource(minMaxDepthCopy, 0, sourceDepthBuffer, 0);
 	}
 	
 	cmptContext.TransitionResource(minMaxMipMaps, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-	cmptContext.TransitionResource(minMaxDepthCopy, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
-
+	cmptContext.TransitionResource(minMaxDepthCopy, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+	cmptContext.TransitionResource(m_minMaxDepthMips, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
+	
 	// The first pass of min max depth uses the full resolution copy and writes to the first mip. 
 	{
 		SourceInfo depthSourceInfo = {};
@@ -608,6 +768,8 @@ void RadianceCascades::RunMinMaxDepth()
 
 		cmptContext.Dispatch2D(depthSourceInfo.sourceWidth >> 1, depthSourceInfo.sourceHeight >> 1);
 	}
+	
+	
 
 	const D3D12_CPU_DESCRIPTOR_HANDLE* startUAV = &m_minMaxDepthMips.GetUAV();
 	const uint32_t numMipMaps = minMaxMipMaps.GetNumMipMaps();
@@ -622,6 +784,7 @@ void RadianceCascades::RunMinMaxDepth()
 		cmptContext.SetDynamicDescriptors(RootEntryMinMaxDepthSourceDepthUAV, 0, 1, startUAV + i);
 		cmptContext.SetDynamicDescriptors(RootEntryMinMaxDepthTargetDepthUAV, 0, 1, startUAV + i + 1);
 
+		cmptContext.InsertUAVBarrier(m_minMaxDepthMips);
 		cmptContext.Dispatch2D(depthSourceInfo.sourceWidth >> 1, depthSourceInfo.sourceHeight >> 1);
 	}
 
@@ -784,6 +947,11 @@ void RadianceCascades::ClearPixelBuffers()
 	{
 		gfxContext.TransitionResource(m_flatlandScene, D3D12_RESOURCE_STATE_RENDER_TARGET, true);
 		gfxContext.ClearColor(m_flatlandScene);
+	}
+
+	{
+		gfxContext.TransitionResource(m_minMaxDepthMips, D3D12_RESOURCE_STATE_RENDER_TARGET, true);
+		gfxContext.ClearColor(m_minMaxDepthMips);
 	}
 	
 	m_rcManager2D.ClearBuffers(gfxContext);

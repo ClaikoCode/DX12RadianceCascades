@@ -12,6 +12,8 @@ __declspec(align(16)) struct GlobalInfo
 	Utils::GPUMatrix viewProjMatrix;
 	Utils::GPUMatrix invViewProjMatrix;
 	Math::Vector3 cameraPos;
+	Utils::GPUMatrix invViewMatrix;
+	Utils::GPUMatrix invProjMatrix;
 };
 
 __declspec(align(16)) struct RTParams
@@ -27,4 +29,13 @@ __declspec(align(16)) struct SourceInfo
 	bool isFirstDepth;
 	uint32_t sourceWidth;
 	uint32_t sourceHeight;
+};
+
+__declspec(align(16)) struct RCGlobalInfo
+{
+	uint32_t probeScalingFactor; // Per dim.
+	uint32_t rayScalingFactor;
+	uint32_t probeDim0;
+	uint32_t rayCount0;
+	float rayLength0;
 };

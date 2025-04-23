@@ -15,6 +15,7 @@ enum RayDispatchID : uint32_t
 {
 	RayDispatchIDNone = 0,
 	RayDispatchIDTest,
+	RayDispatchIDRCRaytracing,
 
 	RayDistpatchIDCount
 };
@@ -35,6 +36,7 @@ enum ShaderID : UUID64
 	ShaderIDDebugDrawPS,
 	ShaderIDDebugDrawVS,
 	ShaderIDMinMaxDepthCS,
+	ShaderIDRCRaytraceRT,
 
 	ShaderIDNone = NULL_ID
 };
@@ -53,6 +55,7 @@ enum PSOID : psoid_t
 	PSOIDRaytracingTestPSO,
 	PSOIDDebugDrawPSO,
 	PSOIDComputeMinMaxDepthPSO,
+	PSOIDRCRaytracingPSO,
 
 	PSOIDCount
 };
@@ -110,7 +113,6 @@ public:
 	static D3D12_SHADER_BYTECODE GetShader(ShaderID shaderID);
 
 	static ID3D12DescriptorHeap* GetDescriptorHeapPtr() { return Get().m_descHeap.GetHeapPointer(); }
-	static DescriptorHandle GetSceneColorDescHandle() { return Get().m_sceneColorDescHande; }
 
 	static RaytracingDispatchRayInputs& GetRaytracingDispatch(RayDispatchID rayDispatchID);
 	static void BuildRaytracingDispatchInputs(PSOID psoID, std::set<ModelID>& models, RayDispatchID rayDispatchID);
@@ -118,6 +120,11 @@ public:
 	static RaytracingPSO& GetRaytracingPSO(PSOID rtPSOID) { return Get().GetRaytracingPSOImpl(rtPSOID); }
 	static GraphicsPSO& GetGraphicsPSO(PSOID gfxPSOID) { return Get().GetGraphicsPSOImpl(gfxPSOID); }
 	static ComputePSO& GetComputePSO(PSOID cmptPSOID) { return Get().GetComputePSOImpl(cmptPSOID); }
+
+	static void CopyDescriptor(const D3D12_CPU_DESCRIPTOR_HANDLE& handle) { return Get().CopyDescriptorImpl(handle); }
+	// Will copy the descriptor if it doesnt exist already.
+	// This is only for UAV, SRV, and CBV
+	static const DescriptorHandle& GetDescCopy(const D3D12_CPU_DESCRIPTOR_HANDLE& handle) { return Get().GetDescCopyImpl(handle); }
 
 	static void Destroy() { Get().DestroyImpl(); }
 
@@ -149,6 +156,9 @@ private:
 	void BuildRaytracingDispatchInputsImpl(PSOID psoID, std::set<ModelID>& models, RayDispatchID rayDispatchID);
 	RaytracingDispatchRayInputs& GetRaytracingDispatchImpl(RayDispatchID rayDispatchID);
 
+	void CopyDescriptorImpl(const D3D12_CPU_DESCRIPTOR_HANDLE& handle);
+	const DescriptorHandle& GetDescCopyImpl(const D3D12_CPU_DESCRIPTOR_HANDLE& handle);
+
 	void DestroyImpl();
 
 private:
@@ -162,7 +172,8 @@ private:
 	std::unordered_map<RayDispatchID, RaytracingDispatchRayInputs> m_rayDispatchInputs;
 	std::unordered_map<PSOID, std::unordered_set<RayDispatchID>> m_psoRayDispatchDependencyMap;
 
-	// I dont like this at all but its necessary to keep all RT resources in the same desc heap.
-	// This is used when binding the color buffer to write as a UAV.
-	DescriptorHandle m_sceneColorDescHande;
+	// Maps the ptr inside D3D12_CPU_DESCRIPTOR_HANDLE to a copied version.
+	// This is to be able to expose CPU only visible desc handles as GPU and CPU visible in the resource manager heap.
+	// This is because most of MiniEngine works with CPU exposed handles only.
+	std::unordered_map<SIZE_T, DescriptorHandle> m_descriptorCopiedCBVSRVUAV;
 };

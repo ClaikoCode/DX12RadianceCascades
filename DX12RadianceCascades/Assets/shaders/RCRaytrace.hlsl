@@ -18,14 +18,6 @@ RaytracingAccelerationStructure Scene : register(t0);
 RWTexture2D<float4> renderOutput : register(u0);
 SamplerState sourceSampler : register(s0);
 
-cbuffer Params : register(b0)
-{
-    uint dispatchWidth;
-    uint dispatchHeight;
-    uint rayFlags;
-    float holeSize;
-};
-
 struct GlobalInfo
 {
     matrix viewProjMatrix;
@@ -33,11 +25,9 @@ struct GlobalInfo
     float3 cameraPos;
     matrix invViewMatrix;
     matrix invProjMatrix;
-    float nearPlane;
-    float farPlane;
 };
 
-ConstantBuffer<GlobalInfo> globalInfo : register(b1);
+ConstantBuffer<GlobalInfo> globalInfo : register(b0);
 
 struct GeometryOffsets
 {
@@ -55,12 +45,12 @@ Texture2D<float4> normalTex     : register(t5, space1);
 
 ConstantBuffer<GeometryOffsets> geomOffsets : register(b0, space1);
 
+
 // RC Related Buffers
-ConstantBuffer<RCGlobals> rcGlobals : register(b2);
-ConstantBuffer<CascadeInfo> cascadeInfo : register(b3);
+ConstantBuffer<RCGlobals> rcGlobals : register(b1);
+ConstantBuffer<CascadeInfo> cascadeInfo : register(b2);
 
-Texture2D<float4> depthTex : register(t1);
-
+RWTexture2D<float4> depthTex : register(u1);
 
 float3 GetBarycentrics(float2 inputBarycentrics)
 {
@@ -126,23 +116,26 @@ inline void GenerateCameraRay(uint2 index, out float3 origin, out float3 directi
     direction = normalize(world.xyz - origin);
 }
 
-inline void GenerateProbeRay(uint2 index, out RayDesc ray)
+inline RayDesc GenerateProbeRay(uint2 index)
 {
+    RayDesc ray;
+    
     ProbeInfo3D probeInfo3D = BuildProbeInfo3DDirFirst(index, cascadeInfo.cascadeIndex, rcGlobals);
 
-    float3 rayDir = GetRCRayDir(probeInfo3D.rayIndex, cascadeInfo.cascadeIndex);
+    float3 rayDir = GetRCRayDir(probeInfo3D.rayIndex, sqrt(probeInfo3D.rayCount));
 
     float3 rayOrigin;
-    int cascadeOffset = 0; // Each cascade corresponds to a given MipMap in the depth texture.
     {
-        uint cascadeIndex = cascadeInfo.cascadeIndex + cascadeOffset;
+        uint cascadeIndex = cascadeInfo.cascadeIndex;
         int2 pixelPos = probeInfo3D.probeIndex;
-        float depthVal = depthTex.Load(int3(pixelPos, cascadeIndex)).r; // Only load R.
+        float depthVal = depthTex[pixelPos].g; // R is min, G is max.
+        // Add small distance towards the camera to avoid wall clipping.
+        // Otherwise, probes will spawn inside a wall and its rays wont interect any geometry.
+        depthVal += 0.00000001f;
         
         uint width;
         uint height;
-        uint _;
-        depthTex.GetDimensions(cascadeIndex, width, height, _);
+        depthTex.GetDimensions(width, height);
         
         float2 texelSize = 1.0f / float2(width, height);
         float3 worldPos = WorldPosFromDepth(depthVal, (float2(pixelPos) + 0.5f) * texelSize,  globalInfo.invProjMatrix, globalInfo.invViewMatrix);
@@ -150,34 +143,48 @@ inline void GenerateProbeRay(uint2 index, out RayDesc ray)
         rayOrigin = worldPos;
     }
     
+    // FOR SOME REASON SETTING THE VALUES MANUALLY GIVES OK BUT 
+    // IF SET WITH PROBE INFO, IT JUST DIES. THIS IS EVEN THOUGH
+    // THE VALUES FOR TMIN AND TMAX ARE CONSISTENT UP UNTIL TRACE RAY CALL.
+    
     ray.Direction = rayDir;
     ray.Origin = rayOrigin;
-    ray.TMax = probeInfo3D.range + probeInfo3D.startDistance;
+    ray.TMax = 10.0f;
     ray.TMin = probeInfo3D.startDistance;
+    
+    //DrawSphere(rayOrigin, 3.0f, float3(1.0f, 0.0f, 0.0f));
+    //DrawLine(rayOrigin, rayOrigin + rayDir * ray.TMax, float3(1.0f, 0.0f, 0.0f));
+
+    return ray;
 }
 
 [shader("raygeneration")]
 void RayGenerationShader()
 {
-    RayDesc ray;
-    GenerateProbeRay(DispatchRaysIndex().xy, ray);
+    RayDesc ray = GenerateProbeRay(DispatchRaysIndex().xy);
     
     RayPayload payload = { 0.0f };
 
-    DrawLine(ray.Origin, ray.Origin + ray.Direction, float3(1.0f, 0.0f, 0.0f));
-    TraceRay(Scene, rayFlags, ~0, 0, 1, 0, ray, payload);
+    //uint2 res = (DispatchRaysIndex().xy % 4);
+    //if (length(res) == 0)
+    //{
+    //    //DrawLine(ray.Origin, ray.Origin + ray.Direction, float3(1.0f, 0.0f, 0.0f));
+    //}
+    
+    //ray.TMin = 0.0f;
+    TraceRay(Scene, 0, ~0, 0, 1, 0, ray, payload);
 }
 
 [shader("anyhit")]
 void AnyHitShader(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr)
 {
-    float3 barycentrics = float3(attr.barycentrics.xy, 1 - attr.barycentrics.x - attr.barycentrics.y);
-    float3 triangleCentre = 1.0f / 3.0f;
-
-    float distanceToCentre = length(triangleCentre - barycentrics);
-
-    if (distanceToCentre < holeSize)
-        IgnoreHit();
+    //float3 barycentrics = float3(attr.barycentrics.xy, 1 - attr.barycentrics.x - attr.barycentrics.y);
+    //float3 triangleCentre = 1.0f / 3.0f;
+    //
+    //float distanceToCentre = length(triangleCentre - barycentrics);
+    //
+    //if (distanceToCentre < holeSize)
+    //    IgnoreHit();
 }
 
 [shader("closesthit")]
@@ -201,12 +208,14 @@ void ClosestHitShader(inout RayPayload payload, in BuiltInTriangleIntersectionAt
     const float2 uv2 = LoadUVFromVertex(vertexByteOffsets.z, uvOffset);
     const float2 uv = BARYCENTRIC_NORMALIZATION(barycentrics, uv0, uv1, uv2);
     
-    uint2 pixelIndex = DispatchRaysIndex().xy;      
-    renderOutput[pixelIndex] = float4(emissiveTex.SampleLevel(sourceSampler, uv, 0).rgb, 1);
+    uint2 pixelIndex = DispatchRaysIndex().xy;
+    DrawLine(WorldRayOrigin(), WorldRayOrigin() + WorldRayDirection() * 2.0f, float3(1.0f, 0.0f, 0.0f));
+    renderOutput[pixelIndex] = float4(albedoTex.SampleLevel(sourceSampler, uv, 0).rgb, 1);
 }
 
 [shader("miss")]
 void MissShader(inout RayPayload payload)
 {
-    renderOutput[DispatchRaysIndex().xy] = float4(0, 0, 0, 1);
+    //DrawLine(WorldRayOrigin(), WorldRayOrigin() + WorldRayDirection() * 2.0f, float3(0.0f, 1.0f, 0.0f));
+    renderOutput[DispatchRaysIndex().xy] = float4(1, 1, 0, 1);
 }
