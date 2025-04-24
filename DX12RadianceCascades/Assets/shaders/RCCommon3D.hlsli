@@ -15,25 +15,12 @@ struct RCGlobals
     uint probeDim0;
     uint rayCount0;
     float rayLength0;
-    float probeSpacing0;
-    float sourceSize;
+    uint cascadeCount;
 };
 
 struct CascadeInfo
 {
     uint cascadeIndex;
-};
-
-struct ProbeInfo
-{
-    float rayCount;
-    float sideLength; // In pixels;
-    uint2 probeIndex;
-    float2 probeSpacing;
-    float rayIndex;
-    float startDistance;
-    float range;
-    float texelSize;
 };
 
 struct ProbeInfo3D
@@ -89,30 +76,6 @@ float3 OctToFloat3EqualArea(float2 e)
     return float3(cos_phi * r_scl, sin_phi * r_scl, z);
 }
 
-ProbeInfo BuildProbeInfo(uint2 pixelPos, uint cascadeIndex, RCGlobals rcGlobals)
-{
-    ProbeInfo probeInfo;
-    
-    probeInfo.rayCount = RAYS_PER_PROBE(cascadeIndex, rcGlobals.rayScalingFactor, rcGlobals.rayCount0);
-    probeInfo.sideLength = sqrt(probeInfo.rayCount);
-    
-    probeInfo.probeIndex = floor(pixelPos / probeInfo.sideLength);
-    probeInfo.probeSpacing = rcGlobals.probeSpacing0 * pow(rcGlobals.probeScalingFactor, cascadeIndex);
-    uint2 rayIndex2D = pixelPos % probeInfo.sideLength;
-    probeInfo.rayIndex = rayIndex2D.x + rayIndex2D.y * probeInfo.sideLength;
-    probeInfo.startDistance = sign(cascadeIndex) * GeometricSeriesSum(rcGlobals.rayLength0, rcGlobals.rayScalingFactor, cascadeIndex);
-    probeInfo.range = rcGlobals.rayLength0 * pow(rcGlobals.rayScalingFactor, cascadeIndex);
-    
-#if USE_LIGHT_LEAK_FIX
-    float d = rcGlobals.probeSpacing0 * pow(2.0, cascadeIndex + 1);
-    probeInfo.range += sign(cascadeIndex) * length(float2(d, d));
-#endif
-    
-    probeInfo.texelSize = 1.0f / rcGlobals.sourceSize;
-    
-    return probeInfo;
-}
-
 ProbeInfo3D BuildProbeInfo3DDirFirst(uint2 pixelPos, uint cascadeIndex, RCGlobals rcGlobals)
 {
     ProbeInfo3D probeInfo3D;
@@ -124,6 +87,8 @@ ProbeInfo3D BuildProbeInfo3DDirFirst(uint2 pixelPos, uint cascadeIndex, RCGlobal
     probeInfo3D.probeIndex = pixelPos % probeInfo3D.sideLength;
     probeInfo3D.rayIndex = floor(pixelPos / probeInfo3D.sideLength);
     
+    // Abs is used to avoid the case where result is -0.0f, which messes up some RC calculations.
+    // For RC, the geometric sum should always be positive either way, so there should be no unexpected outcomes because of abs.
     probeInfo3D.startDistance = abs(GeometricSeriesSum(rcGlobals.rayLength0, rcGlobals.rayScalingFactor, cascadeIndex));
     probeInfo3D.range = rcGlobals.rayLength0 * pow(rcGlobals.rayScalingFactor, cascadeIndex);
     
@@ -133,8 +98,10 @@ ProbeInfo3D BuildProbeInfo3DDirFirst(uint2 pixelPos, uint cascadeIndex, RCGlobal
 float3 GetRCRayDir(int2 rayIndex, int raysPerDim)
 {
     float2 rayIndexFloat = rayIndex;
-    rayIndexFloat += 0.5f;
+    rayIndexFloat += 0.5f; // Middle of pixel.
     
+    // Remap a ray index from [0-raysPerDim] -> [-1, 1].
+    // This will evenly distribute points accross the sampling area [-1, 1].
     float2 uvCoord = Remap(int2(0, 0), int2(raysPerDim, raysPerDim), -1.0f, 1.0f, rayIndexFloat);
     
     return normalize(OctToFloat3EqualArea(uvCoord));

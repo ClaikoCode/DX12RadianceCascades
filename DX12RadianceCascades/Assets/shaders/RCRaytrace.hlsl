@@ -129,22 +129,6 @@ struct RayPayload
     int2 probeIndex;
 };
 
-inline void GenerateCameraRay(uint2 index, out float3 origin, out float3 direction)
-{
-    float2 xy = index + 0.5f; // center in the middle of the pixel.
-    float2 screenPos = xy / DispatchRaysDimensions().xy * 2.0 - 1.0f;
-
-    // Invert Y for DirectX-style coordinates.
-    screenPos.y = -screenPos.y;
-
-    // Unproject the pixel coordinate into a ray.
-    float4 world = mul(float4(screenPos, 0.0f, 1.0f), globalInfo.invViewProjMatrix);
-
-    world.xyz /= world.w;
-    origin = globalInfo.cameraPos.xyz;
-    direction = normalize(world.xyz - origin);
-}
-
 inline RayDesc GenerateProbeRay(ProbeInfo3D probeInfo3D)
 {
     RayDesc ray;
@@ -175,9 +159,6 @@ inline RayDesc GenerateProbeRay(ProbeInfo3D probeInfo3D)
     ray.TMax = probeInfo3D.startDistance + probeInfo3D.range;
     ray.TMin = probeInfo3D.startDistance;
    
-    //DrawSphere(rayOrigin, 3.0f, float3(1.0f, 0.0f, 0.0f));
-    //DrawLine(rayOrigin, rayOrigin + rayDir * ray.TMax, float3(1.0f, 0.0f, 0.0f));
-
     return ray;
 }
 
@@ -191,7 +172,7 @@ void RayGenerationShader()
     
     DrawProbe(probeInfo3D.probeIndex, ray.Origin, ray.TMin);
     
-    TraceRay(Scene, 0, ~0, 0, 1, 0, ray, payload);
+    TraceRay(Scene, RAY_FLAG_NONE, ~0, 0, 1, 0, ray, payload);
 }
 
 [shader("anyhit")]
@@ -229,13 +210,20 @@ void ClosestHitShader(inout RayPayload payload, in BuiltInTriangleIntersectionAt
     
     uint2 pixelIndex = DispatchRaysIndex().xy;
     //DrawCascadeRay(float3(1.0f, 0.0f, 0.0f), 0.5f, payload.probeIndex);
-    renderOutput[pixelIndex] = float4(emissiveTex.SampleLevel(sourceSampler, uv, 0).rgb, 1);
-    //renderOutput[pixelIndex] = float4(float3(0.0f, 0.0f, 1.0f), 1.0f);
+    renderOutput[pixelIndex] = float4(emissiveTex.SampleLevel(sourceSampler, uv, 0).rgb, 1.0f);
 }
 
 [shader("miss")]
 void MissShader(inout RayPayload payload)
 {
     //DrawCascadeRay(float3(0.0f, 1.0f, 0.0f), 0.0f, payload.probeIndex);
-    renderOutput[DispatchRaysIndex().xy] = float4(1.0f, 0.0f, 0.0f, 1.0f);
+    if (cascadeInfo.cascadeIndex == (rcGlobals.cascadeCount - 1))
+    {
+        float3 sunDir = normalize(float3(0.5, 0.15, 0.5));
+        renderOutput[DispatchRaysIndex().xy] = float4(SimpleSunsetSky(WorldRayDirection(), sunDir), 1.0f);
+    }
+    else
+    {
+        renderOutput[DispatchRaysIndex().xy] = float4(1.0f, 0.0f, 0.0f, 1.0f);
+    }
 }

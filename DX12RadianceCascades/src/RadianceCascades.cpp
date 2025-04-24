@@ -664,7 +664,10 @@ void RadianceCascades::RenderRaytracing(Camera& camera)
 	rtCommandList->SetComputeRootDescriptorTable(RootEntryRTGUAV, colorDescriptorHandle);
 	rtContext.SetDynamicConstantBufferView(RootEntryRTGParamCB, sizeof(RTParams), &rtParams);
 	rtContext.SetDynamicConstantBufferView(RootEntryRTGInfoCB, sizeof(GlobalInfo), &rtGlobalInfo);
+
+#if defined(_DEBUGDRAWING)
 	DebugDrawer::BindDebugBuffers(rtContext, RootEntryRTGCount);
+#endif
 
 	::DispatchRays(RayDispatchIDTest, colorTarget.GetWidth(), colorTarget.GetHeight(), rtCommandList);
 
@@ -693,7 +696,9 @@ void RadianceCascades::RenderRCRaytracing(Camera& camera)
 		rtContext.SetDynamicConstantBufferView(RootEntryRCRaytracingRTGGlobalInfoCB, sizeof(GlobalInfo), &globalInfo);
 		rtContext.SetDynamicConstantBufferView(RootEntryRCRaytracingRTGRCGlobalsCB, sizeof(RCGlobalInfo), &rcGlobalInfo);
 
+#if defined(_DEBUGDRAWING)
 		DebugDrawer::BindDebugBuffers(rtContext, RootEntryRCRaytracingRTGCount);
+#endif
 	}
 
 	// Transition resources
@@ -752,22 +757,6 @@ void RadianceCascades::RenderRCRaytracing(Camera& camera)
 
 void RadianceCascades::RenderDepthOnly(Camera& camera, DepthBuffer& targetDepth, D3D12_VIEWPORT viewPort, D3D12_RECT scissor, bool clearDepth)
 {
-	GlobalConstants globals = {};
-	{
-		// Update global constants
-		float sunOriantation = -0.5f;
-		float sunInclination = 0.75f;
-		float costheta = cosf(sunOriantation);
-		float sintheta = sinf(sunOriantation);
-		float cosphi = cosf(sunInclination * 3.14159f * 0.5f);
-		float sinphi = sinf(sunInclination * 3.14159f * 0.5f);
-
-		Vector3 SunDirection = Normalize(Vector3(costheta * cosphi, sinphi, sintheta * cosphi));
-
-		globals.SunDirection = SunDirection;
-		globals.SunIntensity = Vector3(Scalar(0.5f));
-	}
-
 	Renderer::MeshSorter meshSorter = Renderer::MeshSorter(Renderer::MeshSorter::kDefault);
 	meshSorter.SetCamera(camera);
 	meshSorter.SetViewport(viewPort);
@@ -784,6 +773,7 @@ void RadianceCascades::RenderDepthOnly(Camera& camera, DepthBuffer& targetDepth,
 		gfxContext.ClearDepth(targetDepth);
 	}
 
+	GlobalConstants globals = {}; // Empty because depth pass fills its own global info.
 	meshSorter.RenderMeshes(Renderer::MeshSorter::kZPass, gfxContext, globals);
 
 	gfxContext.Finish(true);
@@ -824,8 +814,6 @@ void RadianceCascades::RunMinMaxDepth(DepthBuffer& sourceDepthBuffer)
 
 		cmptContext.Dispatch2D(depthSourceInfo.sourceWidth >> 1, depthSourceInfo.sourceHeight >> 1);
 	}
-	
-	
 
 	const D3D12_CPU_DESCRIPTOR_HANDLE* startUAV = &m_minMaxDepthMips.GetUAV();
 	const uint32_t numMipMaps = minMaxMipMaps.GetNumMipMaps();

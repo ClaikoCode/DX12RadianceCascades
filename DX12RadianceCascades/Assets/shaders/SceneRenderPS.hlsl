@@ -99,6 +99,6 @@ float4 main(VSOutput vsOutput) : SV_Target0
     
     float attenuation = dot(normal, normalize(SunDirection));
     
-    float3 finalColor = baseColor.rgb * attenuation * SunIntensity + emissiveColor;
+    float3 finalColor = baseColor.rgb * attenuation * SunIntensity + emissiveColor + baseColor.rgb * 0.1f;
     return float4(finalColor, 1.0f);
 }
