@@ -54,6 +54,8 @@ void RadianceCascadeManager3D::FillRCGlobalInfo(RCGlobalInfo& rcGlobalInfo)
 
 	rcGlobalInfo.probeScalingFactor = m_scalingFactor.probeScalingFactor;
 	rcGlobalInfo.rayScalingFactor = m_scalingFactor.rayScalingFactor;
+	
+	rcGlobalInfo.cascadeCount = GetCascadeIntervalCount();
 }
 
 uint32_t RadianceCascadeManager3D::GetRaysPerProbe(uint32_t cascadeIndex)

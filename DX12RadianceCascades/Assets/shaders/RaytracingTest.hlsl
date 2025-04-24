@@ -169,7 +169,7 @@ void ClosestHitShader(inout RayPayload payload, in BuiltInTriangleIntersectionAt
     
     uint2 pixelIndex = DispatchRaysIndex().xy;
     
-    if(true)
+    if (false)
     {
         uint2 pixelIndexSubset = ((pixelIndex + 15) % 40);
         
@@ -194,5 +194,7 @@ void ClosestHitShader(inout RayPayload payload, in BuiltInTriangleIntersectionAt
 [shader("miss")]
 void MissShader(inout RayPayload payload)
 {
-    renderOutput[DispatchRaysIndex().xy] = float4(0, 0, 0, 1);
+    float3 sunDir = normalize(float3(0.5, 0.15, 0.5));
+    renderOutput[DispatchRaysIndex().xy] = float4(SimpleSunsetSky(WorldRayDirection(), sunDir), 1.0f);
+
 }

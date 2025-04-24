@@ -38,4 +38,5 @@ __declspec(align(16)) struct RCGlobalInfo
 	uint32_t probeDim0;
 	uint32_t rayCount0;
 	float rayLength0;
+	uint32_t cascadeCount;
 };
