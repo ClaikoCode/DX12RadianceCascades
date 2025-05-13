@@ -17,7 +17,7 @@
 #include "RadianceCascadeManager3D.h"
 
 #if defined(_DEBUGDRAWING)
-#define ENABLE_DEBUG_DRAW 1
+#define ENABLE_DEBUG_DRAW 0
 #else
 #define ENABLE_DEBUG_DRAW 0
 #endif
@@ -39,7 +39,6 @@ public:
 
 struct RadianceCascadesSettings
 {
-	bool visualize2DCascades = false;
 	bool renderRC3D = true;
 	bool visualizeRC3DCascades = false;
 	int cascadeVisIndex = 0;
@@ -49,9 +48,18 @@ struct RadianceCascadesSettings
 #define ENABLE_RASTER (!ENABLE_RT)
 struct GlobalSettings
 {
-	bool renderRaster = ENABLE_RASTER;
-	bool renderRaytracing = ENABLE_RT;
-	bool renderDebug = ENABLE_DEBUG_DRAW;
+	enum RenderMode : int
+	{
+		RenderModeRaster = 0,
+		RenderModeRT,
+
+		// Keep this last.
+		RenderModeCount
+	};
+
+	RenderMode renderMode = RenderModeRaster;
+
+	bool renderDebugLines = ENABLE_DEBUG_DRAW;
 	bool useDebugCam = false;
 };
 
@@ -158,6 +166,8 @@ private:
 	void RunComputeRCMerge();
 	void RunComputeRCRadianceField(ColorBuffer& outputBuffer);
 	void UpdateViewportAndScissor();
+
+	void BuildUISettings();
 
 	void ClearPixelBuffers();
 
