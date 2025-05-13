@@ -66,7 +66,7 @@ namespace AppGUI
 		// Set descriptor heaps for UI textures.
 		uiContext.SetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, g_UIDescHeap.GetHeapPointer());
 
-		// Build draw data.
+		// Fill draw data.
 		ImGui::Render();
 
 		// Render the UI.
