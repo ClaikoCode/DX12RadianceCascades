@@ -12,9 +12,14 @@
 #include "DebugDrawer.h"
 #include "ShaderCompilation\ShaderCompilationManager.h"
 
+#include "AppGUI\AppGUI.h"
+
 #include "RadianceCascades.h"
 
 using namespace Microsoft::WRL;
+
+// Mimicing how Microsoft exposes their global variables (example in Display.cpp)
+namespace GameCore { extern HWND g_hWnd; }
 
 constexpr size_t MAX_INSTANCES = 256;
 static const DXGI_FORMAT s_FlatlandSceneFormat = DXGI_FORMAT_R16G16B16A16_FLOAT;
@@ -89,6 +94,9 @@ RadianceCascades::~RadianceCascades()
 void RadianceCascades::Startup()
 {
 	Renderer::Initialize();
+
+	AppGUI::Initialize(GameCore::g_hWnd);
+
 	UpdateViewportAndScissor();
 
 	InitializeScene();
@@ -108,6 +116,8 @@ void RadianceCascades::Startup()
 void RadianceCascades::Cleanup()
 {
 	Graphics::g_CommandManager.IdleGPU();
+	AppGUI::Shutdown();
+	
 
 	// TODO: It might make more sense for an outer scope to execute this as this class is not responsible for their initialization.
 	DebugDrawer::Destroy();
@@ -134,31 +144,6 @@ void RadianceCascades::Update(float deltaT)
 			m_cameraController->Update(deltaT);
 		}
 	}
-	
-	{
-		if (GameInput::IsFirstPressed(GameInput::kKey_v))
-		{
-			m_settings.rcSettings.visualizeRC3DCascades = !m_settings.rcSettings.visualizeRC3DCascades;
-
-			
-		}
-
-		if (m_settings.rcSettings.visualizeRC3DCascades)
-		{
-			int& cascadeVisIndex = m_settings.rcSettings.cascadeVisIndex;
-
-			if (GameInput::IsFirstPressed(GameInput::kKey_up))
-			{
-				cascadeVisIndex++;
-			}
-			else if (GameInput::IsFirstPressed(GameInput::kKey_down))
-			{
-				cascadeVisIndex--;
-			}
-
-			cascadeVisIndex = (int)Math::Clamp((float)cascadeVisIndex, 0.0f, (float)m_rcManager3D.GetCascadeIntervalCount() - 1.0f);
-		}
-	}
 
 	GraphicsContext& gfxContext = GraphicsContext::Begin(L"Scene Update");
 
@@ -178,13 +163,12 @@ void RadianceCascades::RenderScene()
 {
 	ClearPixelBuffers();
 
-	if (m_settings.globalSettings.renderRaster)
+	if (m_settings.globalSettings.renderMode == GlobalSettings::RenderModeRaster)
 	{
 		RenderRaster(m_camera, m_mainViewport, m_mainScissor);
 		RunMinMaxDepth(Graphics::g_SceneDepthBuffer);
 	}
-
-	if (m_settings.globalSettings.renderRaytracing)
+	else if (m_settings.globalSettings.renderMode == GlobalSettings::RenderModeRT)
 	{
 		RenderRaytracing(m_camera);
 	}
@@ -204,44 +188,31 @@ void RadianceCascades::RenderScene()
 		}
 
 		RenderRCRaytracing(cam);
-	}
-
-	if (m_settings.rcSettings.visualize2DCascades)
-	{
-		RunComputeFlatlandScene();
-		RunComputeRCGather();
-		RunComputeRCMerge();
-		RunComputeRCRadianceField(Graphics::g_SceneColorBuffer);
-
-		static int currentCascadeVisIndex = -1;
-		for (int i = 0; i < (int)m_rcManager2D.GetCascadeCount(); i++)
+		
+		if (m_settings.rcSettings.visualizeRC3DCascades)
 		{
-			if (GameInput::IsFirstPressed((GameInput::DigitalInput)(i + 1)))
-			{
-				currentCascadeVisIndex = i;
-			}
-		}
-
-		if (GameInput::IsFirstPressed(GameInput::kKey_0))
-		{
-			currentCascadeVisIndex = -1;
-		}
-
-		if (currentCascadeVisIndex != -1)
-		{
-			FullScreenCopyCompute(m_rcManager2D.GetCascadeInterval(currentCascadeVisIndex), Graphics::g_SceneColorBuffer);
+			FullScreenCopyCompute(m_rcManager3D.GetCascadeIntervalBuffer(m_settings.rcSettings.cascadeVisIndex), Graphics::g_SceneColorBuffer);
 		}
 	}
-	else if (m_settings.rcSettings.visualizeRC3DCascades)
-	{
-		FullScreenCopyCompute(m_rcManager3D.GetCascadeIntervalBuffer(m_settings.rcSettings.cascadeVisIndex), Graphics::g_SceneColorBuffer);
-	}
-	else if (m_settings.globalSettings.renderDebug) // Keep render debug last in pipeline.
+
+	// Keep render debug last in pipeline.
+	if (m_settings.globalSettings.renderDebugLines)
 	{
 		DebugRenderCameraInfo camInfo;
 		camInfo.viewProjMatrix = m_camera.GetViewProjMatrix();
 		DebugDrawer::Draw(camInfo, Graphics::g_SceneColorBuffer, Graphics::g_SceneDepthBuffer, m_mainViewport, m_mainScissor);
 	}
+}
+
+void RadianceCascades::RenderUI(GraphicsContext& uiContext)
+{
+	AppGUI::NewFrame();
+
+	// Run UI code.
+	BuildUISettings();
+
+	// Render UI
+	AppGUI::Render(uiContext);
 }
 
 void RadianceCascades::InitializeScene()
@@ -973,6 +944,77 @@ void RadianceCascades::UpdateViewportAndScissor()
 	m_mainScissor.top = 0;
 	m_mainScissor.right = (LONG)width;
 	m_mainScissor.bottom = (LONG)height;
+}
+
+void RadianceCascades::BuildUISettings()
+{
+	ImGui::Begin("Settings");
+
+	if (ImGui::CollapsingHeader("Global Settings", ImGuiTreeNodeFlags_DefaultOpen))
+	{
+		GlobalSettings& gs = m_settings.globalSettings;
+
+		ImGui::SeparatorText("Rendering Mode");
+		int* renderMode = reinterpret_cast<int*>(&gs.renderMode);
+		ImGui::RadioButton("Raster", renderMode, GlobalSettings::RenderModeRaster); ImGui::SameLine();
+		ImGui::RadioButton("Raytracing", renderMode, GlobalSettings::RenderModeRT);
+
+#if defined(_DEBUGDRAWING)
+		ImGui::SeparatorText("Debug Drawing");
+		ImGui::Checkbox("Draw Debug Lines", &gs.renderDebugLines);
+#endif
+	}
+	
+	if (ImGui::CollapsingHeader("Radiance Cascade Settings", ImGuiTreeNodeFlags_DefaultOpen))
+	{
+		RadianceCascadesSettings& rcs = m_settings.rcSettings;
+
+		ImGui::Checkbox("Render RC 3D", &rcs.renderRC3D);
+
+		if (rcs.renderRC3D)
+		{
+			ImGui::Separator();
+
+			ImGui::Text("Cascade count: %u", m_rcManager3D.GetCascadeIntervalCount());
+
+			// Create a table with 3 columns: Cascade, Probe Count, Ray Count
+			if (ImGui::BeginTable("CascadeTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_NoHostExtendX))
+			{
+				ImGui::TableSetupColumn("Cascade", ImGuiTableColumnFlags_WidthFixed);
+				ImGui::TableSetupColumn("Probe Count", ImGuiTableColumnFlags_WidthFixed);
+				ImGui::TableSetupColumn("Rays Per Probe", ImGuiTableColumnFlags_WidthFixed);
+				ImGui::TableHeadersRow();
+
+				// Add a row for each cascade
+				for (unsigned int i = 0; i < m_rcManager3D.GetCascadeIntervalCount(); i++) {
+					ImGui::TableNextRow();
+
+					// Cascade column
+					ImGui::TableSetColumnIndex(0);
+					ImGui::Text("%u", i);
+
+					// Probe Count column
+					ImGui::TableSetColumnIndex(1);
+					ImGui::Text("%u", m_rcManager3D.GetProbeCount(i));
+
+					// Rays Per Probe column
+					ImGui::TableSetColumnIndex(2);
+					ImGui::Text("%u", m_rcManager3D.GetRaysPerProbe(i));
+				}
+
+				ImGui::EndTable();
+			}
+
+			ImGui::SeparatorText("Radiance Cascade Visualizations");
+			ImGui::Checkbox("Visualize Cascades", &rcs.visualizeRC3DCascades);
+			if (rcs.visualizeRC3DCascades)
+			{
+				ImGui::SliderInt("Cascade Index", &rcs.cascadeVisIndex, 0, m_rcManager3D.GetCascadeIntervalCount() - 1);
+			}
+		}
+	}
+	
+	ImGui::End();
 }
 
 void RadianceCascades::ClearPixelBuffers()

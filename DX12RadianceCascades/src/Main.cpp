@@ -6,11 +6,14 @@
 #include "Core\FXAA.h"
 #include "Core\SSAO.h"
 
+#include "AppGUI\AppGUI.h"
+
 #include "RadianceCascades.h"
 
 int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int nCmdShow) 
 {
     Logging::Initialize(false, L"runtime_logs.txt");
+    AppGUI::PreInit();
 
     MotionBlur::Enable = false;
     TemporalEffects::EnableTAA = false;

@@ -169,6 +169,15 @@ if %errorlevel% leq 3 exit 0</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="src\AppGUI\AppGUI.h" />
+    <ClInclude Include="src\AppGUI\imconfig.h" />
+    <ClInclude Include="src\AppGUI\imgui.h" />
+    <ClInclude Include="src\AppGUI\imgui_impl_dx12.h" />
+    <ClInclude Include="src\AppGUI\imgui_impl_win32.h" />
+    <ClInclude Include="src\AppGUI\imgui_internal.h" />
+    <ClInclude Include="src\AppGUI\imstb_rectpack.h" />
+    <ClInclude Include="src\AppGUI\imstb_textedit.h" />
+    <ClInclude Include="src\AppGUI\imstb_truetype.h" />
     <ClInclude Include="src\d3dx12.h" />
     <ClInclude Include="src\DebugDrawer.h" />
     <ClInclude Include="src\GPUStructs.h" />
@@ -189,6 +198,28 @@ if %errorlevel% leq 3 exit 0</Command>
     <ClInclude Include="src\Utils.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="src\AppGUI\AppGUI.cpp" />
+    <ClCompile Include="src\AppGUI\imgui.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="src\AppGUI\imgui_demo.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="src\AppGUI\imgui_draw.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="src\AppGUI\imgui_impl_dx12.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="src\AppGUI\imgui_impl_win32.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="src\AppGUI\imgui_tables.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="src\AppGUI\imgui_widgets.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="src\DebugDrawer.cpp" />
     <ClCompile Include="src\Main.cpp" />
     <ClCompile Include="src\RadianceCascadeManager3d.cpp" />
