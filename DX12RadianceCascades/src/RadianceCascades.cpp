@@ -437,7 +437,12 @@ void RadianceCascades::InitializeRT()
 		RaytracingPSO& pso = m_rtTestPSO;
 
 		RootSignature1& globalRootSig = m_rtTestGlobalRootSig;
-		globalRootSig.Reset(RootEntryRTGCount, 1, true);
+		globalRootSig.Reset(
+			RootEntryRTGCount, 1
+#if defined(_DEBUGDRAWING)
+			,true
+#endif
+		);
 		globalRootSig[RootEntryRTGSRV].InitAsShaderResourceView(0);
 		globalRootSig[RootEntryRTGUAV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 1);
 		globalRootSig[RootEntryRTGParamCB].InitAsConstantBufferView(0);
@@ -476,7 +481,13 @@ void RadianceCascades::InitializeRT()
 		RaytracingPSO& pso = m_rcRaytracePSO;
 
 		RootSignature1& globalRootSig = m_rcRaytraceGlobalRootSig;
-		globalRootSig.Reset(RootEntryRCRaytracingRTGCount, 1, true);
+		globalRootSig.Reset(
+			RootEntryRCRaytracingRTGCount, 1 
+#if defined(_DEBUGDRAWING)
+			,true
+#endif
+		);
+
 		globalRootSig[RootEntryRCRaytracingRTGSceneSRV].InitAsShaderResourceView(0);
 		globalRootSig[RootEntryRCRaytracingRTGOutputUAV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 1);
 		globalRootSig[RootEntryRCRaytracingRTGGlobalInfoCB].InitAsConstantBufferView(0);

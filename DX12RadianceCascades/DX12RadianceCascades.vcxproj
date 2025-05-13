@@ -138,6 +138,9 @@ if %errorlevel% leq 3 exit 0</Command>
       <Command>
       </Command>
     </CustomBuildStep>
+    <FxCompile>
+      <PreprocessorDefinitions>_DEBUGDRAWING;</PreprocessorDefinitions>
+    </FxCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>

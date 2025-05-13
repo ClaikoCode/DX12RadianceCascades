@@ -55,12 +55,21 @@ public:
 	}
 
 private:
+#if defined(_DEBUGDRAWING)
 	DebugDrawer();
 
 	void DrawImpl(DebugRenderCameraInfo& cameraInfo, ColorBuffer & targetColor, DepthBuffer& targetDepth, D3D12_VIEWPORT viewPort, D3D12_RECT scissor);
 	void DestroyImpl();
 	void BindDebugBuffersImpl(GraphicsContext& gfxContext, UINT startRootIndex);
 	void BindDebugBuffersImpl(ComputeContext& cmptContext, UINT startRootIndex);
+#else
+	DebugDrawer() {};
+
+	void DrawImpl(DebugRenderCameraInfo& cameraInfo, ColorBuffer& targetColor, DepthBuffer& targetDepth, D3D12_VIEWPORT viewPort, D3D12_RECT scissor) {};
+	void DestroyImpl() {};
+	void BindDebugBuffersImpl(GraphicsContext& gfxContext, UINT startRootIndex) {};
+	void BindDebugBuffersImpl(ComputeContext& cmptContext, UINT startRootIndex) {};
+#endif
 
 private:
 

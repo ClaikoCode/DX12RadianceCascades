@@ -9,11 +9,7 @@
 #include "GPUStructs.h"
 #include "DebugDrawer.h"
 
-struct IndirectCommand
-{
-	D3D12_GPU_VIRTUAL_ADDRESS cameraCBV;
-	D3D12_DRAW_ARGUMENTS drawArgs;
-};
+#if defined(_DEBUGDRAWING)
 
 #define ENABLE_DEPTH 0
 
@@ -143,3 +139,5 @@ void DebugDrawer::BindDebugBuffersImpl(ComputeContext& cmptContext, UINT startRo
 	cmptContext.SetBufferUAV(startRootIndex, lineStructBuff);
 	cmptContext.SetBufferUAV(startRootIndex + 1, counterBuffer);
 }
+
+#endif // if defined(_DEBUGDRAWING)

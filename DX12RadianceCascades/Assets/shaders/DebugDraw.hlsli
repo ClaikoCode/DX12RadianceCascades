@@ -6,6 +6,7 @@
 
 #include "Common.hlsli"
 
+#if defined(_DEBUGDRAWING)
 struct DebugRenderVertex
 {
     float3 position;
@@ -107,5 +108,12 @@ void DrawSphere(float3 center, float radius, float3 color)
         }
     }
 }
+#else
+
+void DrawLine(float3 position0, float3 position1, float3 color) {}
+void DrawAxisAlignedBox(float3 center, float3 extent, float3 color) {}
+void DrawSphere(float3 center, float radius, float3 color) {}
+
+#endif // defined(_DEBUGDRAWING)
 
 #endif // DEBUGDRAW_H
