@@ -50,6 +50,7 @@ namespace GameCore { extern HWND g_hWnd; }
 #include "CompiledShaders/GenerateMipsGammaOddYCS.h"
 
 #define SWAP_CHAIN_BUFFER_COUNT 3
+#define RES1024 (1024*2)
 
 DXGI_FORMAT SwapChainFormat = DXGI_FORMAT_R10G10B10A2_UNORM;
 
@@ -95,8 +96,8 @@ namespace Graphics
 
     uint32_t g_NativeWidth = 0;
     uint32_t g_NativeHeight = 0;
-    uint32_t g_DisplayWidth = 1024 * 2;
-    uint32_t g_DisplayHeight = 1024 * 2;
+    uint32_t g_DisplayWidth = RES1024;
+    uint32_t g_DisplayHeight = RES1024;
     ColorBuffer g_PreDisplayBuffer;
 
     void ResolutionToUINT(eResolution res, uint32_t& width, uint32_t& height)
@@ -129,7 +130,7 @@ namespace Graphics
             height = 2160;
             break;
         case k1024x2:
-            width = 1024 * 2;
+            width = RES1024;
             height = width;
             break;
         }

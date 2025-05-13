@@ -12,9 +12,14 @@
 #include "DebugDrawer.h"
 #include "ShaderCompilation\ShaderCompilationManager.h"
 
+#include "AppGUI\AppGUI.h"
+
 #include "RadianceCascades.h"
 
 using namespace Microsoft::WRL;
+
+// Mimicing how Microsoft exposes their global variables (example in Display.cpp)
+namespace GameCore { extern HWND g_hWnd; }
 
 constexpr size_t MAX_INSTANCES = 256;
 static const DXGI_FORMAT s_FlatlandSceneFormat = DXGI_FORMAT_R16G16B16A16_FLOAT;
@@ -89,6 +94,9 @@ RadianceCascades::~RadianceCascades()
 void RadianceCascades::Startup()
 {
 	Renderer::Initialize();
+
+	AppGUI::Initialize(GameCore::g_hWnd);
+
 	UpdateViewportAndScissor();
 
 	InitializeScene();
@@ -108,6 +116,8 @@ void RadianceCascades::Startup()
 void RadianceCascades::Cleanup()
 {
 	Graphics::g_CommandManager.IdleGPU();
+	AppGUI::Shutdown();
+	
 
 	// TODO: It might make more sense for an outer scope to execute this as this class is not responsible for their initialization.
 	DebugDrawer::Destroy();
@@ -118,6 +128,8 @@ void RadianceCascades::Cleanup()
 
 void RadianceCascades::Update(float deltaT)
 {
+	AppGUI::NewFrame();
+
 	RuntimeResourceManager::UpdateGraphicsPSOs();
 
 	// Mouse update
@@ -242,6 +254,31 @@ void RadianceCascades::RenderScene()
 		camInfo.viewProjMatrix = m_camera.GetViewProjMatrix();
 		DebugDrawer::Draw(camInfo, Graphics::g_SceneColorBuffer, Graphics::g_SceneDepthBuffer, m_mainViewport, m_mainScissor);
 	}
+}
+
+void RadianceCascades::RenderUI(GraphicsContext& uiContext)
+{
+	// Run UI code.
+	{
+		{
+			static float f = 0.0f;
+
+			ImGui::Begin("Hello World!");
+
+			ImGui::Text("This is some useful text.");
+			ImGui::SliderFloat("float", &f, 0.0f, 1.0f);
+
+			ImGui::End();
+		}
+
+		{
+			static bool demoWin = true;
+			ImGui::ShowDemoWindow(&demoWin);
+		}
+	}
+
+	// Render UI
+	AppGUI::Render(uiContext);
 }
 
 void RadianceCascades::InitializeScene()

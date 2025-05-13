@@ -138,6 +138,8 @@ public:
 	virtual void Update(float deltaT) override;
 	virtual void RenderScene() override;
 
+	virtual void RenderUI(GraphicsContext& uiContext) override;
+
 	virtual bool RequiresRaytracingSupport() const override { return true; }
 
 private:
@@ -145,7 +147,7 @@ private:
 	void InitializePSOs();
 	void InitializeRCResources();
 	void InitializeRT();
-
+	
 	void RenderRaster(Camera& camera, D3D12_VIEWPORT viewPort, D3D12_RECT scissor);
 	void RenderRaytracing(Camera& camera);
 	void RenderRCRaytracing(Camera& camera);
