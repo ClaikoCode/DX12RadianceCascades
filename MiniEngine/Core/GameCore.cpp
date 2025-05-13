@@ -23,6 +23,10 @@
 #include "Util/CommandLineArg.h"
 #include <shellapi.h>
 
+// Added by JD.
+#include "..\..\DX12RadianceCascades\src\AppGUI\imgui_impl_win32.h"
+extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
 #pragma comment(lib, "runtimeobject.lib") 
 
 namespace GameCore
@@ -74,11 +78,11 @@ namespace GameCore
         UiContext.SetRenderTarget(g_OverlayBuffer.GetRTV());
         UiContext.SetViewportAndScissor(0, 0, g_OverlayBuffer.GetWidth(), g_OverlayBuffer.GetHeight());
         game.RenderUI(UiContext);
-
-        UiContext.SetRenderTarget(g_OverlayBuffer.GetRTV());
-        UiContext.SetViewportAndScissor(0, 0, g_OverlayBuffer.GetWidth(), g_OverlayBuffer.GetHeight());
-        EngineTuning::Display( UiContext, 10.0f, 40.0f, 1900.0f, 1040.0f );
-
+        
+        //UiContext.SetRenderTarget(g_OverlayBuffer.GetRTV());
+        //UiContext.SetViewportAndScissor(0, 0, g_OverlayBuffer.GetWidth(), g_OverlayBuffer.GetHeight());
+        //EngineTuning::Display( UiContext, 10.0f, 40.0f, 1900.0f, 1040.0f );
+        
         UiContext.Finish();
 
         Display::Present();
@@ -160,6 +164,11 @@ namespace GameCore
     //--------------------------------------------------------------------------------------
     LRESULT CALLBACK WndProc( HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam )
     {
+        if (ImGui_ImplWin32_WndProcHandler(hWnd, message, wParam, lParam))
+        {
+            return true;
+        }
+
         switch( message )
         {
         case WM_SIZE:
