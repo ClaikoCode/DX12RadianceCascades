@@ -10,6 +10,22 @@ static const std::wstring c_ShaderFolder = L"..\\DX12RadianceCascades\\Assets\\s
 static const std::wstring c_ShaderFolder = L"shaders\\";
 #endif
 
+// Contains the preprocessor defines to be added to all files (note ALL). The vector is allowed to be empty.
+static const std::vector<std::wstring> s_ppDefines = {
+	// Used to give any file included in the compilation process to know if it being compiled for shaders.
+	// Can be useful if the same file is intended to be used for both C++ and HLSL compilation.
+	L"_HLSL", 
+
+#if defined(_DEBUG)
+	L"_DEBUG",
+#endif
+
+#if defined(_DEBUGDRAWING)
+	L"_DEBUGDRAWING",
+#endif
+
+};
+
 static const std::wstring c_IncludeDir = c_ShaderFolder;
 
 typedef std::vector<std::wstring> ShaderCompilationArgs;
@@ -159,37 +175,38 @@ std::wstring ShaderModelArg(Shader::ShaderModel shaderModel, Shader::ShaderType 
 	return shaderTypeStr + L"_" + shaderModelStr;
 }
 
-
-void AddCompArg(ShaderCompilationArgs& compArgs, const std::wstring& arg)
+// A token in this context is defined as the whitespace-separated elements of a command string. 
+// This can be options or parameters/arguments.
+void AppendCompilationToken(ShaderCompilationArgs& compArgs, const std::wstring& token)
 {
-	compArgs.push_back(arg);
+	compArgs.push_back(token);
 }
 
 void AddArgFilename(ShaderCompilationArgs& compArgs, const std::wstring& filename)
 {
-	AddCompArg(compArgs, filename);
+	AppendCompilationToken(compArgs, filename);
 }
 
 void AddArgShaderModel(ShaderCompilationArgs& compArgs, Shader::ShaderModel shaderModel, Shader::ShaderType shaderType)
 {
-	AddCompArg(compArgs, L"-T");
-	AddCompArg(compArgs, ShaderModelArg(shaderModel, shaderType));
+	AppendCompilationToken(compArgs, L"-T");
+	AppendCompilationToken(compArgs, ShaderModelArg(shaderModel, shaderType));
 }
 
 void AddArgEntryPoint(ShaderCompilationArgs& compArgs, const std::wstring& entryPoint)
 {
-	AddCompArg(compArgs, L"-E");
-	AddCompArg(compArgs, entryPoint);
+	AppendCompilationToken(compArgs, L"-E");
+	AppendCompilationToken(compArgs, entryPoint);
 }
 
 void AddArgDebugInfo(ShaderCompilationArgs& compArgs)
 {
-	AddCompArg(compArgs, DXC_ARG_DEBUG);
+	AppendCompilationToken(compArgs, DXC_ARG_DEBUG);
 }
 
 void AddArgEmbedDebug(ShaderCompilationArgs& compArgs)
 {
-	AddCompArg(compArgs, L"-Qembed_debug");
+	AppendCompilationToken(compArgs, L"-Qembed_debug");
 }
 
 void AddArgOptimizationLevel(ShaderCompilationArgs& compArgs, uint16_t level)
@@ -199,13 +216,19 @@ void AddArgOptimizationLevel(ShaderCompilationArgs& compArgs, uint16_t level)
 		level = 3; // Defualt to highest available.
 	}
 
-	AddCompArg(compArgs, std::wstring(L"-O") + std::to_wstring(level));
+	AppendCompilationToken(compArgs, std::wstring(L"-O") + std::to_wstring(level));
 }
 
 void AddArgIncludeDirectory(ShaderCompilationArgs& compArgs, const std::wstring& includeDir)
 {
-	AddCompArg(compArgs, L"-I");
-	AddCompArg(compArgs, includeDir);
+	AppendCompilationToken(compArgs, L"-I");
+	AppendCompilationToken(compArgs, includeDir);
+}
+
+void AddArgDefine(ShaderCompilationArgs& compArgs, const std::wstring& define)
+{
+	AppendCompilationToken(compArgs, L"-D");
+	AppendCompilationToken(compArgs, define);
 }
 
 ShaderCompilationArgs BuildArgsFromShaderPackage(const Shader::ShaderCompilationPackage& compPackage)
@@ -228,6 +251,11 @@ ShaderCompilationArgs BuildArgsFromShaderPackage(const Shader::ShaderCompilation
 #else
 	AddArgOptimizationLevel(args, 3);
 #endif
+
+	for (const std::wstring& def : s_ppDefines)
+	{
+		AddArgDefine(args, def);
+	}
 	
 	return args;
 }
