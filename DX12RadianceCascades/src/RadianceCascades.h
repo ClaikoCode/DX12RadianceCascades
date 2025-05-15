@@ -17,7 +17,7 @@
 #include "RadianceCascadeManager3D.h"
 
 #if defined(_DEBUGDRAWING)
-#define ENABLE_DEBUG_DRAW 0
+#define ENABLE_DEBUG_DRAW 1
 #else
 #define ENABLE_DEBUG_DRAW 0
 #endif
@@ -42,6 +42,10 @@ struct RadianceCascadesSettings
 	bool renderRC3D = true;
 	bool visualizeRC3DCascades = false;
 	int cascadeVisIndex = 0;
+
+	bool enableCascadeProbeVis = false;
+	int cascadeVisProbeIntervalIndex = 0;
+	int cascadeVisProbeSubset = 32;
 };
 
 #define ENABLE_RT (false)
@@ -60,7 +64,7 @@ struct GlobalSettings
 	RenderMode renderMode = RenderModeRaster;
 
 	bool renderDebugLines = ENABLE_DEBUG_DRAW;
-	bool useDebugCam = false;
+	bool useDebugCam = true;
 };
 
 struct AppSettings
@@ -128,6 +132,9 @@ private:
 		RootEntryRCRaytracingRTGRCGlobalsCB,
 		RootEntryRCRaytracingRTGCascadeInfoCB,
 		RootEntryRCRaytracingRTGDepthTextureUAV,
+#if defined(_DEBUG)
+		RootEntryRCRaytracingRTGRCVisCB,
+#endif
 		RootEntryRCRaytracingRTGCount,
 
 		RootEntryRCRaytracingRTLGeomDataSRV = 0,
