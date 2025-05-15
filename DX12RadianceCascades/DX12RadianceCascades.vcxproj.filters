@@ -167,6 +167,7 @@
     <None Include="Assets\shaders\RCCommon.hlsli" />
     <None Include="Assets\shaders\DebugDraw.hlsli" />
     <None Include="Assets\shaders\RCCommon3D.hlsli" />
+    <None Include="Assets\shaders\RadianceCascadeVis.hlsli" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Assets\shaders\DirectCopyCS.hlsl" />

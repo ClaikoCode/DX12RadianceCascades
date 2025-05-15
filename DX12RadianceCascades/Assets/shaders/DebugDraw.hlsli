@@ -7,6 +7,7 @@
 #include "Common.hlsli"
 
 #if defined(_DEBUGDRAWING)
+
 struct DebugRenderVertex
 {
     float3 position;

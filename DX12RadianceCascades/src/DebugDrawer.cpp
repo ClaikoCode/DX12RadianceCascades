@@ -67,17 +67,17 @@ void DebugDrawer::DrawImpl(DebugRenderCameraInfo& cameraInfo, ColorBuffer& targe
 {
 	GraphicsContext& gfxContext = GraphicsContext::Begin(L"Debug Draw Context");
 
-	uint32_t count = 0;
+	uint32_t lineCount = 0;
 	{
 		gfxContext.CopyCounter(m_countReadbackBuffer, 0, m_lineStructBuffer);
 		void* countReadBack = m_countReadbackBuffer.Map();
-		memcpy(&count, countReadBack, sizeof(count));
+		memcpy(&lineCount, countReadBack, sizeof(uint32_t));
 		m_countReadbackBuffer.Unmap();
 	}
 
-	if (count > DEBUGDRAW_MAX_LINES)
+	if (lineCount > DEBUGDRAW_MAX_LINES)
 	{
-		count = DEBUGDRAW_MAX_LINES;
+		lineCount = DEBUGDRAW_MAX_LINES;
 	}
 
 	gfxContext.TransitionResource(m_cameraBuffer, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
@@ -96,7 +96,7 @@ void DebugDrawer::DrawImpl(DebugRenderCameraInfo& cameraInfo, ColorBuffer& targe
 	gfxContext.SetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_LINELIST);
 	gfxContext.SetRenderTarget(targetColor.GetRTV(), targetDepth.GetDSV());
 	gfxContext.SetDynamicConstantBufferView(0, sizeof(cameraInfo), &cameraInfo);
-	gfxContext.Draw(count * 2);
+	gfxContext.Draw(lineCount * 2);
 
 	// Clear counter for next frame.
 	gfxContext.ResetCounter(m_lineStructBuffer);

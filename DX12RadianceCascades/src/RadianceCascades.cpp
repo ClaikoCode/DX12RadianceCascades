@@ -128,7 +128,7 @@ void RadianceCascades::Cleanup()
 
 void RadianceCascades::Update(float deltaT)
 {
-	RuntimeResourceManager::UpdateGraphicsPSOs();
+	RuntimeResourceManager::UpdatePSOs();
 
 	// Mouse update
 	{
@@ -443,10 +443,12 @@ void RadianceCascades::InitializeRT()
 			,true
 #endif
 		);
+
 		globalRootSig[RootEntryRTGSRV].InitAsShaderResourceView(0);
 		globalRootSig[RootEntryRTGUAV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 1);
 		globalRootSig[RootEntryRTGParamCB].InitAsConstantBufferView(0);
 		globalRootSig[RootEntryRTGInfoCB].InitAsConstantBufferView(1);
+
 		{
 			SamplerDesc sampler = Graphics::SamplerLinearWrapDesc;
 			globalRootSig.InitStaticSampler(0, sampler);
@@ -493,6 +495,9 @@ void RadianceCascades::InitializeRT()
 		globalRootSig[RootEntryRCRaytracingRTGGlobalInfoCB].InitAsConstantBufferView(0);
 		globalRootSig[RootEntryRCRaytracingRTGRCGlobalsCB].InitAsConstantBufferView(1);
 		globalRootSig[RootEntryRCRaytracingRTGCascadeInfoCB].InitAsConstantBufferView(2);
+#if defined(_DEBUG)
+		globalRootSig[RootEntryRCRaytracingRTGRCVisCB].InitAsConstantBufferView(127);
+#endif
 		globalRootSig[RootEntryRCRaytracingRTGDepthTextureUAV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 1);
 		{
 			SamplerDesc sampler = Graphics::SamplerLinearWrapDesc;
@@ -677,6 +682,16 @@ void RadianceCascades::RenderRCRaytracing(Camera& camera)
 		rtCommandList->SetComputeRootShaderResourceView(RootEntryRCRaytracingRTGSceneSRV, m_sceneTLAS.GetBVH());
 		rtContext.SetDynamicConstantBufferView(RootEntryRCRaytracingRTGGlobalInfoCB, sizeof(GlobalInfo), &globalInfo);
 		rtContext.SetDynamicConstantBufferView(RootEntryRCRaytracingRTGRCGlobalsCB, sizeof(RCGlobalInfo), &rcGlobalInfo);
+
+#if defined(_DEBUG)
+		
+		CascadeVisInfo cascadeVisInfo = {};
+		cascadeVisInfo.enableProbeVis = m_settings.rcSettings.enableCascadeProbeVis;
+		cascadeVisInfo.cascadeVisIndex = m_settings.rcSettings.cascadeVisProbeIntervalIndex;
+		cascadeVisInfo.probeSubset = m_settings.rcSettings.cascadeVisProbeSubset;
+		
+		rtContext.SetDynamicConstantBufferView(RootEntryRCRaytracingRTGRCVisCB, sizeof(CascadeVisInfo), &cascadeVisInfo);
+#endif
 
 #if defined(_DEBUGDRAWING)
 		DebugDrawer::BindDebugBuffers(rtContext, RootEntryRCRaytracingRTGCount);
@@ -961,6 +976,7 @@ void RadianceCascades::BuildUISettings()
 {
 	ImGui::Begin("Settings");
 
+#pragma region GlobalSettings
 	if (ImGui::CollapsingHeader("Global Settings", ImGuiTreeNodeFlags_DefaultOpen))
 	{
 		GlobalSettings& gs = m_settings.globalSettings;
@@ -972,12 +988,16 @@ void RadianceCascades::BuildUISettings()
 
 #if defined(_DEBUGDRAWING)
 		ImGui::SeparatorText("Debug Drawing");
+		ImGui::Checkbox("Use Debug Cam", &gs.useDebugCam);
 		ImGui::Checkbox("Draw Debug Lines", &gs.renderDebugLines);
 #endif
 	}
+#pragma endregion
 	
+#pragma region CascadeSettings
 	if (ImGui::CollapsingHeader("Radiance Cascade Settings", ImGuiTreeNodeFlags_DefaultOpen))
 	{
+
 		RadianceCascadesSettings& rcs = m_settings.rcSettings;
 
 		ImGui::Checkbox("Render RC 3D", &rcs.renderRC3D);
@@ -988,12 +1008,14 @@ void RadianceCascades::BuildUISettings()
 
 			ImGui::Text("Cascade count: %u", m_rcManager3D.GetCascadeIntervalCount());
 
-			// Create a table with 3 columns: Cascade, Probe Count, Ray Count
-			if (ImGui::BeginTable("CascadeTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_NoHostExtendX))
+			// Create a table with 5 columns: Cascade, Probe Count, Ray Count, Start Dist, Length
+			if (ImGui::BeginTable("CascadeTable", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_NoHostExtendX))
 			{
 				ImGui::TableSetupColumn("Cascade", ImGuiTableColumnFlags_WidthFixed);
 				ImGui::TableSetupColumn("Probe Count", ImGuiTableColumnFlags_WidthFixed);
 				ImGui::TableSetupColumn("Rays Per Probe", ImGuiTableColumnFlags_WidthFixed);
+				ImGui::TableSetupColumn("Ray Start Distance", ImGuiTableColumnFlags_WidthFixed);
+				ImGui::TableSetupColumn("Ray Length", ImGuiTableColumnFlags_WidthFixed);
 				ImGui::TableHeadersRow();
 
 				// Add a row for each cascade
@@ -1011,6 +1033,14 @@ void RadianceCascades::BuildUISettings()
 					// Rays Per Probe column
 					ImGui::TableSetColumnIndex(2);
 					ImGui::Text("%u", m_rcManager3D.GetRaysPerProbe(i));
+
+					// Ray Start Distance column
+					ImGui::TableSetColumnIndex(3);
+					ImGui::Text("%.1f", m_rcManager3D.GetStartT(i));
+
+					// Ray Length column
+					ImGui::TableSetColumnIndex(4);
+					ImGui::Text("%.1f", m_rcManager3D.GetRayLength(i));
 				}
 
 				ImGui::EndTable();
@@ -1022,8 +1052,16 @@ void RadianceCascades::BuildUISettings()
 			{
 				ImGui::SliderInt("Cascade Index", &rcs.cascadeVisIndex, 0, m_rcManager3D.GetCascadeIntervalCount() - 1);
 			}
+
+			ImGui::Checkbox("Visualize Probes", &rcs.enableCascadeProbeVis);
+			if (rcs.enableCascadeProbeVis)
+			{
+				ImGui::SliderInt("Cascade Interval", &rcs.cascadeVisProbeIntervalIndex, 0, m_rcManager3D.GetCascadeIntervalCount() - 1);
+				ImGui::SliderInt("Probe Subset", &rcs.cascadeVisProbeSubset, 0, 64);
+			}
 		}
 	}
+#pragma endregion
 	
 	ImGui::End();
 }

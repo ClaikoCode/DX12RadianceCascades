@@ -68,3 +68,14 @@ uint32_t RadianceCascadeManager3D::GetProbeCount(uint32_t cascadeIndex)
 	uint32_t probesPerDim = m_probesPerDim0 / (uint32_t)Math::Pow((float)m_scalingFactor.probeScalingFactor, (float)cascadeIndex);
 	return probesPerDim * probesPerDim;
 }
+
+float RadianceCascadeManager3D::GetStartT(uint32_t cascadeIndex)
+{
+	float startT = Math::GeometricSeriesSum(m_rayLength0, (float)m_scalingFactor.rayScalingFactor, (float)cascadeIndex);
+	return startT == -0.0f ? -startT : startT;
+}
+
+float RadianceCascadeManager3D::GetRayLength(uint32_t cascadeIndex)
+{
+	return m_rayLength0 * Math::Pow((float)m_scalingFactor.rayScalingFactor, (float)cascadeIndex);
+}

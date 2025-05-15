@@ -102,7 +102,7 @@ public:
 		return instance;
 	}
 
-	static void UpdateGraphicsPSOs();
+	static void UpdatePSOs();
 	// Not a reference so rvalues can be input. Inefficient but its not a hotpath.
 	static void AddShaderDependency(ShaderID shaderID, std::vector<psoid_t> psoIDs); 
 	static void RegisterPSO(PSOID psoID, void* psoPtr, PSOType psoType);
@@ -131,7 +131,7 @@ public:
 
 private: 
 	RuntimeResourceManager();
-	void UpdatePSOs();
+	void UpdatePSOsImpl();
 
 	// Will create the shader table if it doesnt exist.
 	HitShaderTablePackage& GetOrCreateHitShaderTablePackage(PSOID psoID, ModelID modelID);

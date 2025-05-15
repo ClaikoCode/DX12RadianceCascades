@@ -40,3 +40,10 @@ __declspec(align(16)) struct RCGlobalInfo
 	float rayLength0;
 	uint32_t cascadeCount;
 };
+
+__declspec(align(16)) struct CascadeVisInfo
+{
+	bool enableProbeVis;
+	uint32_t cascadeVisIndex;
+	uint32_t probeSubset;
+};

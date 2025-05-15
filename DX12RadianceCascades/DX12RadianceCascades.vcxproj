@@ -253,6 +253,7 @@ if %errorlevel% leq 3 exit 0</Command>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
     </None>
     <None Include="Assets\shaders\DebugDraw.hlsli" />
+    <None Include="Assets\shaders\RadianceCascadeVis.hlsli" />
     <None Include="Assets\shaders\RCCommon.hlsli">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
     </None>

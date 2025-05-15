@@ -9,9 +9,9 @@
 
 static const std::set<Shader::ShaderType> s_ValidShaderTypes = { Shader::ShaderTypeCS, Shader::ShaderTypeVS, Shader::ShaderTypePS, Shader::ShaderTypeRT };
 
-void RuntimeResourceManager::UpdateGraphicsPSOs()
+void RuntimeResourceManager::UpdatePSOs()
 {
-	Get().UpdatePSOs();
+	Get().UpdatePSOsImpl();
 }
 
 void RuntimeResourceManager::AddShaderDependency(ShaderID shaderID, std::vector<psoid_t> psoIDs)
@@ -111,7 +111,7 @@ RuntimeResourceManager::RuntimeResourceManager() : m_usedPSOs({})
 	}
 }
 
-void RuntimeResourceManager::UpdatePSOs()
+void RuntimeResourceManager::UpdatePSOsImpl()
 {
 	auto& shaderCompManager = ShaderCompilationManager::Get();
 
