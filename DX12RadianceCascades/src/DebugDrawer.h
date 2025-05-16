@@ -2,7 +2,7 @@
 
 #include "Core\ReadbackBuffer.h"
 
-#define DEBUGDRAW_MAX_LINES 2048 * 2048
+#define DEBUGDRAW_MAX_LINES 2048 * 2048 * 2
 
 struct DebugRenderCameraInfo;
 class ColorBuffer;

@@ -26,7 +26,7 @@ struct CascadeInfo
 struct ProbeInfo3D
 {
     float rayCount;
-    float sideLength; // In pixels.
+    float sideLength; // In pixels. Also is the amount of probes in each dim.
     int2 probeIndex; // Also relative pixel position inside a direction group.
     int2 rayIndex;
     float startDistance; // In world-units.
