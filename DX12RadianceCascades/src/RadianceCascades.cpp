@@ -181,7 +181,7 @@ void RadianceCascades::RenderScene()
 		if (m_settings.globalSettings.useDebugCam)
 		{
 			cam.SetPosition(GetMainSceneModelCenter());
-			cam.SetRotation(Math::Quaternion(Math::Vector3(0.0f, 1.0f, 0.0f), Math::XM_PI));
+			cam.SetLookDirection(Math::Vector3(-1.0f, -1.0f, 0.0f), Math::Vector3(0.0f, 1.0f, 0.0f));
 			cam.Update();
 
 			RenderDepthOnly(cam, m_debugCamDepthBuffer, m_mainViewport, m_mainScissor, true);
@@ -1052,7 +1052,7 @@ void RadianceCascades::BuildUISettings()
 			if (rcs.enableCascadeProbeVis)
 			{
 				ImGui::SliderInt("Cascade Interval", &rcs.cascadeVisProbeIntervalIndex, 0, m_rcManager3D.GetCascadeIntervalCount() - 1);
-				ImGui::SliderInt("Probe Subset", &rcs.cascadeVisProbeSubset, 0, 64);
+				ImGui::SliderInt("Probe Subset", &rcs.cascadeVisProbeSubset, 1, 64);
 			}
 		}
 	}

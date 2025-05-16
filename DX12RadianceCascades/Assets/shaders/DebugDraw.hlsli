@@ -19,7 +19,7 @@ RWByteAddressBuffer debugDrawVertexCounter : register(u127);
 
 void DrawLine(float3 position0, float3 position1, float3 color)
 {
-    const uint MAX_VERTICES = 2048 * 2048;
+    const uint MAX_VERTICES = 2048 * 2048 * 2;
     
     // Simple atomic add with bounds check - no retry logic
     uint offset_in_vertex_buffer;

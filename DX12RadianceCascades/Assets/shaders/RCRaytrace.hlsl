@@ -184,7 +184,7 @@ void ClosestHitShader(inout RayPayload payload, in BuiltInTriangleIntersectionAt
     
     uint2 pixelIndex = DispatchRaysIndex().xy;
     DrawCascadeRay(float3(1.0f, 0.0f, 0.0f), 0.5f, cascadeInfo.cascadeIndex, payload.probeIndex);
-    renderOutput[pixelIndex] = float4(emissiveTex.SampleLevel(sourceSampler, uv, 0).rgb, 1.0f);
+    renderOutput[pixelIndex] = float4(emissiveTex.SampleLevel(sourceSampler, uv, 0).rgb, 0.0f);
 }
 
 [shader("miss")]
@@ -198,6 +198,6 @@ void MissShader(inout RayPayload payload)
     }
     else
     {
-        renderOutput[DispatchRaysIndex().xy] = float4(1.0f, 0.0f, 0.0f, 1.0f);
+        renderOutput[DispatchRaysIndex().xy] = float4(0.0f, 0.0f, 0.0f, 1.0f);
     }
 }
