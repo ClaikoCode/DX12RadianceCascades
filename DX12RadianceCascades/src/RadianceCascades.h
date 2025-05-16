@@ -2,6 +2,7 @@
 
 #include "Core\GameCore.h"
 #include "Core\ColorBuffer.h"
+#include "Core\DepthBuffer.h"
 #include "Core\GpuBuffer.h"
 #include "Core\ReadbackBuffer.h"
 #include "Core\Camera.h"
@@ -45,7 +46,7 @@ struct RadianceCascadesSettings
 
 	bool enableCascadeProbeVis = false;
 	int cascadeVisProbeIntervalIndex = 0;
-	int cascadeVisProbeSubset = 32;
+	int cascadeVisProbeSubset = 16;
 };
 
 #define ENABLE_RT (false)
@@ -64,7 +65,8 @@ struct GlobalSettings
 	RenderMode renderMode = RenderModeRaster;
 
 	bool renderDebugLines = ENABLE_DEBUG_DRAW;
-	bool useDebugCam = true;
+	bool useDepthCheckForDebugLines = false;
+	bool useDebugCam = false;
 };
 
 struct AppSettings
@@ -163,11 +165,11 @@ private:
 	void InitializeRCResources();
 	void InitializeRT();
 	
-	void RenderRaster(Camera& camera, D3D12_VIEWPORT viewPort, D3D12_RECT scissor);
-	void RenderRaytracing(Camera& camera);
+	void RenderRaster(ColorBuffer& targetColor, DepthBuffer& targetDepth, Camera& camera, D3D12_VIEWPORT viewPort, D3D12_RECT scissor);
+	void RenderRaytracing(ColorBuffer& targetColor, Camera& camera);
 	void RenderRCRaytracing(Camera& camera);
 	void RenderDepthOnly(Camera& camera, DepthBuffer& targetDepth, D3D12_VIEWPORT viewPort, D3D12_RECT scissor, bool clearDepth = false);
-	void RunMinMaxDepth(DepthBuffer& sourceDepthBuffer);
+	void BuildMinMaxDepthBuffer(DepthBuffer& sourceDepthBuffer);
 	void RunComputeFlatlandScene();
 	void RunComputeRCGather();
 	void RunComputeRCMerge();
@@ -242,5 +244,7 @@ private:
 
 	ColorBuffer m_minMaxDepthCopy;
 	ColorBuffer m_minMaxDepthMips;
+
+	DepthBuffer m_debugCamDepthBuffer;
 };
 

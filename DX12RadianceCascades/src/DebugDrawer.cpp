@@ -11,10 +11,14 @@
 
 #if defined(_DEBUGDRAWING)
 
-#define ENABLE_DEPTH 0
-
-DebugDrawer::DebugDrawer() : m_debugDrawPSO(L"Debug Draw PSO"), m_debugDrawRootSig(std::make_shared<RootSignature>())
+DebugDrawer::DebugDrawer() : 
+	m_debugDrawNoDepthPSO(L"Debug Draw No Depth PSO"), 
+	m_debugDrawDepthPSO(L"Debug Draw Depth PSO"), 
+	m_debugDrawRootSig(std::make_shared<RootSignature>())
 {
+	RuntimeResourceManager::RegisterPSO(PSOIDDebugDrawNoDepthPSO, &m_debugDrawNoDepthPSO, PSOTypeGraphics);
+	RuntimeResourceManager::RegisterPSO(PSOIDDebugDrawDepthPSO, &m_debugDrawDepthPSO, PSOTypeGraphics);
+
 	m_lineStructBuffer.Create(L"Debug Drawer Line Buffer", DEBUGDRAW_MAX_LINES * 2, sizeof(DebugRenderVertex));
 	m_cameraBuffer.Create(L"Debug Drawer Camera Buffer", 1, sizeof(DebugRenderCameraInfo));
 	m_countReadbackBuffer.Create(L"Debug Drawer Count Readback", 1, sizeof(uint32_t));
@@ -30,24 +34,34 @@ DebugDrawer::DebugDrawer() : m_debugDrawPSO(L"Debug Draw PSO"), m_debugDrawRootS
 	rootSig[0].InitAsConstantBuffer(0); // Camera const buffer.
 	rootSig.Finalize(L"Debug Draw Root Signature", D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
-	// Creating PSO
+	// Creating debug PSO without depth.
 	{
-		GraphicsPSO& pso = m_debugDrawPSO;
+		GraphicsPSO& pso = RuntimeResourceManager::GetGraphicsPSO(PSOIDDebugDrawNoDepthPSO);
+		RuntimeResourceManager::SetShadersForPSO(PSOIDDebugDrawNoDepthPSO, { ShaderIDDebugDrawVS, ShaderIDDebugDrawPS });
+
 		pso.SetRootSignature(rootSig);
-		pso.SetVertexShader(RuntimeResourceManager::GetShader(ShaderIDDebugDrawVS));
-		pso.SetPixelShader(RuntimeResourceManager::GetShader(ShaderIDDebugDrawPS));
 		pso.SetRasterizerState(Graphics::RasterizerTwoSided);
 		pso.SetBlendState(Graphics::BlendAdditive);
-#if ENABLE_DEPTH
-		pso.SetDepthStencilState(Graphics::DepthStateReadOnly);
-		pso.SetRenderTargetFormat(Graphics::g_SceneColorBuffer.GetFormat(), Graphics::g_SceneDepthBuffer.GetFormat());
-#else
+
 		pso.SetDepthStencilState(Graphics::DepthStateDisabled);
 		pso.SetRenderTargetFormat(Graphics::g_SceneColorBuffer.GetFormat(), DXGI_FORMAT_UNKNOWN);
-#endif
+
 		pso.SetInputLayout((UINT)inputLayout.size(), inputLayout.data());
 		pso.SetPrimitiveTopologyType(D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE);
-		
+
+		pso.Finalize();
+	}
+
+	// Creating debug PSO with depth.
+	{
+		GraphicsPSO& pso = RuntimeResourceManager::GetGraphicsPSO(PSOIDDebugDrawDepthPSO);
+		// Same as above, but with depth.
+		pso = { RuntimeResourceManager::GetGraphicsPSO(PSOIDDebugDrawNoDepthPSO) };
+
+		RuntimeResourceManager::SetShadersForPSO(PSOIDDebugDrawDepthPSO, { ShaderIDDebugDrawVS, ShaderIDDebugDrawPS });
+		pso.SetDepthStencilState(Graphics::DepthStateReadOnly);
+		pso.SetRenderTargetFormat(Graphics::g_SceneColorBuffer.GetFormat(), Graphics::g_SceneDepthBuffer.GetFormat());
+
 		pso.Finalize();
 	}
 
@@ -57,13 +71,9 @@ DebugDrawer::DebugDrawer() : m_debugDrawPSO(L"Debug Draw PSO"), m_debugDrawRootS
 	gfxContext.TransitionResource(m_lineStructBuffer.GetCounterBuffer(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
 	gfxContext.Finish(true);
-
-	RuntimeResourceManager::RegisterPSO(PSOIDDebugDrawPSO, &m_debugDrawPSO, PSOTypeGraphics);
-	RuntimeResourceManager::AddShaderDependency(ShaderIDDebugDrawPS, { PSOIDDebugDrawPSO });
-	RuntimeResourceManager::AddShaderDependency(ShaderIDDebugDrawVS, { PSOIDDebugDrawPSO });
 }
 
-void DebugDrawer::DrawImpl(DebugRenderCameraInfo& cameraInfo, ColorBuffer& targetColor, DepthBuffer& targetDepth, D3D12_VIEWPORT viewPort, D3D12_RECT scissor)
+void DebugDrawer::DrawImpl(DebugRenderCameraInfo& cameraInfo, ColorBuffer& targetColor, DepthBuffer& targetDepth, D3D12_VIEWPORT viewPort, D3D12_RECT scissor, bool useDepthCheck)
 {
 	GraphicsContext& gfxContext = GraphicsContext::Begin(L"Debug Draw Context");
 
@@ -89,7 +99,15 @@ void DebugDrawer::DrawImpl(DebugRenderCameraInfo& cameraInfo, ColorBuffer& targe
 	vbView.SizeInBytes = (UINT)m_lineStructBuffer.GetBufferSize();
 	vbView.StrideInBytes = m_lineStructBuffer.GetElementSize();
 
-	gfxContext.SetPipelineState(m_debugDrawPSO);
+	if (useDepthCheck)
+	{
+		gfxContext.SetPipelineState(RuntimeResourceManager::GetGraphicsPSO(PSOIDDebugDrawDepthPSO));
+	}
+	else
+	{
+		gfxContext.SetPipelineState(RuntimeResourceManager::GetGraphicsPSO(PSOIDDebugDrawNoDepthPSO));
+	}
+
 	gfxContext.SetRootSignature(*m_debugDrawRootSig);
 	gfxContext.SetVertexBuffer(0, vbView);
 	gfxContext.SetViewportAndScissor(viewPort, scissor);
@@ -108,7 +126,8 @@ void DebugDrawer::DestroyImpl()
 {
 	Graphics::g_CommandManager.IdleGPU();
 
-	m_debugDrawPSO.DestroyAll();
+	m_debugDrawNoDepthPSO.DestroyAll();
+	m_debugDrawDepthPSO.DestroyAll();
 	m_lineStructBuffer.Destroy();
 	m_cameraBuffer.Destroy();
 	m_countReadbackBuffer.Destroy();

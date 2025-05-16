@@ -7,21 +7,28 @@
 #include "Model\Renderer.h"
 #include "RuntimeResourceManager.h"
 
-static const std::set<Shader::ShaderType> s_ValidShaderTypes = { Shader::ShaderTypeCS, Shader::ShaderTypeVS, Shader::ShaderTypePS, Shader::ShaderTypeRT };
-
-void RuntimeResourceManager::UpdatePSOs()
+void RuntimeResourceManager::CheckAndUpdatePSOs()
 {
-	Get().UpdatePSOsImpl();
-}
-
-void RuntimeResourceManager::AddShaderDependency(ShaderID shaderID, std::vector<psoid_t> psoIDs)
-{
-	Get().AddShaderDependencyImpl(shaderID, psoIDs);
+	Get().CheckAndUpdatePSOsImpl();
 }
 
 void RuntimeResourceManager::RegisterPSO(PSOID psoID, void* psoPtr, PSOType psoType)
 {
 	Get().RegisterPSOImpl(psoID, psoPtr, psoType);
+}
+
+void RuntimeResourceManager::SetShadersForPSO(PSOID psoID, std::vector<ShaderID> shaderIDs, bool updatePSO)
+{ 
+	for (ShaderID shaderID : shaderIDs) 
+	{ 
+		SetShaderForPSO(psoID, shaderID, false); // Set forceupdate to false always.
+	}
+
+	// Update after all shaders has been set.
+	if (updatePSO)
+	{
+		Get().UpdatePSOImpl(psoID);
+	}
 }
 
 void RuntimeResourceManager::AddModel(ModelID modelID, const std::wstring& modelPath, bool createBLAS)
@@ -72,7 +79,7 @@ void RuntimeResourceManager::BuildRaytracingDispatchInputs(PSOID psoID, std::set
 	Get().BuildRaytracingDispatchInputsImpl(psoID, models, rayDispatchID);
 }
 
-RuntimeResourceManager::RuntimeResourceManager() : m_usedPSOs({})
+RuntimeResourceManager::RuntimeResourceManager() : m_psoMap({})
 {
 	m_descHeap.Create(L"Runtime Resource Manager Desc Heap", D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 2048);
 
@@ -111,96 +118,23 @@ RuntimeResourceManager::RuntimeResourceManager() : m_usedPSOs({})
 	}
 }
 
-void RuntimeResourceManager::UpdatePSOsImpl()
+void RuntimeResourceManager::CheckAndUpdatePSOsImpl()
 {
 	auto& shaderCompManager = ShaderCompilationManager::Get();
 
 	if (shaderCompManager.HasRecentReCompilations())
 	{
-		// Wait for all work to be done before changing PSOs.
-		Graphics::g_CommandManager.IdleGPU();
-
 		auto& compSet = shaderCompManager.GetRecentReCompilations();
 
 		for (UUID64 shaderID : compSet)
 		{
-			Shader::ShaderType shaderType = shaderCompManager.GetShaderType(shaderID);
+			const auto& psoIds = m_shaderPSODependencyMap[shaderID];
 
-			if (s_ValidShaderTypes.find(shaderType) == s_ValidShaderTypes.end())
+			if (!psoIds.empty())
 			{
-				LOG_INFO(L"Invalid shader type: {}. Skipping.", (uint32_t)shaderType);
-				continue;
-			}
-
-			D3D12_SHADER_BYTECODE shaderByteCode = shaderCompManager.GetShaderByteCode(shaderID);
-
-			if (shaderByteCode.pShaderBytecode)
-			{
-				const auto& psoIds = m_shaderPSODependencyMap[shaderID];
-
-				if (!psoIds.empty())
+				for (psoid_t psoID : psoIds)
 				{
-					for (psoid_t psoID : psoIds)
-					{
-						const PSOPackage& package = m_usedPSOs[psoID];
-
-						if (package.psoType == PSOTypeCompute)
-						{
-							ComputePSO& pso = *(reinterpret_cast<ComputePSO*>(package.PSOPointer));
-
-							if (pso.GetPipelineStateObject() != nullptr)
-							{
-								pso.SetComputeShader(shaderByteCode);
-								pso.Finalize();
-							}
-						}
-						else if (package.psoType == PSOTypeGraphics)
-						{
-							GraphicsPSO& pso = *(reinterpret_cast<GraphicsPSO*>(package.PSOPointer));
-
-							if (pso.GetPipelineStateObject() != nullptr)
-							{
-								if (shaderType == Shader::ShaderTypePS)
-								{
-									pso.SetPixelShader(shaderByteCode);
-								}
-								else if (shaderType == Shader::ShaderTypeVS)
-								{
-									pso.SetVertexShader(shaderByteCode);
-								}
-
-								pso.Finalize();
-							}
-						}
-						else if (package.psoType == PSOTypeRaytracing)
-						{
-							RaytracingPSO& pso = *(reinterpret_cast<RaytracingPSO*>(package.PSOPointer));
-
-							LOG_DEBUG(L"Updating RT PSO {}.", psoID);
-							if (pso.GetStateObject() != nullptr)
-							{
-								pso.SetDxilLibrary(s_DXILExports, shaderByteCode);
-
-								pso.Finalize();
-							}
-
-							PSOID rtPSOID = (PSOID)psoID;
-							LOG_DEBUG(L"Updating all hit shader tables with new shader identifier data.");
-							ForceBuildHitShaderTables(rtPSOID);
-
-							std::set<ModelID> dependantModels = {};
-							for (auto& [modelID, _] : m_shaderTablePSOMap[rtPSOID])
-							{
-								dependantModels.insert(modelID);
-							}
-
-							LOG_DEBUG(L"Updating all raytracing dispatch inputs with new shader tables.");
-							for (const RayDispatchID rayDispatchID : m_psoRayDispatchDependencyMap[rtPSOID])
-							{
-								BuildRaytracingDispatchInputsImpl(rtPSOID, dependantModels, rayDispatchID);
-							}
-						}
-					}
+					SetShaderForPSOImpl((PSOID)psoID, (ShaderID)shaderID, true);
 				}
 			}
 		}
@@ -269,22 +203,139 @@ void RuntimeResourceManager::ForceBuildHitShaderTables(PSOID psoID)
 	}
 }
 
-void RuntimeResourceManager::AddShaderDependencyImpl(ShaderID shaderID, std::vector<psoid_t>& psoIDs)
+void RuntimeResourceManager::SetShaderForPSOImpl(PSOID psoID, ShaderID shaderID, bool updatePSO)
 {
-	for (uint32_t psoID : psoIDs)
+	ShaderCompilationManager& compManager = ShaderCompilationManager::Get();
+
+	const ShaderData* shaderData = compManager.GetShaderData(shaderID);
+	ASSERT(shaderData != nullptr); // TODO: Handle default shaders if one doesnt exist.
+
+	PSOPackage& psoPackage = GetPSOImpl(psoID);
+	PSOType psoType = psoPackage.psoType;
+
+	ShaderType shaderType = shaderData->shaderCompPackage.shaderType;
+	D3D12_SHADER_BYTECODE shaderByteCode = compManager.GetShaderByteCode(shaderID);
+
+	if (psoType == PSOTypeCompute)
 	{
-		m_shaderPSODependencyMap[shaderID].insert(psoID);
+		if (!IS_OF_SHADER_TYPE(shaderType, ShaderTypeCS))
+		{
+			LOG_ERROR(L"Invalid shader type '{}' for a Compute PSO.", ShaderTypeToString(shaderType));
+			return;
+		}
+
+		ComputePSO& pso = psoPackage.AsComputePSO();
+		pso.SetComputeShader(shaderByteCode);
+	}
+	else if (psoType == PSOTypeGraphics)
+	{
+		if (!IS_OF_SHADER_TYPE(shaderType, ShaderTypeGraphics))
+		{
+			LOG_ERROR(L"Invalid shader type '{}' for a Graphics PSO.", ShaderTypeToString(shaderType));
+			return;
+		}
+
+		GraphicsPSO& pso = psoPackage.AsGraphicsPSO();
+
+		switch (shaderType)
+		{
+		case ShaderTypeVS:
+			pso.SetVertexShader(shaderByteCode);
+			break;
+
+		case ShaderTypePS:
+			pso.SetPixelShader(shaderByteCode);
+			break;
+
+		default:
+			LOG_ERROR(L"Setting a shader of type '{}' has not yet been implemented for Graphics PSO.", ShaderTypeToString(shaderType));
+		}
+	}
+	else if (psoType == PSOTypeRaytracing)
+	{
+		if (!IS_OF_SHADER_TYPE(shaderType, ShaderTypeRT))
+		{
+			LOG_ERROR(L"Invalid shader type '{}' for a Raytracing PSO.", ShaderTypeToString(shaderType));
+			return;
+		}
+
+		RaytracingPSO& pso = psoPackage.AsRaytracingPSO();
+		pso.SetDxilLibrary(s_DXILExports, shaderByteCode);
+	}
+
+	// If everything succeeded, add the shader dependency.
+	AddShaderDependencyToPSOImpl(shaderID, psoID);
+
+	if (updatePSO)
+	{
+		UpdatePSOImpl(psoID);
+	}
+}
+
+void RuntimeResourceManager::UpdatePSOImpl(PSOID psoID)
+{
+	// Wait for all work to be done before changing any PSO.
+	Graphics::g_CommandManager.IdleGPU();
+
+	PSOPackage& psoPackage = GetPSOImpl(psoID);
+	PSOType psoType = psoPackage.psoType;
+
+	if (psoType == PSOTypeCompute)
+	{
+		psoPackage.AsComputePSO().Finalize();
+	}
+	else if (psoType == PSOTypeGraphics)
+	{
+		psoPackage.AsGraphicsPSO().Finalize();
+	}
+	else if (psoType == PSOTypeRaytracing)
+	{
+		psoPackage.AsRaytracingPSO().Finalize();
+
+		LOG_DEBUG(L"Updating all hit shader tables with new shader identifier data.");
+		ForceBuildHitShaderTables(psoID);
+
+		std::set<ModelID> dependantModels = {};
+		for (auto& [modelID, _] : m_shaderTablePSOMap[psoID])
+		{
+			dependantModels.insert(modelID);
+		}
+
+		LOG_DEBUG(L"Updating all raytracing dispatch inputs with new shader tables.");
+		for (const RayDispatchID rayDispatchID : m_psoRayDispatchDependencyMap[psoID])
+		{
+			BuildRaytracingDispatchInputsImpl(psoID, dependantModels, rayDispatchID);
+		}
+	}
+	else
+	{
+		LOG_ERROR(L"Invalid PSO type {}", (uint32_t)psoPackage.psoType);
+	}
+}
+
+void RuntimeResourceManager::AddShaderDependencyToPSOImpl(ShaderID shaderID, psoid_t psoID)
+{
+	// TODO: 
+	// Check for the given PSO if it exist for any other shader. If that shader is the same type, remove the PSO as a dependency. There can only be a single shader for a given PSO and Shader type.
+	m_shaderPSODependencyMap[shaderID].insert(psoID);
+}
+
+void RuntimeResourceManager::AddShaderDependenciesToPSOImpl(ShaderID shaderID, std::vector<psoid_t>& psoIDs)
+{
+	for (psoid_t psoID : psoIDs)
+	{
+		AddShaderDependencyToPSOImpl(shaderID, psoID);
 	}
 }
 
 void RuntimeResourceManager::RegisterPSOImpl(PSOID psoID, void* psoPtr, PSOType psoType)
 {
-	m_usedPSOs[psoID] = { psoPtr, psoType };
+	m_psoMap[psoID] = { psoPtr, psoType };
 }
 
 PSOPackage& RuntimeResourceManager::GetPSOImpl(PSOID psoID)
 {
-	return m_usedPSOs[psoID];
+	return m_psoMap[psoID];
 }
 
 void RuntimeResourceManager::AddModelImpl(ModelID modelID, const std::wstring& modelPath, bool createBLAS)
@@ -332,26 +383,17 @@ BLASBuffer& RuntimeResourceManager::GetModelBLASImpl(ModelID modelID)
 
 RaytracingPSO& RuntimeResourceManager::GetRaytracingPSOImpl(PSOID rtPSOID)
 {
-	const PSOPackage& psoPackage = GetPSOImpl(rtPSOID);
-	ASSERT(psoPackage.psoType == PSOTypeRaytracing && psoPackage.PSOPointer != nullptr);
-
-	return *reinterpret_cast<RaytracingPSO*>(psoPackage.PSOPointer);
+	return GetPSOImpl(rtPSOID).AsRaytracingPSO();
 }
 
 GraphicsPSO& RuntimeResourceManager::GetGraphicsPSOImpl(PSOID gfxPSOID)
 {
-	const PSOPackage& psoPackage = GetPSOImpl(gfxPSOID);
-	ASSERT(psoPackage.psoType == PSOTypeGraphics && psoPackage.PSOPointer != nullptr);
-
-	return *reinterpret_cast<GraphicsPSO*>(psoPackage.PSOPointer);
+	return GetPSOImpl(gfxPSOID).AsGraphicsPSO();
 }
 
 ComputePSO& RuntimeResourceManager::GetComputePSOImpl(PSOID cmptPSOID)
 {
-	const PSOPackage& psoPackage = GetPSOImpl(cmptPSOID);
-	ASSERT(psoPackage.psoType == PSOTypeCompute && psoPackage.PSOPointer != nullptr);
-
-	return *reinterpret_cast<ComputePSO*>(psoPackage.PSOPointer);
+	return GetPSOImpl(cmptPSOID).AsComputePSO();
 }
 
 void RuntimeResourceManager::BuildRaytracingDispatchInputsImpl(PSOID psoID, std::set<ModelID>& models, RayDispatchID rayDispatchID)
@@ -399,4 +441,22 @@ void RuntimeResourceManager::DestroyImpl()
 	m_internalModels.clear();
 	m_rayDispatchInputs.clear();
 	m_descHeap.Destroy();
+}
+
+GraphicsPSO& PSOPackage::AsGraphicsPSO()
+{
+	ASSERT(PSOPointer != nullptr && psoType == PSOTypeGraphics);
+	return *reinterpret_cast<GraphicsPSO*>(PSOPointer);
+}
+
+ComputePSO& PSOPackage::AsComputePSO()
+{
+	ASSERT(PSOPointer != nullptr && psoType == PSOTypeCompute);
+	return *reinterpret_cast<ComputePSO*>(PSOPointer);
+}
+
+RaytracingPSO& PSOPackage::AsRaytracingPSO()
+{
+	ASSERT(PSOPointer != nullptr && psoType == PSOTypeRaytracing);
+	return *reinterpret_cast<RaytracingPSO*>(PSOPointer);
 }
