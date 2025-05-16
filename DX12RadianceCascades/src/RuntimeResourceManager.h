@@ -54,7 +54,8 @@ enum PSOID : psoid_t
 	PSOIDComputeRCMergePSO,
 	PSOIDComputeRCRadianceFieldPSO,
 	PSOIDRaytracingTestPSO,
-	PSOIDDebugDrawPSO,
+	PSOIDDebugDrawNoDepthPSO,
+	PSOIDDebugDrawDepthPSO,
 	PSOIDComputeMinMaxDepthPSO,
 	PSOIDRCRaytracingPSO,
 
@@ -74,6 +75,10 @@ struct PSOPackage
 {
 	void* PSOPointer;
 	PSOType psoType;
+
+	GraphicsPSO& AsGraphicsPSO();
+	ComputePSO& AsComputePSO();
+	RaytracingPSO& AsRaytracingPSO();
 };
 
 struct InternalModel
@@ -102,10 +107,13 @@ public:
 		return instance;
 	}
 
-	static void UpdatePSOs();
-	// Not a reference so rvalues can be input. Inefficient but its not a hotpath.
-	static void AddShaderDependency(ShaderID shaderID, std::vector<psoid_t> psoIDs); 
+	// Will go through all recompiled shaders (if any) and update the PSOs that depend on them.
+	static void CheckAndUpdatePSOs();
 	static void RegisterPSO(PSOID psoID, void* psoPtr, PSOType psoType);
+	// Optional argument for updating the PSO after shader has been set.
+	static void SetShaderForPSO(PSOID psoID, ShaderID shaderID, bool updatePSO = false) { Get().SetShaderForPSOImpl(psoID, shaderID, updatePSO); }
+	// Optional argument for updating the PSO after shader has been set.
+	static void SetShadersForPSO(PSOID psoID, std::vector<ShaderID> shaderIDs, bool updatePSO = false);
 
 	static void AddModel(ModelID modelID, const std::wstring& modelPath, bool createBLAS = false);
 	static InternalModel& GetInternalModel(ModelID  modelID);
@@ -131,7 +139,7 @@ public:
 
 private: 
 	RuntimeResourceManager();
-	void UpdatePSOsImpl();
+	void CheckAndUpdatePSOsImpl();
 
 	// Will create the shader table if it doesnt exist.
 	HitShaderTablePackage& GetOrCreateHitShaderTablePackage(PSOID psoID, ModelID modelID);
@@ -141,7 +149,14 @@ private:
 	void BuildCombinedShaderTable(PSOID psoID, std::set<ModelID> models, ShaderTable<LocalHitData>& outShaderTable);
 
 private:
-	void AddShaderDependencyImpl(ShaderID shaderID, std::vector<psoid_t>& psoIDs); 
+	// Intelligently checks pso types with compatible shader types and sets the shader if valid. Optionally update the PSO object.
+	// This method always updates shader dependencies accordingly.
+	void SetShaderForPSOImpl(PSOID psoID, ShaderID shaderID, bool forceUpdate = false);
+	// Updates (finalizes) the specified PSO and updates any dependencies if they exist.
+	void UpdatePSOImpl(PSOID psoID);
+
+	void AddShaderDependencyToPSOImpl(ShaderID shaderID, psoid_t psoID);
+	void AddShaderDependenciesToPSOImpl(ShaderID shaderID, std::vector<psoid_t>& psoIDs); 
 	void RegisterPSOImpl(PSOID psoID, void* psoPtr, PSOType psoType);
 	PSOPackage& GetPSOImpl(PSOID psoID);
 
@@ -165,8 +180,10 @@ private:
 private:
 	DescriptorHeap m_descHeap;
 
+	// Maps a shader to a list of PSOs that depend on it. 
+	// When a shader is updated, all PSOs that use it can be fetched for any modification or checks.
 	std::unordered_map<UUID64, std::set<psoid_t>> m_shaderPSODependencyMap;
-	std::array<PSOPackage, PSOIDCount> m_usedPSOs;
+	std::array<PSOPackage, PSOIDCount> m_psoMap;
 
 	std::unordered_map<ModelID, InternalModel> m_internalModels;
 	std::unordered_map<PSOID, std::unordered_map<ModelID, HitShaderTablePackage>> m_shaderTablePSOMap;

@@ -64,6 +64,18 @@ namespace Utils
 		return result;
 	}
 
+	// In radians.
+	static float HorizontalFovToVerticalFov(float horizontalFov, float widthOverHeight)
+	{
+		return 2.0f * atan(tan(horizontalFov * 0.5f) * widthOverHeight);
+	}
+
+	// In radians.
+	static float VerticalFovToHorizontalFov(float verticalFov, float widthOverHeight)
+	{
+		return 2.0f * atan(tan(verticalFov * 0.5f) / widthOverHeight);
+	}
+
 	// A structure that automatically constructs a matrix that is the transpose of its input.
 	struct GPUMatrix
 	{

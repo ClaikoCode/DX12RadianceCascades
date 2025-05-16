@@ -26,6 +26,12 @@ static const std::vector<std::wstring> s_ppDefines = {
 
 };
 
+static const std::array<std::wstring, ShaderModelCount> c_ShaderModelArg = {
+	L"5_0",
+	L"6_1",
+	L"6_3"
+};
+
 static const std::wstring c_IncludeDir = c_ShaderFolder;
 
 typedef std::vector<std::wstring> ShaderCompilationArgs;
@@ -138,33 +144,33 @@ private:
 	std::unordered_set<std::wstring> m_includedFiles;
 };
 
-std::wstring ShaderModelArg(Shader::ShaderModel shaderModel, Shader::ShaderType shaderType)
+std::wstring ShaderModelArg(ShaderModel shaderModel, ShaderType shaderType)
 {
-	const std::wstring& shaderModelStr = Shader::c_ShaderModelArg[shaderModel];
+	const std::wstring& shaderModelStr = c_ShaderModelArg[shaderModel];
 
 	std::wstring shaderTypeStr = L"";
 
 	switch (shaderType)
 	{
-	case Shader::ShaderTypeVS:
+	case ShaderTypeVS:
 		shaderTypeStr += L"vs";
 		break;
-	case Shader::ShaderTypeHS:
+	case ShaderTypeHS:
 		shaderTypeStr += L"hs";
 		break;
-	case Shader::ShaderTypeDS:
+	case ShaderTypeDS:
 		shaderTypeStr += L"ds";
 		break;
-	case Shader::ShaderTypeGS:
+	case ShaderTypeGS:
 		shaderTypeStr += L"gs";
 		break;
-	case Shader::ShaderTypePS:
+	case ShaderTypePS:
 		shaderTypeStr += L"ps";
 		break;
-	case Shader::ShaderTypeCS:
+	case ShaderTypeCS:
 		shaderTypeStr += L"cs";
 		break;
-	case Shader::ShaderTypeLib:
+	case ShaderTypeLib:
 		shaderTypeStr += L"lib"; // Library shader.
 		break;
 	default:
@@ -187,7 +193,7 @@ void AddArgFilename(ShaderCompilationArgs& compArgs, const std::wstring& filenam
 	AppendCompilationToken(compArgs, filename);
 }
 
-void AddArgShaderModel(ShaderCompilationArgs& compArgs, Shader::ShaderModel shaderModel, Shader::ShaderType shaderType)
+void AddArgShaderModel(ShaderCompilationArgs& compArgs, ShaderModel shaderModel, ShaderType shaderType)
 {
 	AppendCompilationToken(compArgs, L"-T");
 	AppendCompilationToken(compArgs, ShaderModelArg(shaderModel, shaderType));
@@ -231,13 +237,13 @@ void AddArgDefine(ShaderCompilationArgs& compArgs, const std::wstring& define)
 	AppendCompilationToken(compArgs, define);
 }
 
-ShaderCompilationArgs BuildArgsFromShaderPackage(const Shader::ShaderCompilationPackage& compPackage)
+ShaderCompilationArgs BuildArgsFromShaderPackage(const ShaderCompilationPackage& compPackage)
 {
 	ShaderCompilationArgs args = {};
 
 	AddArgFilename(args, compPackage.shaderFilename);
 
-	if (compPackage.shaderType != Shader::ShaderTypeRT)
+	if (compPackage.shaderType != ShaderTypeRT)
 	{
 		AddArgEntryPoint(args, compPackage.entryPoint);
 	}
@@ -273,9 +279,9 @@ std::vector<WCHAR*> ConvertArgsToInputArgs(const ShaderCompilationArgs& compArgs
 	return argPtrs;
 }
 
-Shader::ComDxcBuffer BlobEncodingToBuffer(ComPtr<IDxcBlobEncoding> source)
+ComDxcBuffer BlobEncodingToBuffer(ComPtr<IDxcBlobEncoding> source)
 {
-	Shader::ComDxcBuffer comDxcBuffer = {};
+	ComDxcBuffer comDxcBuffer = {};
 	comDxcBuffer.sourcePtr = source;
 	DxcBuffer& dxcBuffer = comDxcBuffer.dxcBuffer;
 
@@ -307,9 +313,9 @@ ShaderCompilationManager::ShaderCompilationManager() :
 	m_shaderDirWatcher.Start();
 }
 
-Shader::ShaderData* ShaderCompilationManager::GetShaderData(UUID64 shaderID)
+const ShaderData* ShaderCompilationManager::GetShaderData(UUID64 shaderID)
 {
-	Shader::ShaderData* shaderData = nullptr;
+	ShaderData* shaderData = nullptr;
 
 	auto it = m_shaderDataMap.find(shaderID);
 	if (it == m_shaderDataMap.end())
@@ -350,7 +356,7 @@ std::set<UUID64>* ShaderCompilationManager::GetShaderDependencies(const std::wst
 void ShaderCompilationManager::CompileShader(UUID64 shaderID)
 {
 	// Has to be registered already.
-	Shader::ShaderData* shaderData = GetShaderData(shaderID);
+	ShaderData* shaderData = const_cast<ShaderData*>(GetShaderData(shaderID));
 
 	if (shaderData)
 	{
@@ -396,18 +402,18 @@ void ShaderCompilationManager::CompileDependencies(const std::string& shaderFile
 
 void ShaderCompilationManager::CompileDependencies(UUID64 shaderID)
 {
-	Shader::ShaderData* shaderData = GetShaderData(shaderID);
+	const ShaderData* shaderData = GetShaderData(shaderID);
 	if (shaderData)
 	{
 		CompileDependencies(shaderData->shaderCompPackage.shaderFilename);
 	}
 }
 
-bool ShaderCompilationManager::CompileShaderPackageToBlob(Shader::ShaderCompilationPackage& shaderCompPackage, IDxcBlob** outBlob)
+bool ShaderCompilationManager::CompileShaderPackageToBlob(ShaderCompilationPackage& shaderCompPackage, IDxcBlob** outBlob)
 {
 	ShaderCompilationArgs args = BuildArgsFromShaderPackage(shaderCompPackage);
 
-	Shader::ComDxcBuffer comDxcBuffer = {};
+	ComDxcBuffer comDxcBuffer = {};
 	{
 		ComPtr<IDxcBlobEncoding> source = nullptr;
 		const std::wstring shaderPath = ::BuildShaderPath(shaderCompPackage.shaderFilename);
@@ -460,34 +466,34 @@ bool ShaderCompilationManager::CompileShaderPackageToBlob(Shader::ShaderCompilat
 
 void ShaderCompilationManager::RegisterComputeShader(UUID64 shaderID, const std::wstring shaderFilename, bool compile)
 {
-	RegisterShader(shaderID, shaderFilename, Shader::ShaderTypeCS, compile);
+	RegisterShader(shaderID, shaderFilename, ShaderTypeCS, compile);
 }
 
 void ShaderCompilationManager::RegisterVertexShader(UUID64 shaderID, const std::wstring shaderFilename, bool compile)
 {
-	RegisterShader(shaderID, shaderFilename, Shader::ShaderTypeVS, compile);
+	RegisterShader(shaderID, shaderFilename, ShaderTypeVS, compile);
 }
 
 void ShaderCompilationManager::RegisterPixelShader(UUID64 shaderID, const std::wstring shaderFilename, bool compile)
 {
-	RegisterShader(shaderID, shaderFilename, Shader::ShaderTypePS, compile);
+	RegisterShader(shaderID, shaderFilename, ShaderTypePS, compile);
 }
 
 void ShaderCompilationManager::RegisterRaytracingShader(UUID64 shaderID, const std::wstring shaderFilename, bool compile)
 {
-	RegisterShader(shaderID, shaderFilename, Shader::ShaderTypeRT, compile);
+	RegisterShader(shaderID, shaderFilename, ShaderTypeRT, compile);
 }
 
-void ShaderCompilationManager::RegisterShader(UUID64 shaderID, const std::wstring shaderFilename, Shader::ShaderType shaderType, bool compile /*= false*/)
+void ShaderCompilationManager::RegisterShader(UUID64 shaderID, const std::wstring shaderFilename, ShaderType shaderType, bool compile /*= false*/)
 {
-	Shader::ShaderCompilationPackage compPackage = {};
+	ShaderCompilationPackage compPackage = {};
 	compPackage.shaderFilename = shaderFilename;
 	compPackage.shaderType = shaderType;
 
 	RegisterShader(shaderID, compPackage, compile);
 }
 
-void ShaderCompilationManager::RegisterShader(UUID64 shaderID, const Shader::ShaderCompilationPackage& compPackage, bool compile)
+void ShaderCompilationManager::RegisterShader(UUID64 shaderID, const ShaderCompilationPackage& compPackage, bool compile)
 {
 	if (compPackage.shaderFilename.empty())
 	{
@@ -502,7 +508,7 @@ void ShaderCompilationManager::RegisterShader(UUID64 shaderID, const Shader::Sha
 	}
 
 	{
-		Shader::ShaderData shaderData = {};
+		ShaderData shaderData = {};
 		shaderData.shaderCompPackage = compPackage;
 		m_shaderDataMap[shaderID] = std::move(shaderData);
 	}
@@ -519,6 +525,7 @@ void ShaderCompilationManager::RegisterShader(UUID64 shaderID, const Shader::Sha
 	}
 }
 
+
 void ShaderCompilationManager::GetShaderDataBinary(UUID64 shaderID, void** binaryOut, size_t* binarySizeOut)
 {
 	if (binaryOut == nullptr || binarySizeOut == nullptr)
@@ -527,7 +534,7 @@ void ShaderCompilationManager::GetShaderDataBinary(UUID64 shaderID, void** binar
 		return;
 	}
 
-	Shader::ShaderData* shaderData = GetShaderData(shaderID);
+	const ShaderData* shaderData = GetShaderData(shaderID);
 	if (shaderData && shaderData->shaderBlob)
 	{
 		*binaryOut = shaderData->shaderBlob->GetBufferPointer();
@@ -556,15 +563,15 @@ D3D12_SHADER_BYTECODE ShaderCompilationManager::GetShaderByteCode(UUID64 shaderI
 	return byteCode;
 }
 
-Shader::ShaderType ShaderCompilationManager::GetShaderType(UUID64 shaderID)
+ShaderType ShaderCompilationManager::GetShaderType(UUID64 shaderID)
 {
-	Shader::ShaderData* shaderData = GetShaderData(shaderID);
+	const ShaderData* shaderData = GetShaderData(shaderID);
 	if (shaderData)
 	{
 		return shaderData->shaderCompPackage.shaderType;
 	}
 
-	return Shader::ShaderTypeNone;
+	return ShaderTypeNone;
 }
 
 void ShaderCompilationManager::AddRecentReCompilation(UUID64 shaderID)

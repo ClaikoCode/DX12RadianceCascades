@@ -34,9 +34,9 @@ public:
 		return GetLineBuffer().GetCounterBuffer();
 	}
 
-	static void Draw(DebugRenderCameraInfo& cameraInfo, ColorBuffer& targetColor, DepthBuffer& targetDepth, D3D12_VIEWPORT viewPort, D3D12_RECT scissor)
+	static void Draw(DebugRenderCameraInfo& cameraInfo, ColorBuffer& targetColor, DepthBuffer& targetDepth, D3D12_VIEWPORT viewPort, D3D12_RECT scissor, bool useDepthCheck)
 	{
-		Get().DrawImpl(cameraInfo, targetColor, targetDepth, viewPort, scissor);
+		Get().DrawImpl(cameraInfo, targetColor, targetDepth, viewPort, scissor, useDepthCheck);
 	}
 
 	static void Destroy()
@@ -58,14 +58,14 @@ private:
 #if defined(_DEBUGDRAWING)
 	DebugDrawer();
 
-	void DrawImpl(DebugRenderCameraInfo& cameraInfo, ColorBuffer & targetColor, DepthBuffer& targetDepth, D3D12_VIEWPORT viewPort, D3D12_RECT scissor);
+	void DrawImpl(DebugRenderCameraInfo& cameraInfo, ColorBuffer & targetColor, DepthBuffer& targetDepth, D3D12_VIEWPORT viewPort, D3D12_RECT scissor, bool useDepthCheck);
 	void DestroyImpl();
 	void BindDebugBuffersImpl(GraphicsContext& gfxContext, UINT startRootIndex);
 	void BindDebugBuffersImpl(ComputeContext& cmptContext, UINT startRootIndex);
 #else
 	DebugDrawer() {};
 
-	void DrawImpl(DebugRenderCameraInfo& cameraInfo, ColorBuffer& targetColor, DepthBuffer& targetDepth, D3D12_VIEWPORT viewPort, D3D12_RECT scissor) {};
+	void DrawImpl(DebugRenderCameraInfo& cameraInfo, ColorBuffer& targetColor, DepthBuffer& targetDepth, D3D12_VIEWPORT viewPort, D3D12_RECT scissor, bool useDepthCheck) {};
 	void DestroyImpl() {};
 	void BindDebugBuffersImpl(GraphicsContext& gfxContext, UINT startRootIndex) {};
 	void BindDebugBuffersImpl(ComputeContext& cmptContext, UINT startRootIndex) {};
@@ -73,7 +73,8 @@ private:
 
 private:
 
-	GraphicsPSO m_debugDrawPSO;
+	GraphicsPSO m_debugDrawNoDepthPSO;
+	GraphicsPSO m_debugDrawDepthPSO;
 	std::shared_ptr<RootSignature> m_debugDrawRootSig;
 	StructuredBuffer m_lineStructBuffer;
 	ByteAddressBuffer m_cameraBuffer;
