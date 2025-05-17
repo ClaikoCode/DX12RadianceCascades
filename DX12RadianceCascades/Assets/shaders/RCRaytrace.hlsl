@@ -116,7 +116,7 @@ inline RayDesc GenerateProbeRay(ProbeInfo3D probeInfo3D)
         float depthVal = depthTex[pixelPos].g; // R is min, G is max.
         // Add small distance towards the camera to avoid wall clipping.
         // Otherwise, probes will spawn inside a wall and its rays wont interect any geometry.
-        depthVal += 0.00000001f;
+        depthVal += 0.0000001f;
         
         uint width;
         uint height;

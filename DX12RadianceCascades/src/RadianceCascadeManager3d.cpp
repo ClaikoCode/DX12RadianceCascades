@@ -1,13 +1,18 @@
 #include "rcpch.h"
 #include "Core\ColorBuffer.h"
+#include "Core\GraphicsCore.h"
+#include "Core\CommandListManager.h"
 #include "GPUStructs.h"
 #include "RadianceCascadeManager3D.h"
 
 void RadianceCascadeManager3D::Init(float rayLength0, uint32_t raysPerProbe0)
 {
-	ASSERT(Math::IsPowerOfTwo(raysPerProbe0) && raysPerProbe0 > 8u);
+	Graphics::g_CommandManager.IdleGPU();
 
-	const uint32_t cascadeCount = 7;
+	float log4Rays = Math::LogAB(4, raysPerProbe0);
+	ASSERT(log4Rays == Math::Floor(log4Rays) && raysPerProbe0 > 8u);
+
+	const uint32_t cascadeCount = 6;
 	const uint32_t probeCountPerDim0 = 128;
 	
 	if (m_cascadeIntervals.size() < cascadeCount)

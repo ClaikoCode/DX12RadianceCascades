@@ -1,6 +1,6 @@
 #include "RCCommon3D.hlsli"
 
-// Needs to be a bilinear and additive (both alpha and rgb) sampler with borders set to black.
+// Needs to be a bilinear sampler with borders set to black with alpha of 1.0
 SamplerState linearSampler : register(s0);
 
 Texture2D<float4> cascadeN1 : register(t0);
@@ -12,9 +12,8 @@ ConstantBuffer<CascadeInfo> cascadeInfo : register(b1);
 
 float4 ReadRadianceN1(float2 probeIndex, float2 rayIndex, float probeCountPerDimN1, float texWidthN1)
 {
-    float2 sampleTexel = rayIndex * probeCountPerDimN1 + probeIndex + 0.5f;
+    float2 sampleTexel = rayIndex * probeCountPerDimN1 + probeIndex ;
     float2 sampleUV = sampleTexel / texWidthN1;
-    
         
     return cascadeN1.SampleLevel(linearSampler, sampleUV, 0);
 }
