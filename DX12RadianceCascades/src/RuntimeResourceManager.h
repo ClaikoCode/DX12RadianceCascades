@@ -38,6 +38,7 @@ enum ShaderID : UUID64
 	ShaderIDDebugDrawVS,
 	ShaderIDMinMaxDepthCS,
 	ShaderIDRCRaytraceRT,
+	ShaderIDRC3DMergeCS,
 
 	ShaderIDNone = NULL_ID
 };
@@ -58,6 +59,7 @@ enum PSOID : psoid_t
 	PSOIDDebugDrawDepthPSO,
 	PSOIDComputeMinMaxDepthPSO,
 	PSOIDRCRaytracingPSO,
+	PSOIDRC3DMergePSO,
 
 	PSOIDCount
 };

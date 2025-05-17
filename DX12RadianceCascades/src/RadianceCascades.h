@@ -41,12 +41,16 @@ public:
 struct RadianceCascadesSettings
 {
 	bool renderRC3D = true;
-	bool visualizeRC3DCascades = false;
+	bool visualizeRC3DGatherCascades = false;
+	bool visualizeRC3DMergeCascades = false;
 	int cascadeVisIndex = 0;
 
 	bool enableCascadeProbeVis = false;
 	int cascadeVisProbeIntervalIndex = 0;
 	int cascadeVisProbeSubset = 16;
+
+	float rayLength0 = 12.0f;
+	uint32_t raysPerProbe0 = 256u;
 };
 
 #define ENABLE_RT (false)
@@ -143,6 +147,12 @@ private:
 		RootEntryRCRaytracingRTLTexturesSRV,
 		RootEntryRCRaytracingRTLGeomOffsetsCB,
 		RootEntryRCRaytracingRTLCount,
+
+		RootEntryRC3DMergeCascadeN1SRV = 0,
+		RootEntryRC3DMergeCascadeNUAV,
+		RootEntryRC3DMergeRCGlobalsCB,
+		RootEntryRC3DMergeCascadeInfoCB,
+		RootEntryRC3DMergeCount,
 	};
 
 public:
@@ -167,7 +177,8 @@ private:
 	
 	void RenderRaster(ColorBuffer& targetColor, DepthBuffer& targetDepth, Camera& camera, D3D12_VIEWPORT viewPort, D3D12_RECT scissor);
 	void RenderRaytracing(ColorBuffer& targetColor, Camera& camera);
-	void RenderRCRaytracing(Camera& camera);
+	void RunRCGather(Camera& camera);
+	void RunRCMerge();
 	void RenderDepthOnly(Camera& camera, DepthBuffer& targetDepth, D3D12_VIEWPORT viewPort, D3D12_RECT scissor, bool clearDepth = false);
 	void BuildMinMaxDepthBuffer(DepthBuffer& sourceDepthBuffer);
 	void RunComputeFlatlandScene();
@@ -231,11 +242,14 @@ private:
 	TLASBuffers m_sceneTLAS;
 
 	ComputePSO m_minMaxDepthPSO = ComputePSO(L"Min Max Depth Compute");
-	RootSignature m_minMaxDepthrootSig;
+	RootSignature m_minMaxDepthRootSig;
 
 	RaytracingPSO m_rcRaytracePSO = RaytracingPSO(L"RC Raytrace PSO");
 	RootSignature1 m_rcRaytraceGlobalRootSig;
 	RootSignature1 m_rcRaytraceLocalRootSig;
+
+	ComputePSO m_rc3dMergePSO = ComputePSO(L"RC 3D Merge PSO");
+	RootSignature m_rc3dMergeRootSig;
 
 	ColorBuffer m_flatlandScene = ColorBuffer({ 0.0f, 0.0f, 0.0f, 100000.0f });
 

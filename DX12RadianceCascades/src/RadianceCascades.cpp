@@ -193,9 +193,16 @@ void RadianceCascades::RenderScene()
 			BuildMinMaxDepthBuffer(Graphics::g_SceneDepthBuffer);
 		}
 
-		RenderRCRaytracing(cam);
+		RunRCGather(cam);
 		
-		if (m_settings.rcSettings.visualizeRC3DCascades)
+		if (m_settings.rcSettings.visualizeRC3DGatherCascades)
+		{
+			FullScreenCopyCompute(m_rcManager3D.GetCascadeIntervalBuffer(m_settings.rcSettings.cascadeVisIndex), Graphics::g_SceneColorBuffer);
+		}
+
+		RunRCMerge();
+
+		if (m_settings.rcSettings.visualizeRC3DMergeCascades)
 		{
 			FullScreenCopyCompute(m_rcManager3D.GetCascadeIntervalBuffer(m_settings.rcSettings.cascadeVisIndex), Graphics::g_SceneColorBuffer);
 		}
@@ -290,6 +297,7 @@ void RadianceCascades::InitializePSOs()
 		RuntimeResourceManager::RegisterPSO(PSOIDRaytracingTestPSO,			&m_rtTestPSO,					PSOTypeRaytracing);
 		RuntimeResourceManager::RegisterPSO(PSOIDComputeMinMaxDepthPSO,		&m_minMaxDepthPSO,				PSOTypeCompute);
 		RuntimeResourceManager::RegisterPSO(PSOIDRCRaytracingPSO,			&m_rcRaytracePSO,				PSOTypeRaytracing);
+		RuntimeResourceManager::RegisterPSO(PSOIDRC3DMergePSO,				&m_rc3dMergePSO,				PSOTypeCompute);
 	}
 
 	// Overwrite and update external PSO shaders.
@@ -299,6 +307,7 @@ void RadianceCascades::InitializePSOs()
 		RuntimeResourceManager::SetShadersForPSO(PSOIDSecondExternalPSO, sceneRenderShaderIDs, true);
 	}
 
+#pragma region ComputePSOs
 	{
 		ComputePSO& pso = RuntimeResourceManager::GetComputePSO(PSOIDComputeRCGatherPSO);
 		RuntimeResourceManager::SetShaderForPSO(PSOIDComputeRCGatherPSO, ShaderIDRCGatherCS);
@@ -327,16 +336,22 @@ void RadianceCascades::InitializePSOs()
 		RuntimeResourceManager::SetShaderForPSO(PSOIDComputeFullScreenCopyPSO, ShaderIDFullScreenCopyCS);
 
 		RootSignature& rootSig = m_fullScreenCopyComputeRootSig;
-		rootSig.Reset(RootEntryFullScreenCopyComputeCount, 2);
+		rootSig.Reset(
+			RootEntryFullScreenCopyComputeCount, 
+			2,
+#if defined(_DEBUGDRAWING)
+			false
+#endif
+		);
 		rootSig[RootEntryFullScreenCopyComputeSource].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 0, 1);
 		rootSig[RootEntryFullScreenCopyComputeDest].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 1);
 		rootSig[RootEntryFullScreenCopyComputeDestInfo].InitAsConstants(0, 2);
 
 		{
-			SamplerDesc pointSampler = Graphics::SamplerPointClampDesc;
+			SamplerDesc pointSampler = Graphics::SamplerPointBorderDesc;
 			rootSig.InitStaticSampler(0, pointSampler);
 
-			SamplerDesc linearSampler = Graphics::SamplerLinearClampDesc;
+			SamplerDesc linearSampler = Graphics::SamplerLinearBorderDesc;
 			rootSig.InitStaticSampler(1, linearSampler);
 		}
 
@@ -407,7 +422,7 @@ void RadianceCascades::InitializePSOs()
 		ComputePSO& pso = RuntimeResourceManager::GetComputePSO(PSOIDComputeMinMaxDepthPSO);
 		RuntimeResourceManager::SetShaderForPSO(PSOIDComputeMinMaxDepthPSO, ShaderIDMinMaxDepthCS);
 
-		RootSignature& rootSig = m_minMaxDepthrootSig;
+		RootSignature& rootSig = m_minMaxDepthRootSig;
 		rootSig.Reset(RootEntryMinMaxDepthCount);
 		rootSig[RootEntryMinMaxDepthSourceInfo].InitAsConstantBuffer(0);
 		rootSig[RootEntryMinMaxDepthSourceDepthUAV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 1);
@@ -418,6 +433,29 @@ void RadianceCascades::InitializePSOs()
 		pso.Finalize();
 	}
 
+	{
+		ComputePSO& pso = RuntimeResourceManager::GetComputePSO(PSOIDRC3DMergePSO);
+		RuntimeResourceManager::SetShaderForPSO(PSOIDRC3DMergePSO, ShaderIDRC3DMergeCS);
+
+		RootSignature& rootSig = m_rc3dMergeRootSig;
+		rootSig.Reset(RootEntryRC3DMergeCount, 1);
+		rootSig[RootEntryRC3DMergeCascadeN1SRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 0, 1);
+		rootSig[RootEntryRC3DMergeCascadeNUAV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 1);
+		rootSig[RootEntryRC3DMergeRCGlobalsCB].InitAsConstantBuffer(0);
+		rootSig[RootEntryRC3DMergeCascadeInfoCB].InitAsConstantBuffer(1);
+		{
+			SamplerDesc sampler = Graphics::SamplerLinearBorderDesc;
+			sampler.SetBorderColor(Color(0.0f, 0.0f, 0.0f, 1.0f)); // Alpha of 1 to set visibility term.
+			rootSig.InitStaticSampler(0, sampler);
+		}
+		rootSig.Finalize(L"RC 3D Merge");
+
+		pso.SetRootSignature(rootSig);
+		pso.Finalize();
+	}
+#pragma endregion
+
+#pragma region RaytracingPSOs
 	{
 		RaytracingPSO& pso = RuntimeResourceManager::GetRaytracingPSO(PSOIDRaytracingTestPSO);
 		RuntimeResourceManager::SetShaderForPSO(PSOIDRaytracingTestPSO, ShaderIDRaytracingTestRT);
@@ -511,6 +549,7 @@ void RadianceCascades::InitializePSOs()
 
 		pso.Finalize();
 	}
+#pragma endregion
 }
 
 void RadianceCascades::InitializeRCResources()
@@ -520,7 +559,7 @@ void RadianceCascades::InitializeRCResources()
 	float diag = Math::Length({ (float)::GetSceneColorWidth(), (float)::GetSceneColorHeight(), 0.0f });
 	m_rcManager2D.Init(SAMPLE_LEN_0, RAYS_PER_PROBE_0, diag);
 
-	m_rcManager3D.Init(10.0f, 16u);
+	m_rcManager3D.Init(m_settings.rcSettings.rayLength0, m_settings.rcSettings.raysPerProbe0);
 }
 
 void RadianceCascades::InitializeRT()
@@ -652,7 +691,7 @@ void RadianceCascades::RenderRaytracing(ColorBuffer& targetColor, Camera& camera
 	rtContext.Finish(true);
 }
 
-void RadianceCascades::RenderRCRaytracing(Camera& camera)
+void RadianceCascades::RunRCGather(Camera& camera)
 {
 	GlobalInfo globalInfo = {};
 	::FillCameraInfo(globalInfo, camera);
@@ -741,6 +780,45 @@ void RadianceCascades::RenderRCRaytracing(Camera& camera)
 	}
 
 	rtContext.Finish(true);
+}
+
+void RadianceCascades::RunRCMerge()
+{
+	ComputeContext& cmptContext = ComputeContext::Begin(L"RC Merge Compute");
+	ComputePSO& pso = RuntimeResourceManager::GetComputePSO(PSOIDRC3DMergePSO);
+	cmptContext.SetPipelineState(pso);
+	cmptContext.SetRootSignature(pso.GetRootSignature());
+
+	RCGlobalInfo rcGlobals = {};
+	m_rcManager3D.FillRCGlobalInfo(rcGlobals);
+
+	cmptContext.SetDynamicConstantBufferView(RootEntryRC3DMergeRCGlobalsCB, sizeof(RCGlobalInfo), &rcGlobals);
+
+#if defined(_DEBUGDRAWING)
+	DebugDrawer::BindDebugBuffers(cmptContext, RootEntryRC3DMergeCount);
+#endif
+
+	for (uint32_t i = m_rcManager3D.GetCascadeIntervalCount() - 1; i >= 1; i--)
+	{
+		CascadeInfo cascadeInfo = {};
+		cascadeInfo.cascadeIndex = i - 1;
+
+		cmptContext.SetDynamicConstantBufferView(RootEntryRC3DMergeCascadeInfoCB, sizeof(CascadeInfo), &cascadeInfo);
+
+		ColorBuffer& cascadeN1 = m_rcManager3D.GetCascadeIntervalBuffer(i);
+		ColorBuffer& cascadeN = m_rcManager3D.GetCascadeIntervalBuffer(i - 1);
+
+		cmptContext.TransitionResource(cascadeN1, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+		cmptContext.TransitionResource(cascadeN, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+		cmptContext.FlushResourceBarriers();
+
+		cmptContext.SetDynamicDescriptor(RootEntryRC3DMergeCascadeN1SRV, 0, cascadeN1.GetSRV());
+		cmptContext.SetDynamicDescriptor(RootEntryRC3DMergeCascadeNUAV, 0, cascadeN.GetUAV());
+
+		cmptContext.Dispatch2D(cascadeN.GetWidth(), cascadeN.GetHeight());
+	}
+
+	cmptContext.Finish(true);
 }
 
 void RadianceCascades::RenderDepthOnly(Camera& camera, DepthBuffer& targetDepth, D3D12_VIEWPORT viewPort, D3D12_RECT scissor, bool clearDepth)
@@ -1001,7 +1079,9 @@ void RadianceCascades::BuildUISettings()
 		{
 			ImGui::Separator();
 
-			ImGui::Text("Cascade count: %u", m_rcManager3D.GetCascadeIntervalCount());
+			ImGui::Text("Cascade Count: %u", m_rcManager3D.GetCascadeIntervalCount());
+			uint32_t res = m_rcManager3D.GetCascadeIntervalBuffer(0).GetWidth();
+			ImGui::Text("Cascade Resolution: %u, %u", res, res);
 
 			// Create a table with 5 columns: Cascade, Probe Count, Ray Count, Start Dist, Length
 			if (ImGui::BeginTable("CascadeTable", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_NoHostExtendX))
@@ -1042,8 +1122,9 @@ void RadianceCascades::BuildUISettings()
 			}
 
 			ImGui::SeparatorText("Radiance Cascade Visualizations");
-			ImGui::Checkbox("Visualize Cascades", &rcs.visualizeRC3DCascades);
-			if (rcs.visualizeRC3DCascades)
+			ImGui::Checkbox("Visualize Gather Cascades", &rcs.visualizeRC3DGatherCascades);
+			ImGui::Checkbox("Visualize Merge Cascades", &rcs.visualizeRC3DMergeCascades);
+			if (rcs.visualizeRC3DGatherCascades || rcs.visualizeRC3DMergeCascades)
 			{
 				ImGui::SliderInt("Cascade Index", &rcs.cascadeVisIndex, 0, m_rcManager3D.GetCascadeIntervalCount() - 1);
 			}

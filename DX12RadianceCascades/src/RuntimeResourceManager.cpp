@@ -104,6 +104,7 @@ RuntimeResourceManager::RuntimeResourceManager() : m_psoMap({})
 		shaderCM.RegisterComputeShader(ShaderIDRCMergeCS, L"RCMergeCS.hlsl", true);
 		shaderCM.RegisterComputeShader(ShaderIDRCRadianceFieldCS, L"RCRadianceFieldCS.hlsl", true);
 		shaderCM.RegisterComputeShader(ShaderIDMinMaxDepthCS, L"MinMaxDepthCS.hlsl", true);
+		shaderCM.RegisterComputeShader(ShaderIDRC3DMergeCS, L"RCMerge3D.hlsl", true);
 
 		// RT Shaders
 		shaderCM.RegisterRaytracingShader(ShaderIDRaytracingTestRT, L"RaytracingTest.hlsl", true);
