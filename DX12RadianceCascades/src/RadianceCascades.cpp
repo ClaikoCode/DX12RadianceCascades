@@ -333,7 +333,7 @@ void RadianceCascades::InitializePSOs()
 
 	{
 		ComputePSO& pso = RuntimeResourceManager::GetComputePSO(PSOIDComputeFullScreenCopyPSO);
-		RuntimeResourceManager::SetShaderForPSO(PSOIDComputeFullScreenCopyPSO, ShaderIDFullScreenCopyCS);
+		RuntimeResourceManager::SetShaderForPSO(PSOIDComputeFullScreenCopyPSO, ShaderIDDirectCopyCS);
 
 		RootSignature& rootSig = m_fullScreenCopyComputeRootSig;
 		rootSig.Reset(
@@ -435,7 +435,7 @@ void RadianceCascades::InitializePSOs()
 
 	{
 		ComputePSO& pso = RuntimeResourceManager::GetComputePSO(PSOIDRC3DMergePSO);
-		RuntimeResourceManager::SetShaderForPSO(PSOIDRC3DMergePSO, ShaderIDRC3DMergeCS);
+		RuntimeResourceManager::SetShaderForPSO(PSOIDRC3DMergePSO, ShaderIDRCMerge3D);
 
 		RootSignature& rootSig = m_rc3dMergeRootSig;
 		rootSig.Reset(RootEntryRC3DMergeCount, 1);
@@ -458,7 +458,7 @@ void RadianceCascades::InitializePSOs()
 #pragma region RaytracingPSOs
 	{
 		RaytracingPSO& pso = RuntimeResourceManager::GetRaytracingPSO(PSOIDRaytracingTestPSO);
-		RuntimeResourceManager::SetShaderForPSO(PSOIDRaytracingTestPSO, ShaderIDRaytracingTestRT);
+		RuntimeResourceManager::SetShaderForPSO(PSOIDRaytracingTestPSO, ShaderIDRaytracingTest);
 
 		RootSignature1& globalRootSig = m_rtTestGlobalRootSig;
 		globalRootSig.Reset(
@@ -502,7 +502,7 @@ void RadianceCascades::InitializePSOs()
 
 	{
 		RaytracingPSO& pso = RuntimeResourceManager::GetRaytracingPSO(PSOIDRCRaytracingPSO);
-		RuntimeResourceManager::SetShaderForPSO(PSOIDRCRaytracingPSO, ShaderIDRCRaytraceRT);
+		RuntimeResourceManager::SetShaderForPSO(PSOIDRCRaytracingPSO, ShaderIDRCRaytrace);
 
 		RootSignature1& globalRootSig = m_rcRaytraceGlobalRootSig;
 		globalRootSig.Reset(
