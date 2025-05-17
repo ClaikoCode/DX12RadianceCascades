@@ -4,6 +4,11 @@
 #include "ShaderTable.h"
 #include "RaytracingBuffers.h"
 #include "RaytracingDispatchRayInputs.h"
+#include "ShaderIDs.h"
+
+// Forward declaration of ShaderID enum so intellisense gets 
+// less confused when shader IDs header file has not yet been generated.
+enum ShaderID : uint64_t;
 
 enum ModelID : UUID64
 {
@@ -19,28 +24,6 @@ enum RayDispatchID : uint32_t
 	RayDispatchIDRCRaytracing,
 
 	RayDistpatchIDCount
-};
-
-enum ShaderID : UUID64
-{
-	ShaderIDInvalid = 0,
-	ShaderIDSceneRenderPS,
-	ShaderIDSceneRenderVS,
-	ShaderIDRCGatherCS,
-	ShaderIDFlatlandSceneCS,
-	ShaderIDFullScreenQuadVS,
-	ShaderIDFullScreenCopyPS,
-	ShaderIDFullScreenCopyCS,
-	ShaderIDRCMergeCS,
-	ShaderIDRCRadianceFieldCS,
-	ShaderIDRaytracingTestRT,
-	ShaderIDDebugDrawPS,
-	ShaderIDDebugDrawVS,
-	ShaderIDMinMaxDepthCS,
-	ShaderIDRCRaytraceRT,
-	ShaderIDRC3DMergeCS,
-
-	ShaderIDNone = NULL_ID
 };
 
 typedef uint32_t psoid_t;

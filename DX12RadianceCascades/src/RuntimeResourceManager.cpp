@@ -85,11 +85,16 @@ RuntimeResourceManager::RuntimeResourceManager() : m_psoMap({})
 
 	auto& shaderCM = ShaderCompilationManager::Get();
 
+	// Check for shaders, create 
+	{
+
+	}
+
 	// Initialize shaders
 	{
 		// Pixel Shaders
 		shaderCM.RegisterPixelShader(ShaderIDSceneRenderPS, L"SceneRenderPS.hlsl", true);
-		shaderCM.RegisterPixelShader(ShaderIDFullScreenCopyPS, L"DirectWritePS.hlsl", true);
+		shaderCM.RegisterPixelShader(ShaderIDDirectWritePS, L"DirectWritePS.hlsl", true);
 		shaderCM.RegisterPixelShader(ShaderIDDebugDrawPS, L"DebugDrawPS.hlsl", true);
 
 		// Vertex Shaders
@@ -100,15 +105,15 @@ RuntimeResourceManager::RuntimeResourceManager() : m_psoMap({})
 		// Compute Shaders
 		shaderCM.RegisterComputeShader(ShaderIDRCGatherCS, L"RCGatherCS.hlsl", true);
 		shaderCM.RegisterComputeShader(ShaderIDFlatlandSceneCS, L"FlatlandSceneCS.hlsl", true);
-		shaderCM.RegisterComputeShader(ShaderIDFullScreenCopyCS, L"DirectCopyCS.hlsl", true);
+		shaderCM.RegisterComputeShader(ShaderIDDirectCopyCS, L"DirectCopyCS.hlsl", true);
 		shaderCM.RegisterComputeShader(ShaderIDRCMergeCS, L"RCMergeCS.hlsl", true);
 		shaderCM.RegisterComputeShader(ShaderIDRCRadianceFieldCS, L"RCRadianceFieldCS.hlsl", true);
 		shaderCM.RegisterComputeShader(ShaderIDMinMaxDepthCS, L"MinMaxDepthCS.hlsl", true);
-		shaderCM.RegisterComputeShader(ShaderIDRC3DMergeCS, L"RCMerge3D.hlsl", true);
+		shaderCM.RegisterComputeShader(ShaderIDRCMerge3D, L"RCMerge3D.hlsl", true);
 
 		// RT Shaders
-		shaderCM.RegisterRaytracingShader(ShaderIDRaytracingTestRT, L"RaytracingTest.hlsl", true);
-		shaderCM.RegisterRaytracingShader(ShaderIDRCRaytraceRT, L"RCRaytrace.hlsl", true);
+		shaderCM.RegisterRaytracingShader(ShaderIDRaytracingTest, L"RaytracingTest.hlsl", true);
+		shaderCM.RegisterRaytracingShader(ShaderIDRCRaytrace, L"RCRaytrace.hlsl", true);
 	}
 
 	// Initialize Models

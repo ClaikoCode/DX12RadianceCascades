@@ -131,8 +131,7 @@ robocopy $(SolutionDir)Libs\dxc_2025_02_20\bin\$(Platform)\ $(SolutionDir)Run\ *
 if %errorlevel% leq 3 exit 0</Command>
     </PostBuildEvent>
     <PreBuildEvent>
-      <Command>
-      </Command>
+      <Command>python $(SolutionDir)Scripts\CreateShaderIDs.py $(SolutionDir)</Command>
     </PreBuildEvent>
     <CustomBuildStep>
       <Command>
@@ -170,6 +169,9 @@ if %errorlevel% leq 3 exit 0</Command>
 robocopy $(SolutionDir)Libs\dxc_2025_02_20\bin\$(Platform)\ $(SolutionDir)Run\ *.dll /E /XO /NP
 if %errorlevel% leq 3 exit 0</Command>
     </PostBuildEvent>
+    <PreBuildEvent>
+      <Command>python $(SolutionDir)Scripts\CreateShaderIDs.py $(SolutionDir)</Command>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="src\AppGUI\AppGUI.h" />
