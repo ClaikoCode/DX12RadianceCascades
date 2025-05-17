@@ -1,4 +1,5 @@
 #include "rcpch.h"
+
 #include "Core\BufferManager.h"
 #include "Core\CommandContext.h"
 #include "ShaderCompilation\ShaderCompilationManager.h"
@@ -83,37 +84,13 @@ RuntimeResourceManager::RuntimeResourceManager() : m_psoMap({})
 {
 	m_descHeap.Create(L"Runtime Resource Manager Desc Heap", D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 2048);
 
-	auto& shaderCM = ShaderCompilationManager::Get();
-
-	// Check for shaders, create 
+	// Load and compile shaders.
 	{
-
-	}
-
-	// Initialize shaders
-	{
-		// Pixel Shaders
-		shaderCM.RegisterPixelShader(ShaderIDSceneRenderPS, L"SceneRenderPS.hlsl", true);
-		shaderCM.RegisterPixelShader(ShaderIDDirectWritePS, L"DirectWritePS.hlsl", true);
-		shaderCM.RegisterPixelShader(ShaderIDDebugDrawPS, L"DebugDrawPS.hlsl", true);
-
-		// Vertex Shaders
-		shaderCM.RegisterVertexShader(ShaderIDSceneRenderVS, L"SceneRenderVS.hlsl", true);
-		shaderCM.RegisterVertexShader(ShaderIDFullScreenQuadVS, L"FullScreenQuadVS.hlsl", true);
-		shaderCM.RegisterVertexShader(ShaderIDDebugDrawVS, L"DebugDrawVS.hlsl", true);
-
-		// Compute Shaders
-		shaderCM.RegisterComputeShader(ShaderIDRCGatherCS, L"RCGatherCS.hlsl", true);
-		shaderCM.RegisterComputeShader(ShaderIDFlatlandSceneCS, L"FlatlandSceneCS.hlsl", true);
-		shaderCM.RegisterComputeShader(ShaderIDDirectCopyCS, L"DirectCopyCS.hlsl", true);
-		shaderCM.RegisterComputeShader(ShaderIDRCMergeCS, L"RCMergeCS.hlsl", true);
-		shaderCM.RegisterComputeShader(ShaderIDRCRadianceFieldCS, L"RCRadianceFieldCS.hlsl", true);
-		shaderCM.RegisterComputeShader(ShaderIDMinMaxDepthCS, L"MinMaxDepthCS.hlsl", true);
-		shaderCM.RegisterComputeShader(ShaderIDRCMerge3D, L"RCMerge3D.hlsl", true);
-
-		// RT Shaders
-		shaderCM.RegisterRaytracingShader(ShaderIDRaytracingTest, L"RaytracingTest.hlsl", true);
-		shaderCM.RegisterRaytracingShader(ShaderIDRCRaytrace, L"RCRaytrace.hlsl", true);
+		auto& shaderCM = ShaderCompilationManager::Get();
+		for (auto& [shaderID, shaderFilename] : s_ShaderIDFilenameMap)
+		{
+			shaderCM.RegisterShader(shaderID, shaderFilename, true);
+		}
 	}
 
 	// Initialize Models
