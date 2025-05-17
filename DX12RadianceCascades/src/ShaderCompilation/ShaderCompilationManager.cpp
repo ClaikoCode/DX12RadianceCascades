@@ -484,6 +484,39 @@ void ShaderCompilationManager::RegisterRaytracingShader(UUID64 shaderID, const s
 	RegisterShader(shaderID, shaderFilename, ShaderTypeRT, compile);
 }
 
+void ShaderCompilationManager::RegisterShader(UUID64 shaderID, const std::wstring& shaderFilename, bool compile)
+{
+	std::wstring_view wstringView = shaderFilename;
+
+	// Walking 6 steps to get to 'X' in 'ShaderIDNameXS.hlsl' and one step to adjust for 0 indexing based on length.
+	std::wstring_view shaderTypeStr = wstringView.substr(wstringView.length() - 1 - 6 , 2);
+
+	ShaderType shaderType = ShaderTypeNone;
+	if (shaderTypeStr == L"VS")
+	{
+		shaderType = ShaderTypeVS;
+	}
+	else if (shaderTypeStr == L"PS")
+	{
+		shaderType = ShaderTypePS;
+	}
+	else if (shaderTypeStr == L"CS")
+	{
+		shaderType = ShaderTypeCS;
+	}
+	else if (shaderTypeStr == L"RT")
+	{
+		shaderType = ShaderTypeRT;
+	}
+	else
+	{
+		LOG_ERROR(L"Unknown shader type for file '{}'.", shaderFilename);
+		shaderType = ShaderTypeNone;
+	}
+
+	RegisterShader(shaderID, shaderFilename, shaderType, compile);
+}
+
 void ShaderCompilationManager::RegisterShader(UUID64 shaderID, const std::wstring shaderFilename, ShaderType shaderType, bool compile /*= false*/)
 {
 	ShaderCompilationPackage compPackage = {};
@@ -603,5 +636,10 @@ ShaderCompilationManager& ShaderCompilationManager::Get()
 	static ShaderCompilationManager instance = {};
 
 	return instance;
+}
+
+std::string ShaderCompilationManager::GetShaderDirectory()
+{
+	return Utils::WstringToString(c_ShaderFolder);
 }
 

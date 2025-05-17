@@ -96,6 +96,8 @@ class ShaderCompilationManager
 public:
 
     static ShaderCompilationManager& Get();
+    std::string GetShaderDirectory();
+
     void CompileShader(UUID64 shaderID);
     void CompileDependencies(const std::wstring& shaderFilename);
     void CompileDependencies(const std::string& shaderFilename);
@@ -107,6 +109,8 @@ public:
     void RegisterVertexShader(UUID64 shaderID, const std::wstring shaderFilename, bool compile = false);
     void RegisterPixelShader(UUID64 shaderID, const std::wstring shaderFilename, bool compile = false);
 	void RegisterRaytracingShader(UUID64 shaderID, const std::wstring shaderFilename, bool compile = false);
+    // Will try to deduce shader type from filename.
+    void RegisterShader(UUID64 shaderID, const std::wstring& shaderFilename, bool compile = false);
     void RegisterShader(UUID64 shaderID, const std::wstring shaderFilename, ShaderType shaderType, bool compile = false);
     void RegisterShader(UUID64 shaderID, const ShaderCompilationPackage& compPackage, bool compile);
     
