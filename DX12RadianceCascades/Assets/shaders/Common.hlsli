@@ -63,4 +63,28 @@ float3 SimpleSunsetSky(float3 viewDir, float3 sunDir)
     return skyBaseColor;
 }
 
+int2 GetDims(RWTexture2D<float4> tex)
+{
+    uint texWidth;
+    uint texHeight;
+    tex.GetDimensions(texWidth, texHeight);
+    
+    return int2(texWidth, texHeight);
+}
+
+int2 GetDims(Texture2D tex)
+{
+    uint texWidth;
+    uint texHeight;
+    tex.GetDimensions(texWidth, texHeight);
+    
+    return int2(texWidth, texHeight);
+}
+
+// Order: (0, 0), (1, 0), (0, 1), (1, 1)
+int2 TranslateCoord4x1To2x2(int coord4x1)
+{    
+    return int2(coord4x1 % 2, coord4x1 / 2);
+}
+
 #endif // COMMON_H

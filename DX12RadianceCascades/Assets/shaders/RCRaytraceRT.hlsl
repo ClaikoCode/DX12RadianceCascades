@@ -116,7 +116,7 @@ inline RayDesc GenerateProbeRay(ProbeInfo3D probeInfo3D)
         float depthVal = depthTex[pixelPos].g; // R is min, G is max.
         // Add small distance towards the camera to avoid wall clipping.
         // Otherwise, probes will spawn inside a wall and its rays wont interect any geometry.
-        depthVal += 0.0000001f;
+        depthVal += 0.000000001f;
         
         uint width;
         uint height;
@@ -144,8 +144,9 @@ void RayGenerationShader()
     
     RayPayload payload = { probeInfo3D.probeIndex };
     
-    DrawProbe(cascadeInfo.cascadeIndex, probeInfo3D.probeIndex, ray.Origin, ray.TMin);
+    //fDrawProbe(cascadeInfo.cascadeIndex, probeInfo3D.probeIndex, ray.Origin, ray.TMin);
     
+    //TraceRay(Scene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, payload);
     TraceRay(Scene, RAY_FLAG_NONE, ~0, 0, 1, 0, ray, payload);
 }
 
@@ -190,7 +191,7 @@ void ClosestHitShader(inout RayPayload payload, in BuiltInTriangleIntersectionAt
 [shader("miss")]
 void MissShader(inout RayPayload payload)
 {
-    DrawCascadeRay(float3(0.0f, 1.0f, 0.0f), 0.0f, cascadeInfo.cascadeIndex, payload.probeIndex);
+    //DrawCascadeRay(float3(0.0f, 1.0f, 0.0f), 0.0f, cascadeInfo.cascadeIndex, payload.probeIndex);
     if (cascadeInfo.cascadeIndex == (rcGlobals.cascadeCount - 1))
     {
         float3 sunDir = normalize(float3(0.5, 0.15, 0.5));

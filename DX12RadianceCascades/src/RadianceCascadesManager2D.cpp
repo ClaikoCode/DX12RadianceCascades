@@ -62,11 +62,11 @@ void RadianceCascadesManager2D::Shutdown()
 	m_radianceField.Destroy();
 }
 
-RCGlobals RadianceCascadesManager2D::FillRCGlobalsData(uint32_t sourceSize)
+RC2DGlobals RadianceCascadesManager2D::FillRCGlobalsData(uint32_t sourceSize)
 {
 	//ASSERT(Math::IsPowerOfTwo(sourceSize));
 
-	RCGlobals rcGlobals = {};
+	RC2DGlobals rcGlobals = {};
 	rcGlobals.probeDim0 = probeDim0;
 	rcGlobals.rayCount0 = raysPerProbe0;
 	rcGlobals.rayLength0 = rayLength0;

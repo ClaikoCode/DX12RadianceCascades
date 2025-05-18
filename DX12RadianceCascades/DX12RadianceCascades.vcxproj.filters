@@ -183,5 +183,6 @@
     <FxCompile Include="Assets\shaders\DebugDrawVS.hlsl" />
     <FxCompile Include="Assets\shaders\MinMaxDepthCS.hlsl" />
     <FxCompile Include="Assets\shaders\RCMerge3DCS.hlsl" />
+    <FxCompile Include="Assets\shaders\RCCoalesce3DCS.hlsl" />
   </ItemGroup>
 </Project>

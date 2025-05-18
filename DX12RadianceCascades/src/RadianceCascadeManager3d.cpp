@@ -2,18 +2,19 @@
 #include "Core\ColorBuffer.h"
 #include "Core\GraphicsCore.h"
 #include "Core\CommandListManager.h"
+#include "Core\CommandContext.h"
 #include "GPUStructs.h"
 #include "RadianceCascadeManager3D.h"
 
-void RadianceCascadeManager3D::Init(float rayLength0, uint32_t raysPerProbe0)
+void RadianceCascadeManager3D::Init(float rayLength0, uint32_t raysPerProbe0, uint32_t probesPerDim0, uint32_t cascadeIntervalCount)
 {
 	Graphics::g_CommandManager.IdleGPU();
 
-	float log4Rays = Math::LogAB(4, raysPerProbe0);
+	float log4Rays = Math::LogAB(4.0f, (float)raysPerProbe0);
 	ASSERT(log4Rays == Math::Floor(log4Rays) && raysPerProbe0 > 8u);
 
-	const uint32_t cascadeCount = 6;
-	const uint32_t probeCountPerDim0 = 128;
+	const uint32_t cascadeCount = cascadeIntervalCount;
+	const uint32_t probeCountPerDim0 = probesPerDim0;
 	
 	if (m_cascadeIntervals.size() < cascadeCount)
 	{
@@ -46,12 +47,20 @@ void RadianceCascadeManager3D::Init(float rayLength0, uint32_t raysPerProbe0)
 		m_cascadeIntervals.resize(actualCascadeCount);
 	}
 
+	m_coalescedResult.Create(
+		L"Coalesced Result",
+		probeCountPerDim0,
+		probeCountPerDim0,
+		1,
+		DXGI_FORMAT_R16G16B16A16_FLOAT
+	);
+
 	m_rayLength0 = rayLength0;
 	m_raysPerProbe0 = raysPerProbe0;
 	m_probesPerDim0 = probeCountPerDim0;
 }
 
-void RadianceCascadeManager3D::FillRCGlobalInfo(RCGlobalInfo& rcGlobalInfo)
+void RadianceCascadeManager3D::FillRCGlobalInfo(RCGlobals& rcGlobalInfo)
 {
 	rcGlobalInfo.probeDim0 = m_probesPerDim0;
 	rcGlobalInfo.rayCount0 = m_raysPerProbe0;
@@ -61,6 +70,18 @@ void RadianceCascadeManager3D::FillRCGlobalInfo(RCGlobalInfo& rcGlobalInfo)
 	rcGlobalInfo.rayScalingFactor = m_scalingFactor.rayScalingFactor;
 	
 	rcGlobalInfo.cascadeCount = GetCascadeIntervalCount();
+}
+
+void RadianceCascadeManager3D::ClearBuffers(GraphicsContext& gfxContext)
+{
+	for (ColorBuffer& cascadeInterval : m_cascadeIntervals)
+	{
+		gfxContext.TransitionResource(cascadeInterval, D3D12_RESOURCE_STATE_RENDER_TARGET);
+		gfxContext.ClearColor(cascadeInterval);
+	}
+
+	gfxContext.TransitionResource(m_coalescedResult, D3D12_RESOURCE_STATE_RENDER_TARGET);
+	gfxContext.ClearColor(m_coalescedResult);
 }
 
 uint32_t RadianceCascadeManager3D::GetRaysPerProbe(uint32_t cascadeIndex)

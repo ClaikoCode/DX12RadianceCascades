@@ -6,8 +6,6 @@
 #define RAYS_PER_PROBE(cascadeIndex, scalingFactor, rayCount0) (rayCount0 * pow(scalingFactor, cascadeIndex))
 #define PROBES_PER_DIM(cascadeIndex, scalingFactor, probeDim0) (probeDim0 / pow(scalingFactor, cascadeIndex))
 
-#define USE_LIGHT_LEAK_FIX 0
-
 struct RCGlobals
 {
     uint probeScalingFactor; // Per dim.
@@ -100,9 +98,9 @@ float3 GetRCRayDir(int2 rayIndex, int raysPerDim)
     float2 rayIndexFloat = rayIndex;
     rayIndexFloat += 0.5f; // Middle of pixel.
     
-    // Remap a ray index from [0-raysPerDim] -> [-1, 1].
+    // Remap a ray index from [0, raysPerDim] -> [-1, 1].
     // This will evenly distribute points accross the sampling area [-1, 1].
-    float2 uvCoord = Remap(int2(0, 0), int2(raysPerDim, raysPerDim), -1.0f, 1.0f, rayIndexFloat);
+    float2 uvCoord = Remap(float2(0, 0), float2(raysPerDim, raysPerDim), -1.0f, 1.0f, rayIndexFloat);
     
     return normalize(OctToFloat3EqualArea(uvCoord));
 }
