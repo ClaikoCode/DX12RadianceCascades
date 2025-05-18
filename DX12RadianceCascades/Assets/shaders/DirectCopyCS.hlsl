@@ -25,7 +25,7 @@ void main(uint3 DTid : SV_DispatchThreadID)
     if (IN_BOUNDS(pixelPos, destInfo.destResolution))
     {
         float2 relative = pixelPos / float2(destInfo.destResolution);
-        float4 sampledColor = sourceTex.SampleLevel(pointSampler, relative, 0);
+        float4 sampledColor = sourceTex.SampleLevel(linearSampler, relative, 0);
         destTex[pixelPos] = float4(sampledColor.rgb, 1.0f);
     }
 }

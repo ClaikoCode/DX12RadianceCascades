@@ -43,6 +43,7 @@ enum PSOID : psoid_t
 	PSOIDComputeMinMaxDepthPSO,
 	PSOIDRCRaytracingPSO,
 	PSOIDRC3DMergePSO,
+	PSOIDRC3DCoalescePSO,
 
 	PSOIDCount
 };

@@ -6,7 +6,7 @@ __declspec(align(16)) struct CascadeInfo
 	float padding[3];
 };
 
-__declspec(align(16)) struct RCGlobals
+__declspec(align(16)) struct RC2DGlobals
 {
 	uint32_t probeScalingFactor;
 	uint32_t rayScalingFactor;
@@ -29,7 +29,7 @@ public:
 	ColorBuffer& GetRadianceField() { return m_radianceField; }
 	uint32_t GetCascadeCount() { return (uint32_t)m_cascadeIntervals.size(); }
 
-	RCGlobals FillRCGlobalsData(uint32_t sourceSize);
+	RC2DGlobals FillRCGlobalsData(uint32_t sourceSize);
 
 	uint32_t GetProbePixelSize(uint32_t cascadeIndex); // Per dim.
 	uint32_t GetProbeCount(uint32_t cascadeIndex); // Per dim.

@@ -43,14 +43,17 @@ struct RadianceCascadesSettings
 	bool renderRC3D = true;
 	bool visualizeRC3DGatherCascades = false;
 	bool visualizeRC3DMergeCascades = false;
+	bool seeCoalesceResult = true;
 	int cascadeVisIndex = 0;
 
 	bool enableCascadeProbeVis = false;
 	int cascadeVisProbeIntervalIndex = 0;
-	int cascadeVisProbeSubset = 16;
+	int cascadeVisProbeSubset = 256;
 
-	float rayLength0 = 12.0f;
-	uint32_t raysPerProbe0 = 256u;
+	float rayLength0 = 25.0f;
+	uint32_t raysPerProbe0 = 64u;
+	uint32_t probesPerDim0 = 512u;
+	uint32_t cascadeLevels = 7u;
 };
 
 #define ENABLE_RT (false)
@@ -153,6 +156,11 @@ private:
 		RootEntryRC3DMergeRCGlobalsCB,
 		RootEntryRC3DMergeCascadeInfoCB,
 		RootEntryRC3DMergeCount,
+
+		RootEntryRC3DCoalesceCascade0SRV = 0,
+		RootEntryRC3DCoalesceOutputTexUAV,
+		RootEntryRC3DCoalesceRCGlobalsCB,
+		RootEntryRC3DCoalesceCount,
 	};
 
 public:
@@ -184,6 +192,7 @@ private:
 	void RunComputeFlatlandScene();
 	void RunComputeRCGather();
 	void RunComputeRCMerge();
+	void RunRCCoalesce();
 	void RunComputeRCRadianceField(ColorBuffer& outputBuffer);
 	void UpdateViewportAndScissor();
 
@@ -250,6 +259,9 @@ private:
 
 	ComputePSO m_rc3dMergePSO = ComputePSO(L"RC 3D Merge PSO");
 	RootSignature m_rc3dMergeRootSig;
+
+	ComputePSO m_rc3dCoalescePSO = ComputePSO(L"RC 3D Coalesce PSO");
+	RootSignature m_rc3dCoalesceRootSig;
 
 	ColorBuffer m_flatlandScene = ColorBuffer({ 0.0f, 0.0f, 0.0f, 100000.0f });
 

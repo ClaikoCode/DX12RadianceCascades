@@ -31,7 +31,7 @@ __declspec(align(16)) struct SourceInfo
 	uint32_t sourceHeight;
 };
 
-__declspec(align(16)) struct RCGlobalInfo
+__declspec(align(16)) struct RCGlobals
 {
 	uint32_t probeScalingFactor; // Per dim.
 	uint32_t rayScalingFactor;
