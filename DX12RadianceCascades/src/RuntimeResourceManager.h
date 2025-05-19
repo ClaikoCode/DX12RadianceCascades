@@ -44,6 +44,7 @@ enum PSOID : psoid_t
 	PSOIDRCRaytracingPSO,
 	PSOIDRC3DMergePSO,
 	PSOIDRC3DCoalescePSO,
+	PSOIDDeferredLightingPSO,
 
 	PSOIDCount
 };

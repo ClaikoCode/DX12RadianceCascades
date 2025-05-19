@@ -43,7 +43,7 @@ struct RadianceCascadesSettings
 	bool renderRC3D = true;
 	bool visualizeRC3DGatherCascades = false;
 	bool visualizeRC3DMergeCascades = false;
-	bool seeCoalesceResult = true;
+	bool seeCoalesceResult = false;
 	int cascadeVisIndex = 0;
 
 	bool enableCascadeProbeVis = false;
@@ -161,6 +161,11 @@ private:
 		RootEntryRC3DCoalesceOutputTexUAV,
 		RootEntryRC3DCoalesceRCGlobalsCB,
 		RootEntryRC3DCoalesceCount,
+
+		RootEntryDeferredLightingAlbedoSRV = 0,
+		RootEntryDeferredLightingNormalSRV,
+		RootEntryDeferredLightingDiffuseRadianceSRV,
+		RootEntryDeferredLightingCount,
 	};
 
 public:
@@ -194,6 +199,7 @@ private:
 	void RunComputeRCMerge();
 	void RunRCCoalesce();
 	void RunComputeRCRadianceField(ColorBuffer& outputBuffer);
+	void RunDeferredLightingPass(ColorBuffer& albedoBuffer, ColorBuffer& normalBuffer, ColorBuffer& diffuseRadianceBuffer, ColorBuffer& outputBuffer);
 	void UpdateViewportAndScissor();
 
 	void BuildUISettings();
@@ -201,6 +207,7 @@ private:
 	void ClearPixelBuffers();
 
 	// Will run a compute shader that samples the source and writes to dest.
+	// TODO: Take in a sampler type and change PSO to have a binding for a dynamic sampler state that is bound at runtime.
 	void FullScreenCopyCompute(PixelBuffer& source, D3D12_CPU_DESCRIPTOR_HANDLE sourceSRV, ColorBuffer& dest);
 	void FullScreenCopyCompute(ColorBuffer& source, ColorBuffer& dest);
 
@@ -263,10 +270,15 @@ private:
 	ComputePSO m_rc3dCoalescePSO = ComputePSO(L"RC 3D Coalesce PSO");
 	RootSignature m_rc3dCoalesceRootSig;
 
+	GraphicsPSO m_deferredLightingPSO = GraphicsPSO(L"Deferred Lighting PSO");
+	RootSignature m_deferredLightingRootSig;
+
 	ColorBuffer m_flatlandScene = ColorBuffer({ 0.0f, 0.0f, 0.0f, 100000.0f });
 
 	RadianceCascadesManager2D m_rcManager2D;
 	RadianceCascadeManager3D m_rcManager3D;
+
+	ColorBuffer m_albedoBuffer;
 
 	ColorBuffer m_minMaxDepthCopy;
 	ColorBuffer m_minMaxDepthMips;
