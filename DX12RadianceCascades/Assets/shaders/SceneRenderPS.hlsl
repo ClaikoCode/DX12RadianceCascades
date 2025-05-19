@@ -89,8 +89,13 @@ float3 ComputeNormal(VSOutput vsOutput)
 #endif
 }
 
+struct PSOutput
+{
+    float4 albedoBuffer : SV_Target0;
+    float4 normalBuffer : SV_Target1;
+};
 
-float4 main(VSOutput vsOutput) : SV_Target0
+PSOutput main(VSOutput vsOutput)
 {
     float2 samplingCoords = vsOutput.uv0;
     float4 baseColor = baseColorFactor * baseColorTexture.Sample(baseColorSampler, samplingCoords);
@@ -98,8 +103,14 @@ float4 main(VSOutput vsOutput) : SV_Target0
     float3 normal = ComputeNormal(vsOutput);
     
     float attenuation = dot(normal, normalize(SunDirection));
-    attenuation = 1.0f;
+    //attenuation = 1.0f;
     
     float3 finalColor = baseColor.rgb * attenuation * SunIntensity + emissiveColor + baseColor.rgb * 0.1f;
-    return float4(finalColor, 1.0f);
+    
+    PSOutput psOutput;
+    
+    psOutput.albedoBuffer = float4(baseColor.rgb + emissiveColor, 1.0f);
+    //psOutput.albedoBuffer = float4(finalColor, 1.0f);
+    psOutput.normalBuffer = float4(normal, 1.0f);
+    return psOutput;
 }

@@ -42,6 +42,11 @@ namespace
 		return Graphics::g_SceneColorBuffer.GetHeight();
 	}
 
+	DXGI_FORMAT GetSceneColorFormat()
+	{
+		return Graphics::g_SceneColorBuffer.GetFormat();
+	}
+
 	void FillCameraInfo(GlobalInfo& globalInfo, const Camera& camera)
 	{
 		globalInfo.viewProjMatrix = camera.GetViewProjMatrix();
@@ -86,6 +91,13 @@ namespace
 		cmptContext.SetPipelineState(pso);
 		cmptContext.SetRootSignature(pso.GetRootSignature());
 	}
+
+	void SetGraphicsPSOAndRootSig(GraphicsContext& gfxContext, PSOID psoID)
+	{
+		GraphicsPSO& pso = RuntimeResourceManager::GetGraphicsPSO(psoID);
+		gfxContext.SetPipelineState(pso);
+		gfxContext.SetRootSignature(pso.GetRootSignature());
+	}
 }
 
 RadianceCascades::RadianceCascades()
@@ -101,8 +113,11 @@ RadianceCascades::~RadianceCascades()
 void RadianceCascades::Startup()
 {
 	Renderer::Initialize();
-
 	AppGUI::Initialize(GameCore::g_hWnd);
+
+	{
+		m_albedoBuffer.Create(L"Albedo Buffer", ::GetSceneColorWidth(), ::GetSceneColorHeight(), 1, ::GetSceneColorFormat());
+	}
 
 	UpdateViewportAndScissor();
 
@@ -127,7 +142,6 @@ void RadianceCascades::Cleanup()
 	Graphics::g_CommandManager.IdleGPU();
 	AppGUI::Shutdown();
 	
-
 	// TODO: It might make more sense for an outer scope to execute this as this class is not responsible for their initialization.
 	DebugDrawer::Destroy();
 	RuntimeResourceManager::Destroy();
@@ -224,6 +238,17 @@ void RadianceCascades::RenderScene()
 				{
 					FullScreenCopyCompute(m_rcManager3D.GetCoalesceBuffer(), Graphics::g_SceneColorBuffer);
 				}
+				else
+				{
+					// Copy scene color to albedo buffer.
+					FullScreenCopyCompute(Graphics::g_SceneColorBuffer, m_albedoBuffer);
+					RunDeferredLightingPass(
+						m_albedoBuffer,
+						Graphics::g_SceneNormalBuffer,
+						m_rcManager3D.GetCoalesceBuffer(),
+						Graphics::g_SceneColorBuffer
+					);
+				}
 			}
 		}
 	}
@@ -317,6 +342,7 @@ void RadianceCascades::InitializePSOs()
 		RuntimeResourceManager::RegisterPSO(PSOIDRCRaytracingPSO,			&m_rcRaytracePSO,				PSOTypeRaytracing);
 		RuntimeResourceManager::RegisterPSO(PSOIDRC3DMergePSO,				&m_rc3dMergePSO,				PSOTypeCompute);
 		RuntimeResourceManager::RegisterPSO(PSOIDRC3DCoalescePSO,			&m_rc3dCoalescePSO,				PSOTypeCompute);
+		RuntimeResourceManager::RegisterPSO(PSOIDDeferredLightingPSO,		&m_deferredLightingPSO,			PSOTypeGraphics);
 	}
 
 	// Overwrite and update external PSO shaders.
@@ -325,6 +351,41 @@ void RadianceCascades::InitializePSOs()
 		RuntimeResourceManager::SetShadersForPSO(PSOIDFirstExternalPSO, sceneRenderShaderIDs, true);
 		RuntimeResourceManager::SetShadersForPSO(PSOIDSecondExternalPSO, sceneRenderShaderIDs, true);
 	}
+
+#pragma region GraphicsPSOs
+
+	{
+		GraphicsPSO& pso = RuntimeResourceManager::GetGraphicsPSO(PSOIDDeferredLightingPSO);
+		RuntimeResourceManager::SetShadersForPSO(PSOIDDeferredLightingPSO, { ShaderIDFullScreenQuadVS, ShaderIDDeferredLightingPassPS });
+
+		RootSignature& rootSig = m_deferredLightingRootSig;
+		rootSig.Reset(
+			RootEntryDeferredLightingCount,
+			1
+#if defined(_DEBUGDRAWING)
+			,false
+#endif
+		);
+		rootSig[RootEntryDeferredLightingAlbedoSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 0, 1);
+		rootSig[RootEntryDeferredLightingNormalSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1);
+		rootSig[RootEntryDeferredLightingDiffuseRadianceSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 2, 1);
+		{
+			SamplerDesc samplerState = Graphics::SamplerLinearBorderDesc;
+			rootSig.InitStaticSampler(0, samplerState);
+		}
+		rootSig.Finalize(L"Deferred Lighting");
+
+		pso.SetRasterizerState(Graphics::RasterizerTwoSided);
+		pso.SetPrimitiveTopologyType(D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE);
+		pso.SetBlendState(Graphics::BlendTraditional);
+		pso.SetDepthStencilState(Graphics::DepthStateDisabled);
+		pso.SetRenderTargetFormats(1, &Graphics::g_SceneColorBuffer.GetFormat(), DXGI_FORMAT_UNKNOWN);
+
+		pso.SetRootSignature(rootSig);
+		pso.Finalize();
+	}
+
+#pragma endregion
 
 #pragma region ComputePSOs
 	{
@@ -1087,6 +1148,35 @@ void RadianceCascades::RunComputeRCRadianceField(ColorBuffer& outputBuffer)
 	FullScreenCopyCompute(radianceField, outputBuffer);
 }
 
+void RadianceCascades::RunDeferredLightingPass(ColorBuffer& albedoBuffer, ColorBuffer& normalBuffer, ColorBuffer& diffuseRadianceBuffer, ColorBuffer& outputBuffer)
+{
+	GraphicsContext& gfxContext = GraphicsContext::Begin(L"Diffuse Lighting Pass");
+
+	// Transition resources
+	gfxContext.TransitionResource(albedoBuffer, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+	gfxContext.TransitionResource(normalBuffer, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+	gfxContext.TransitionResource(diffuseRadianceBuffer, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+	gfxContext.TransitionResource(outputBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET);
+
+	// Set up the pipeline state and root signature
+	::SetGraphicsPSOAndRootSig(gfxContext, PSOIDDeferredLightingPSO);
+	
+	// Set the render target and viewport
+	gfxContext.SetRenderTarget(outputBuffer.GetRTV());
+	gfxContext.SetViewportAndScissor(m_mainViewport, m_mainScissor);
+	gfxContext.SetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+	
+	// Set descriptors
+	gfxContext.SetDynamicDescriptor(RootEntryDeferredLightingAlbedoSRV, 0, albedoBuffer.GetSRV());
+	gfxContext.SetDynamicDescriptor(RootEntryDeferredLightingNormalSRV, 0, normalBuffer.GetSRV());
+	gfxContext.SetDynamicDescriptor(RootEntryDeferredLightingDiffuseRadianceSRV, 0, diffuseRadianceBuffer.GetSRV());
+
+	// Draw a full-screen quad
+	gfxContext.Draw(4, 0);
+	
+	gfxContext.Finish(true);
+}
+
 void RadianceCascades::UpdateViewportAndScissor()
 {
 	float width = (float)Graphics::g_SceneColorBuffer.GetWidth();
@@ -1229,6 +1319,7 @@ void RadianceCascades::BuildUISettings()
 void RadianceCascades::ClearPixelBuffers()
 {
 	ColorBuffer& sceneColorBuffer = Graphics::g_SceneColorBuffer;
+	ColorBuffer& sceneNormalBuffer = Graphics::g_SceneNormalBuffer;
 	DepthBuffer& sceneDepthBuffer = Graphics::g_SceneDepthBuffer;
 
 	GraphicsContext& gfxContext = GraphicsContext::Begin(L"Clear Pixel Buffers");
@@ -1239,6 +1330,9 @@ void RadianceCascades::ClearPixelBuffers()
 
 		gfxContext.TransitionResource(sceneColorBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET, true);
 		gfxContext.ClearColor(sceneColorBuffer);
+
+		gfxContext.TransitionResource(sceneNormalBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET, true);
+		gfxContext.ClearColor(sceneNormalBuffer);
 	}
 
 	{

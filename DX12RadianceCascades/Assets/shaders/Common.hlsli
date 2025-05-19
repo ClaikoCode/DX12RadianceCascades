@@ -17,6 +17,8 @@
 #define InverseLerpClamped(a, b, val) (saturate((val - a) / (b - a)))
 #define Remap(a, b, c, d, val) (lerp(c, d, InverseLerpClamped(a, b, val)))
 
+#define IsZero(x) (length(x) < EPSILON)
+
 // Depth val should be between 0 and 1 (NO LINEARIZATION REQUIRED)
 float3 WorldPosFromDepth(float depthVal, float2 uv, matrix invProjMatrix, matrix invViewMatrix)
 {
@@ -45,18 +47,18 @@ float3 SimpleSunsetSky(float3 viewDir, float3 sunDir)
     
     // Create sky gradient
     float3 skyBaseColor = lerp(
-        float3(0.8, 0.4, 0.2) * 2.0, // Warm orange at horizon
-        float3(0.1, 0.2, 0.4) * 1.0, // Deep blue at zenith
+        float3(0.8, 0.4, 0.2) * 3.0, // Warm orange at horizon
+        float3(0.1, 0.2, 0.4) * 1.5, // Deep blue at zenith
         pow(height, 0.5)
     );
     
     // Sun calculation
     float sunDot = max(dot(viewDir, sunDir), 0.0);
-    float sunDisc = smoothstep(0.998, 0.9995, sunDot);
+    float sunDisc = smoothstep(0.96, 0.9997, sunDot);
     float sunGlow = pow(sunDot, 8.0);
     
     // Add sun and glow
-    float3 sunColor = float3(1.0, 0.6, 0.3) * 10.0; // HDR sun
+    float3 sunColor = float3(1.0, 0.6, 0.3) * 20.0; // HDR sun
     skyBaseColor += sunDisc * sunColor;
     skyBaseColor += sunGlow * float3(0.8, 0.5, 0.3) * (1.0 - height) * 0.8;
     

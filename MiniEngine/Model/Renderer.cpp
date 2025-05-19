@@ -196,7 +196,11 @@ void Renderer::Initialize(void)
     m_DefaultPSO.SetDepthStencilState(DepthStateReadWrite);
     m_DefaultPSO.SetInputLayout(0, nullptr);
     m_DefaultPSO.SetPrimitiveTopologyType(D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE);
-    m_DefaultPSO.SetRenderTargetFormats(1, &ColorFormat, DepthFormat);
+    //m_DefaultPSO.SetRenderTargetFormats(1, &ColorFormat, DepthFormat);
+    // Modified by JD.
+    DXGI_FORMAT formats[2] = { ColorFormat, DXGI_FORMAT_R16G16B16A16_FLOAT };
+    m_DefaultPSO.SetRenderTargetFormats(2, formats, DepthFormat);
+
     m_DefaultPSO.SetVertexShader(g_pDefaultVS, sizeof(g_pDefaultVS));
     m_DefaultPSO.SetPixelShader(g_pDefaultPS, sizeof(g_pDefaultPS));
 
@@ -628,7 +632,12 @@ void MeshSorter::RenderMeshes(
 				{
 					context.TransitionResource(*m_DSV, D3D12_RESOURCE_STATE_DEPTH_READ);
 					context.TransitionResource(g_SceneColorBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET);
-					context.SetRenderTarget(g_SceneColorBuffer.GetRTV(), m_DSV->GetDSV_DepthReadOnly());
+					//context.SetRenderTarget(g_SceneColorBuffer.GetRTV(), m_DSV->GetDSV_DepthReadOnly());
+                    
+                    // Edited by JD.
+                    context.TransitionResource(g_SceneNormalBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET);
+                    D3D12_CPU_DESCRIPTOR_HANDLE rtvHandles[2] = { g_SceneColorBuffer.GetRTV(), g_SceneNormalBuffer.GetRTV() };
+                    context.SetRenderTargets(2, rtvHandles, m_DSV->GetDSV_DepthReadOnly());
 				}
 				else
 				{

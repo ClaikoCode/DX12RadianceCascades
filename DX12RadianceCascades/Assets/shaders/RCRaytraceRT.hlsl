@@ -20,6 +20,8 @@ RaytracingAccelerationStructure Scene : register(t0);
 RWTexture2D<float4> renderOutput : register(u0);
 SamplerState sourceSampler : register(s0);
 
+TextureCube<float4> cubeMap : register(t1);
+
 struct GlobalInfo
 {
     matrix viewProjMatrix;
@@ -194,7 +196,7 @@ void MissShader(inout RayPayload payload)
     //DrawCascadeRay(float3(0.0f, 1.0f, 0.0f), 0.0f, cascadeInfo.cascadeIndex, payload.probeIndex);
     if (cascadeInfo.cascadeIndex == (rcGlobals.cascadeCount - 1))
     {
-        float3 sunDir = normalize(float3(0.5, 0.15, 0.5));
+        float3 sunDir = normalize(float3(0.5, 0.9, 0.5));
         renderOutput[DispatchRaysIndex().xy] = float4(SimpleSunsetSky(WorldRayDirection(), sunDir), 1.0f);
     }
     else
