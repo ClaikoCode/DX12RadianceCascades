@@ -17,9 +17,18 @@ void main( uint3 DTid : SV_DispatchThreadID )
     if (!OUT_OF_BOUNDS(pixelPos, outputDims))
     {
         int2 probePos = pixelPos;
+        float3 radiance = 0.0f;
+
+        uint rayCount = rcGlobals.rayCount0;
+        // If the merge has been pre-averaged it means that each original ray has 
+        // casted a ray equal to its ray scaling factor. 
+        if(rcGlobals.usePreAveraging)
+        {
+            rayCount /= rcGlobals.rayScalingFactor; 
+        }
         
-        uint rayCount0Sqrt = sqrt(rcGlobals.rayCount0);
-        float4 summedRadiance = 0.0f;
+        uint rayCount0Sqrt = sqrt(rayCount);
+        float4 summedRadiance = 0.0f;        
         for (int i = 0; i < rayCount0Sqrt; i++)
         {
             for (int k = 0; k < rayCount0Sqrt; k++)
@@ -31,8 +40,7 @@ void main( uint3 DTid : SV_DispatchThreadID )
             }
         }
 
-        float3 radiance = summedRadiance.rgb / rcGlobals.rayCount0;
-        
+        radiance = summedRadiance.rgb / rayCount; 
         outputTex[pixelPos] = float4(radiance, 1.0f);
     }
 }

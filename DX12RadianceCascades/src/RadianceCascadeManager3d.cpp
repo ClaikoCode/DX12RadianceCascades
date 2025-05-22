@@ -6,7 +6,7 @@
 #include "GPUStructs.h"
 #include "RadianceCascadeManager3D.h"
 
-void RadianceCascadeManager3D::Init(float rayLength0, uint32_t raysPerProbe0, uint32_t probesPerDim0, uint32_t cascadeIntervalCount)
+void RadianceCascadeManager3D::Init(float rayLength0, uint32_t raysPerProbe0, uint32_t probesPerDim0, uint32_t cascadeIntervalCount, bool usePreAverage)
 {
 	Graphics::g_CommandManager.IdleGPU();
 
@@ -24,11 +24,21 @@ void RadianceCascadeManager3D::Init(float rayLength0, uint32_t raysPerProbe0, ui
 	uint32_t actualCascadeCount = cascadeCount;
 	uint32_t probeCount = probeCountPerDim0 * probeCountPerDim0;
 	uint32_t raysPerProbe = raysPerProbe0;
+	
+	// If we are using pre-averaged intervals it can be seen as collapsing all rays of an upper cascade into a single ray in the lower cascade.
+	// What this effectivly means that if we have 4 as a ray scaling factor, every 4 texels that would store those rays in a higher cascade is now 1 texel instead.
+	// We can just bake in this factor from the beginning, which will yield the same result.
+	if (usePreAverage)
+	{
+		raysPerProbe /= m_scalingFactor.rayScalingFactor;
+	}
+
 	for (uint32_t i = 0; i < cascadeCount; i++)
 	{
 		std::wstring cascadeName = std::wstring(L"Cascade Interval ") + std::to_wstring(i);
 
 		uint32_t textureSideLength = (uint32_t)Math::Sqrt((float)(probeCount * raysPerProbe));
+
 		m_cascadeIntervals[i].Create(cascadeName, textureSideLength, textureSideLength, 1, DXGI_FORMAT_R16G16B16A16_FLOAT);
 
 		// If we have reached the maximum depth that we can subdivide probes, we stop and save over the new value.
@@ -58,6 +68,7 @@ void RadianceCascadeManager3D::Init(float rayLength0, uint32_t raysPerProbe0, ui
 	m_rayLength0 = rayLength0;
 	m_raysPerProbe0 = raysPerProbe0;
 	m_probesPerDim0 = probeCountPerDim0;
+	m_preAveragedIntervals = usePreAverage;
 }
 
 void RadianceCascadeManager3D::FillRCGlobalInfo(RCGlobals& rcGlobalInfo)
@@ -70,6 +81,8 @@ void RadianceCascadeManager3D::FillRCGlobalInfo(RCGlobals& rcGlobalInfo)
 	rcGlobalInfo.rayScalingFactor = m_scalingFactor.rayScalingFactor;
 	
 	rcGlobalInfo.cascadeCount = GetCascadeIntervalCount();
+
+	rcGlobalInfo.usePreAveraging = m_preAveragedIntervals;
 }
 
 void RadianceCascadeManager3D::ClearBuffers(GraphicsContext& gfxContext)
@@ -89,9 +102,14 @@ uint32_t RadianceCascadeManager3D::GetRaysPerProbe(uint32_t cascadeIndex)
 	return m_raysPerProbe0 * (uint32_t)Math::Pow((float)m_scalingFactor.rayScalingFactor, (float)cascadeIndex);
 }
 
+uint32_t RadianceCascadeManager3D::GetProbeCountPerDim(uint32_t cascadeIndex)
+{
+	return m_probesPerDim0 / (uint32_t)Math::Pow((float)m_scalingFactor.probeScalingFactor, (float)cascadeIndex);
+}
+
 uint32_t RadianceCascadeManager3D::GetProbeCount(uint32_t cascadeIndex)
 {
-	uint32_t probesPerDim = m_probesPerDim0 / (uint32_t)Math::Pow((float)m_scalingFactor.probeScalingFactor, (float)cascadeIndex);
+	uint32_t probesPerDim = GetProbeCountPerDim(cascadeIndex);
 	return probesPerDim * probesPerDim;
 }
 
