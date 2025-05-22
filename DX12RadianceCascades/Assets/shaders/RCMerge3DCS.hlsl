@@ -14,7 +14,7 @@ float4 ReadRadianceN1(float2 probeIndex, float2 rayIndex, float probeCountPerDim
 {
     float2 sampleTexel = rayIndex * probeCountPerDimN1 + probeIndex;
     float2 sampleUV = sampleTexel / texWidthN1;
-        
+
     return cascadeN1.SampleLevel(linearSampler, sampleUV, 0);
 }
 
@@ -30,12 +30,13 @@ void main( uint3 DTid : SV_DispatchThreadID )
     {
         ProbeInfo3D probeInfoN = BuildProbeInfo3DDirFirst(pixelPos, cascadeInfo.cascadeIndex, rcGlobals);
         float4 nearRadiance = cascadeN[pixelPos];
-     
-        float2 cascadeN1ProbeIndex = float2(probeInfoN.probeIndex + 0.5f) / rcGlobals.probeScalingFactor;
-
-        float probeCountPerDimN1 = floor(probeInfoN.sideLength / rcGlobals.probeScalingFactor);
         float4 farRadianceSum = 0.0f;
-        for (int i = 0; i < 4; i++)
+        
+        float2 cascadeN1ProbeIndex = float2(probeInfoN.probeIndex + 0.5f) / rcGlobals.probeScalingFactor;
+        float probeCountPerDimN1 = floor(probeInfoN.sideLength / rcGlobals.probeScalingFactor);
+        
+        int raysToMerge = rcGlobals.rayScalingFactor;
+        for (int i = 0; i < raysToMerge; i++)
         {
             int2 offset = TranslateCoord4x1To2x2(i);
             float4 farRadiance = ReadRadianceN1(cascadeN1ProbeIndex, float2(probeInfoN.rayIndex * 2) + offset, probeCountPerDimN1, sourceDims.x);
@@ -43,12 +44,12 @@ void main( uint3 DTid : SV_DispatchThreadID )
             float3 radiance = nearRadiance.a * farRadiance.rgb; // Radiance is only carried if near field is visible.
             float visibility = nearRadiance.a * farRadiance.a; // Make sure visibility is updated if near field is not visible.
             
-            // Because of the interpolation when sampling the alpha, if some rays are visible and some are not, the colors should be weighted accordingly.
-            farRadianceSum += float4(radiance, visibility) * 0.25f; // Normalize value as each sample takes 4 probes into account.
+            farRadianceSum += float4(radiance, visibility);
         }
         
         // TODO: This should be weighted by the depth as well.
-        float4 radianceSum = nearRadiance + farRadianceSum;
+        float4 normalizedFarRadiance = farRadianceSum / raysToMerge;
+        float4 radianceSum = nearRadiance + normalizedFarRadiance;
 
         // Write radiance.
         cascadeN[pixelPos] = radianceSum;

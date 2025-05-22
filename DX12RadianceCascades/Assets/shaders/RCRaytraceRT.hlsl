@@ -104,11 +104,10 @@ struct RayPayload
     float4 result;
 };
 
+// Direction is filled outside of this function.
 inline RayDesc GenerateProbeRay(ProbeInfo3D probeInfo3D)
 {
     RayDesc ray;
-
-    float3 rayDir = GetRCRayDir(probeInfo3D.rayIndex, sqrt(probeInfo3D.rayCount));
 
     float3 rayOrigin;
     {
@@ -134,8 +133,7 @@ inline RayDesc GenerateProbeRay(ProbeInfo3D probeInfo3D)
         
         rayOrigin = worldPos;
     }
-    
-    ray.Direction = rayDir;
+   
     ray.Origin = rayOrigin;
     ray.TMax = probeInfo3D.startDistance + probeInfo3D.range;
     ray.TMin = probeInfo3D.startDistance;
@@ -153,10 +151,37 @@ void RayGenerationShader()
     
     DrawProbe(cascadeInfo.cascadeIndex, probeInfo3D.probeIndex, ray.Origin, ray.TMin);
     
-    //TraceRay(Scene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, payload);
-    TraceRay(Scene, RAY_FLAG_NONE, ~0, 0, 1, 0, ray, payload);
+    uint rayFlags = RAY_FLAG_NONE;
     
-    renderOutput[DispatchRaysIndex().xy] = payload.result;
+    int sqrtRayCount = sqrt(probeInfo3D.rayCount);
+    float4 radianceOutput = float4(0.0f, 0.0f, 0.0f, 0.0f);
+    if(rcGlobals.usePreAveraging)
+    {
+        int2 translationDims = sqrt(rcGlobals.rayScalingFactor);
+        int2 baseRayIndex = probeInfo3D.rayIndex * translationDims;
+        
+        // Pre-averaging is done by sampling all upper rays at once.
+        for (int i = 0; i < rcGlobals.rayScalingFactor; i++)
+        {
+            int2 rayIndexOffset = Translate1DTo2D(i, translationDims);
+
+            // Scale with sqrtRayCount to get the correct ray index.
+            ray.Direction = GetRCRayDir(baseRayIndex + rayIndexOffset, sqrtRayCount);
+            TraceRay(Scene, rayFlags, ~0, 0, 1, 0, ray, payload);
+        }
+        
+        // Normalized sum.
+        radianceOutput = payload.result / rcGlobals.rayScalingFactor;
+    }
+    else
+    {
+        ray.Direction = GetRCRayDir(probeInfo3D.rayIndex, sqrtRayCount);
+        TraceRay(Scene, rayFlags, ~0, 0, 1, 0, ray, payload);
+        
+        radianceOutput = payload.result;
+    }
+    
+    renderOutput[DispatchRaysIndex().xy] = radianceOutput;
 }
 
 [shader("anyhit")]
@@ -195,7 +220,7 @@ void ClosestHitShader(inout RayPayload payload, in BuiltInTriangleIntersectionAt
     const float2 uv = BARYCENTRIC_NORMALIZATION(barycentrics, uv0, uv1, uv2);
     
     float3 hitColor = emissiveTex.SampleLevel(sourceSampler, uv, 0).rgb;
-    payload.result = float4(hitColor, 0.0f);
+    payload.result += float4(hitColor, 0.0f);
 }
 
 [shader("miss")]
@@ -214,5 +239,5 @@ void MissShader(inout RayPayload payload)
         missColor = float3(0.0f, 0.0f, 0.0f);
     }
     
-    payload.result = float4(missColor, 1.0f);
+    payload.result += float4(missColor, 1.0f);
 }

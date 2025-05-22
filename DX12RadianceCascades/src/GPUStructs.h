@@ -39,6 +39,7 @@ __declspec(align(16)) struct RCGlobals
 	uint32_t rayCount0;
 	float rayLength0;
 	uint32_t cascadeCount;
+	bool usePreAveraging;
 };
 
 __declspec(align(16)) struct CascadeVisInfo

@@ -83,10 +83,17 @@ int2 GetDims(Texture2D tex)
     return int2(texWidth, texHeight);
 }
 
+int2 Translate1DTo2D(int coord1D, int2 dims)
+{
+    return int2(coord1D % dims.x, coord1D / dims.x);
+}
+
+
 // Order: (0, 0), (1, 0), (0, 1), (1, 1)
 int2 TranslateCoord4x1To2x2(int coord4x1)
 {    
-    return int2(coord4x1 % 2, coord4x1 / 2);
+    return Translate1DTo2D(coord4x1, int2(2, 2));
 }
+
 
 #endif // COMMON_H

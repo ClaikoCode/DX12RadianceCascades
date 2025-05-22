@@ -528,7 +528,7 @@ void RadianceCascades::InitializePSOs()
 		rootSig[RootEntryRC3DMergeCascadeInfoCB].InitAsConstantBuffer(1);
 		{
 			SamplerDesc sampler = Graphics::SamplerLinearBorderDesc;
-			sampler.SetBorderColor(Color(0.0f, 0.0f, 0.0f, 0.0f)); // Alpha of 1 to set visibility term.
+			sampler.SetBorderColor(Color(0.0f, 0.0f, 0.0f, 1.0f)); // Alpha of 1 to set visibility term.
 			rootSig.InitStaticSampler(0, sampler);
 		}
 		rootSig.Finalize(L"RC 3D Merge");
@@ -659,10 +659,11 @@ void RadianceCascades::InitializeRCResources()
 	m_rcManager2D.Init(SAMPLE_LEN_0, RAYS_PER_PROBE_0, diag);
 
 	m_rcManager3D.Init(
-		m_settings.rcSettings.rayLength0, 
-		m_settings.rcSettings.raysPerProbe0, 
-		m_settings.rcSettings.probesPerDim0, 
-		m_settings.rcSettings.cascadeLevels
+		m_settings.rcSettings.rayLength0,
+		m_settings.rcSettings.raysPerProbe0,
+		m_settings.rcSettings.probesPerDim0,
+		m_settings.rcSettings.cascadeLevels, 
+		true
 	);
 }
 
@@ -860,7 +861,7 @@ void RadianceCascades::RunRCGather(Camera& camera)
 	{
 		CascadeInfo cascadeInfo = {};
 		cascadeInfo.cascadeIndex = cascadeIndex;
-
+		
 		rtContext.SetDynamicConstantBufferView(RootEntryRCRaytracingRTGCascadeInfoCB, sizeof(CascadeInfo), &cascadeInfo);
 		
 		ColorBuffer& cascadeBuffer = m_rcManager3D.GetCascadeIntervalBuffer(cascadeIndex);
@@ -872,9 +873,7 @@ void RadianceCascades::RunRCGather(Camera& camera)
 		const DescriptorHandle& depthCascadeUAV = RuntimeResourceManager::GetDescCopy(*(depthUAVStart + cascadeIndex + depthIndexOffset));
 		rtCommandList->SetComputeRootDescriptorTable(RootEntryRCRaytracingRTGDepthTextureUAV, depthCascadeUAV);
 
-		uint32_t raysPerProbe = m_rcManager3D.GetRaysPerProbe(cascadeIndex);
-		uint32_t probeCount = m_rcManager3D.GetProbeCount(cascadeIndex);
-		uint32_t dispatchDims = (uint32_t)(Math::Sqrt((float)raysPerProbe) * Math::Sqrt((float)probeCount));
+		uint32_t dispatchDims = cascadeBuffer.GetWidth();
 		::DispatchRays(
 			RayDispatchIDRCRaytracing, 
 			dispatchDims,
@@ -1226,6 +1225,8 @@ void RadianceCascades::BuildUISettings()
 #pragma endregion
 	
 #pragma region CascadeSettings
+	// TODO: This feels a bit backwards. Almost all settings are taken from the Rc manager itself. 
+	// Maybe its better to just have a function in the rc manager that calls GUI functions?
 	if (ImGui::CollapsingHeader("Radiance Cascade Settings", ImGuiTreeNodeFlags_DefaultOpen))
 	{
 
@@ -1233,13 +1234,20 @@ void RadianceCascades::BuildUISettings()
 
 		ImGui::Checkbox("Render RC 3D", &rcs.renderRC3D);
 
+		
+		if (ImGui::SliderFloat("Ray Length", &rcs.rayLength0, 0.1f, 1000.0f))
+		{
+			m_rcManager3D.SetRayLength(rcs.rayLength0);
+		}
+
 		if (rcs.renderRC3D)
 		{
 			ImGui::Separator();
+			uint32_t cascadeResolution = m_rcManager3D.GetCascadeIntervalBuffer(0).GetWidth();
 
 			ImGui::Text("Cascade Count: %u", m_rcManager3D.GetCascadeIntervalCount());
-			uint32_t res = m_rcManager3D.GetCascadeIntervalBuffer(0).GetWidth();
-			ImGui::Text("Cascade Resolution: %u, %u", res, res);
+			ImGui::Text("Cascade Resolution: %u x %u", cascadeResolution, cascadeResolution);
+			ImGui::Text("Using pre-averaging: %s", m_rcManager3D.UsesPreAveragedIntervals() ? "Yes" : "No");
 
 			// Create a table with 5 columns: Cascade, Probe Count, Ray Count, Start Dist, Length
 			if (ImGui::BeginTable("CascadeTable", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_NoHostExtendX))
@@ -1260,8 +1268,9 @@ void RadianceCascades::BuildUISettings()
 					ImGui::Text("%u", i);
 
 					// Probe Count column
+					uint32_t cascadeCountPerDim = m_rcManager3D.GetProbeCountPerDim(i);
 					ImGui::TableSetColumnIndex(1);
-					ImGui::Text("%u", m_rcManager3D.GetProbeCount(i));
+					ImGui::Text("%u x %u", cascadeCountPerDim, cascadeCountPerDim);
 
 					// Rays Per Probe column
 					ImGui::TableSetColumnIndex(2);
