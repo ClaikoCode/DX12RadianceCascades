@@ -109,7 +109,7 @@ PSOutput main(VSOutput vsOutput)
     
     PSOutput psOutput;
     
-    psOutput.albedoBuffer = float4(baseColor.rgb + emissiveColor, 1.0f);
+    psOutput.albedoBuffer = float4(baseColor.rgb, 1.0f);
     //psOutput.albedoBuffer = float4(finalColor, 1.0f);
     psOutput.normalBuffer = float4(normal, 1.0f);
     return psOutput;

@@ -50,7 +50,7 @@ struct RadianceCascadesSettings
 	int cascadeVisProbeIntervalIndex = 0;
 	int cascadeVisProbeSubset = 256;
 
-	float rayLength0 = 25.0f;
+	float rayLength0 = 10.0f;
 	uint32_t raysPerProbe0 = 64u;
 	uint32_t probesPerDim0 = 512u;
 	uint32_t cascadeLevels = 7u;
