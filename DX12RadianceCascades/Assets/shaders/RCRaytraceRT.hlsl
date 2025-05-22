@@ -20,8 +20,6 @@ RaytracingAccelerationStructure Scene : register(t0);
 RWTexture2D<float4> renderOutput : register(u0);
 SamplerState sourceSampler : register(s0);
 
-TextureCube<float4> cubeMap : register(t1);
-
 struct GlobalInfo
 {
     matrix viewProjMatrix;
@@ -103,6 +101,7 @@ float2 LoadUVFromVertex(uint vertexByteOffset, uint uvOffsetInBytes)
 struct RayPayload
 {
     int2 probeIndex;
+    float4 result;
 };
 
 inline RayDesc GenerateProbeRay(ProbeInfo3D probeInfo3D)
@@ -115,6 +114,12 @@ inline RayDesc GenerateProbeRay(ProbeInfo3D probeInfo3D)
     {
         uint cascadeIndex = cascadeInfo.cascadeIndex;
         int2 pixelPos = probeInfo3D.probeIndex;
+        // TODO: Check if loading this with discrete pixel positions is faulty.
+        // The world pos from depth is based on middle of pixel whilst this is not. This is a discrepency in the math.
+        // This may be faulty. Bind depth tex as a SRV instead and then use SampleLevel with 0.5 pixel offset
+        // using the cascade interval offset (same number as in C++). 
+        // Thinking about it further I think this is actually correct. The single value for a texel represents the depth of the probe and it is placed in the middle of the texel.
+        // It should not be interpolated. You should still try.
         float depthVal = depthTex[pixelPos].g; // R is min, G is max.
         // Add small distance towards the camera to avoid wall clipping.
         // Otherwise, probes will spawn inside a wall and its rays wont interect any geometry.
@@ -144,12 +149,14 @@ void RayGenerationShader()
     ProbeInfo3D probeInfo3D = BuildProbeInfo3DDirFirst(DispatchRaysIndex().xy, cascadeInfo.cascadeIndex, rcGlobals);
     RayDesc ray = GenerateProbeRay(probeInfo3D);
     
-    RayPayload payload = { probeInfo3D.probeIndex };
+    RayPayload payload = { probeInfo3D.probeIndex, float4(0.0f, 0.0f, 0.0f, 0.0f) };
     
-    //fDrawProbe(cascadeInfo.cascadeIndex, probeInfo3D.probeIndex, ray.Origin, ray.TMin);
+    DrawProbe(cascadeInfo.cascadeIndex, probeInfo3D.probeIndex, ray.Origin, ray.TMin);
     
     //TraceRay(Scene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, payload);
     TraceRay(Scene, RAY_FLAG_NONE, ~0, 0, 1, 0, ray, payload);
+    
+    renderOutput[DispatchRaysIndex().xy] = payload.result;
 }
 
 [shader("anyhit")]
@@ -167,6 +174,8 @@ void AnyHitShader(inout RayPayload payload, in BuiltInTriangleIntersectionAttrib
 [shader("closesthit")]
 void ClosestHitShader(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr)
 {
+    DrawCascadeRay(float3(1.0f, 0.0f, 0.0f), 0.5f, cascadeInfo.cascadeIndex, payload.probeIndex);
+    
     float3 barycentrics = GetBarycentrics(attr.barycentrics);
     
     // POS: 3 x 32 bits (float)
@@ -185,22 +194,25 @@ void ClosestHitShader(inout RayPayload payload, in BuiltInTriangleIntersectionAt
     const float2 uv2 = LoadUVFromVertex(vertexByteOffsets.z, uvOffset);
     const float2 uv = BARYCENTRIC_NORMALIZATION(barycentrics, uv0, uv1, uv2);
     
-    uint2 pixelIndex = DispatchRaysIndex().xy;
-    DrawCascadeRay(float3(1.0f, 0.0f, 0.0f), 0.5f, cascadeInfo.cascadeIndex, payload.probeIndex);
-    renderOutput[pixelIndex] = float4(emissiveTex.SampleLevel(sourceSampler, uv, 0).rgb, 0.0f);
+    float3 hitColor = emissiveTex.SampleLevel(sourceSampler, uv, 0).rgb;
+    payload.result = float4(hitColor, 0.0f);
 }
 
 [shader("miss")]
 void MissShader(inout RayPayload payload)
 {
     //DrawCascadeRay(float3(0.0f, 1.0f, 0.0f), 0.0f, cascadeInfo.cascadeIndex, payload.probeIndex);
+    
+    float3 missColor;
     if (cascadeInfo.cascadeIndex == (rcGlobals.cascadeCount - 1))
     {
         float3 sunDir = normalize(float3(0.5, 0.9, 0.5));
-        renderOutput[DispatchRaysIndex().xy] = float4(SimpleSunsetSky(WorldRayDirection(), sunDir), 1.0f);
+        missColor = SimpleSunsetSky(WorldRayDirection(), sunDir);
     }
     else
     {
-        renderOutput[DispatchRaysIndex().xy] = float4(0.0f, 0.0f, 0.0f, 1.0f);
+        missColor = float3(0.0f, 0.0f, 0.0f);
     }
+    
+    payload.result = float4(missColor, 1.0f);
 }

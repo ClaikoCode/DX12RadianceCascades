@@ -186,29 +186,32 @@ void RadianceCascades::RenderScene()
 {
 	ClearPixelBuffers();
 
+	Camera renderCamera = m_camera;
+	if (m_settings.globalSettings.useDebugCam)
+	{
+		float offset = 100.0f;
+		renderCamera.SetPosition(GetMainSceneModelCenter() + Math::Vector3(offset, 0.0f, 0.0f));
+		renderCamera.SetLookDirection(Math::Vector3(-1.0f, -1.0f, 0.0f), Math::Vector3(0.0f, 1.0f, 0.0f));
+
+		renderCamera.Update();
+
+		RenderDepthOnly(renderCamera, m_debugCamDepthBuffer, m_mainViewport, m_mainScissor, true);
+	}
+
+
 	if (m_settings.globalSettings.renderMode == GlobalSettings::RenderModeRaster)
 	{
-		RenderRaster(Graphics::g_SceneColorBuffer, Graphics::g_SceneDepthBuffer, m_camera, m_mainViewport, m_mainScissor);
+		RenderRaster(Graphics::g_SceneColorBuffer, Graphics::g_SceneDepthBuffer, renderCamera, m_mainViewport, m_mainScissor);
 	}
 	else if (m_settings.globalSettings.renderMode == GlobalSettings::RenderModeRT)
 	{
-		RenderRaytracing(Graphics::g_SceneColorBuffer, m_camera);
+		RenderRaytracing(Graphics::g_SceneColorBuffer, renderCamera);
 	}
 
 	if (m_settings.rcSettings.renderRC3D)
 	{
-		Camera cam = m_camera;
-
 		if (m_settings.globalSettings.useDebugCam)
 		{
-			float offset = 100.0f;
-			cam.SetPosition(GetMainSceneModelCenter() + Math::Vector3(offset, 0.0f, 0.0f));
-			cam.SetLookDirection(Math::Vector3(-1.0f, -1.0f, 0.0f), Math::Vector3(0.0f, 1.0f, 0.0f));
-
-			cam.Update();
-
-			RenderDepthOnly(cam, m_debugCamDepthBuffer, m_mainViewport, m_mainScissor, true);
-
 			BuildMinMaxDepthBuffer(m_debugCamDepthBuffer);
 		}
 		else
@@ -216,7 +219,7 @@ void RadianceCascades::RenderScene()
 			BuildMinMaxDepthBuffer(Graphics::g_SceneDepthBuffer);
 		}
 
-		RunRCGather(cam);
+		RunRCGather(renderCamera);
 		
 		if (m_settings.rcSettings.visualizeRC3DGatherCascades)
 		{
@@ -257,7 +260,7 @@ void RadianceCascades::RenderScene()
 	if (m_settings.globalSettings.renderDebugLines)
 	{
 		DebugRenderCameraInfo camInfo;
-		camInfo.viewProjMatrix = m_camera.GetViewProjMatrix();
+		camInfo.viewProjMatrix = renderCamera.GetViewProjMatrix();
 		DebugDrawer::Draw(
 			camInfo, 
 			Graphics::g_SceneColorBuffer, 
@@ -525,7 +528,7 @@ void RadianceCascades::InitializePSOs()
 		rootSig[RootEntryRC3DMergeCascadeInfoCB].InitAsConstantBuffer(1);
 		{
 			SamplerDesc sampler = Graphics::SamplerLinearBorderDesc;
-			sampler.SetBorderColor(Color(0.0f, 0.0f, 0.0f, 1.0f)); // Alpha of 1 to set visibility term.
+			sampler.SetBorderColor(Color(0.0f, 0.0f, 0.0f, 0.0f)); // Alpha of 1 to set visibility term.
 			rootSig.InitStaticSampler(0, sampler);
 		}
 		rootSig.Finalize(L"RC 3D Merge");
@@ -635,7 +638,8 @@ void RadianceCascades::InitializePSOs()
 		localRootSig.Finalize(L"Local Root Signature", D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE);
 		pso.SetLocalRootSignature(&localRootSig);
 
-		pso.SetPayloadAndAttributeSize(8, 8);
+		// Payload: int2 probeIndex, float4 result
+		pso.SetPayloadAndAttributeSize(8 + 4 * 4, 8);
 
 		pso.SetHitGroup(s_HitGroupName, D3D12_HIT_GROUP_TYPE_TRIANGLES);
 		pso.SetClosestHitShader(L"ClosestHitShader");
