@@ -54,7 +54,7 @@ struct RadianceCascadesSettings
 	bool useDepthAwareMerging = true;
 	uint32_t raysPerProbe0 = 16u;
 	uint32_t probesPerDim0 = 1024u;
-	uint32_t cascadeLevels = 7u;
+	uint32_t cascadeLevels = 6u;
 };
 
 #define ENABLE_RT (false)
@@ -168,6 +168,9 @@ private:
 		RootEntryDeferredLightingAlbedoSRV = 0,
 		RootEntryDeferredLightingNormalSRV,
 		RootEntryDeferredLightingDiffuseRadianceSRV,
+		RootEntryDeferredLightingCascade0MinMaxDepthSRV,
+		RootEntryDeferredLightingDepthBufferSRV,
+		RootEntryDeferredLightingGlobalInfoCB,
 		RootEntryDeferredLightingCount,
 	};
 
@@ -227,6 +230,10 @@ private:
 	{
 		return GetMainSceneModelInstance().GetBoundingBox().GetCenter();
 	}
+
+	// EXTREMELY wasteful but it gets the job done for how much energy I have currently.
+	std::unordered_map<ModelID, std::vector<Utils::GPUMatrix>> GetBLASInstances();
+	std::vector<TLASInstanceGroup> GetTLASInstanceGroups();
 
 private:
 

@@ -152,6 +152,8 @@ void RadianceCascades::Cleanup()
 void RadianceCascades::Update(float deltaT)
 {
 	RuntimeResourceManager::CheckAndUpdatePSOs();
+	static float time = 0.0f;
+	time += deltaT;
 
 	// Mouse update
 	{
@@ -166,6 +168,11 @@ void RadianceCascades::Update(float deltaT)
 		{
 			m_cameraController->Update(deltaT);
 		}
+	}
+
+	{
+		//Math::Vector3 position = GetMainSceneModelCenter() - Math::Vector3(0.0f, 550.0f, 0.0f) + Math::Vector3(200.0f * Math::Sin(time), 0.0f, 0.0f);
+		//m_sceneModels[1].GetTransform().SetTranslation(position);
 	}
 
 	GraphicsContext& gfxContext = GraphicsContext::Begin(L"Scene Update");
@@ -371,6 +378,9 @@ void RadianceCascades::InitializePSOs()
 		rootSig[RootEntryDeferredLightingAlbedoSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 0, 1);
 		rootSig[RootEntryDeferredLightingNormalSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1);
 		rootSig[RootEntryDeferredLightingDiffuseRadianceSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 2, 1);
+		rootSig[RootEntryDeferredLightingCascade0MinMaxDepthSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 3, 1);
+		rootSig[RootEntryDeferredLightingDepthBufferSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 4, 1);
+		rootSig[RootEntryDeferredLightingGlobalInfoCB].InitAsConstantBuffer(0);
 		{
 			SamplerDesc samplerState = Graphics::SamplerLinearBorderDesc;
 			rootSig.InitStaticSampler(0, samplerState);
@@ -672,27 +682,7 @@ void RadianceCascades::InitializeRCResources()
 void RadianceCascades::InitializeRT()
 {
 	// Initialize TLASes.
-	std::vector<TLASInstanceGroup> instanceGroups = {};
-	std::unordered_map<ModelID, std::vector<Utils::GPUMatrix>> blasInstances = {};
-	{
-		for (InternalModelInstance& modelInstance : m_sceneModels)
-		{
-			ModelID modelID = modelInstance.underlyingModelID;
-			Math::Matrix4 mat = Math::Matrix4(modelInstance.GetTransform());
-			blasInstances[modelID].push_back(mat);
-		}
-
-		for (auto& [key, value] : blasInstances)
-		{
-			TLASInstanceGroup instanceGroup = {};
-			instanceGroup.blasBuffer = &RuntimeResourceManager::GetModelBLAS(key);
-			instanceGroup.instanceTransforms = value;
-
-			instanceGroups.push_back(instanceGroup);
-		}
-
-		m_sceneTLAS.Init(instanceGroups);
-	}
+	std::unordered_map<ModelID, std::vector<Utils::GPUMatrix>> blasInstances = GetBLASInstances();
 
 	// Initialize RT dispatch inputs.
 	{
@@ -704,6 +694,11 @@ void RadianceCascades::InitializeRT()
 
 		RuntimeResourceManager::BuildRaytracingDispatchInputs(PSOIDRaytracingTestPSO, modelIDs, RayDispatchIDTest);
 		RuntimeResourceManager::BuildRaytracingDispatchInputs(PSOIDRCRaytracingPSO, modelIDs, RayDispatchIDRCRaytracing);
+	}
+
+	{
+		std::vector<TLASInstanceGroup> tlasInstances = GetTLASInstanceGroups();
+		m_sceneTLAS.Init(tlasInstances);
 	}
 }
 
@@ -1162,12 +1157,21 @@ void RadianceCascades::RunComputeRCRadianceField(ColorBuffer& outputBuffer)
 
 void RadianceCascades::RunDeferredLightingPass(ColorBuffer& albedoBuffer, ColorBuffer& normalBuffer, ColorBuffer& diffuseRadianceBuffer, ColorBuffer& outputBuffer)
 {
+	// TODO: Have these as input parameters. Better yet, create an input struct because its getting very long.
+	ColorBuffer& depthBuffer = m_minMaxDepthCopy;
+	ColorBuffer& minMaxDepthBuffer = m_minMaxDepthMips;
+
+	GlobalInfo globalInfo = {};
+	::FillGlobalInfo(globalInfo, m_camera); // TODO: Make camera as input.
+
 	GraphicsContext& gfxContext = GraphicsContext::Begin(L"Diffuse Lighting Pass");
 
 	// Transition resources
 	gfxContext.TransitionResource(albedoBuffer, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 	gfxContext.TransitionResource(normalBuffer, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 	gfxContext.TransitionResource(diffuseRadianceBuffer, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+	gfxContext.TransitionResource(depthBuffer, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+	gfxContext.TransitionResource(minMaxDepthBuffer, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 	gfxContext.TransitionResource(outputBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
 	// Set up the pipeline state and root signature
@@ -1182,6 +1186,9 @@ void RadianceCascades::RunDeferredLightingPass(ColorBuffer& albedoBuffer, ColorB
 	gfxContext.SetDynamicDescriptor(RootEntryDeferredLightingAlbedoSRV, 0, albedoBuffer.GetSRV());
 	gfxContext.SetDynamicDescriptor(RootEntryDeferredLightingNormalSRV, 0, normalBuffer.GetSRV());
 	gfxContext.SetDynamicDescriptor(RootEntryDeferredLightingDiffuseRadianceSRV, 0, diffuseRadianceBuffer.GetSRV());
+	gfxContext.SetDynamicDescriptor(RootEntryDeferredLightingCascade0MinMaxDepthSRV, 0, minMaxDepthBuffer.GetSRV());
+	gfxContext.SetDynamicDescriptor(RootEntryDeferredLightingDepthBufferSRV, 0, depthBuffer.GetSRV());
+	gfxContext.SetDynamicConstantBufferView(RootEntryDeferredLightingGlobalInfoCB, sizeof(GlobalInfo), &globalInfo);
 
 	// Draw a full-screen quad
 	gfxContext.Draw(4, 0);
@@ -1252,7 +1259,7 @@ void RadianceCascades::BuildUISettings()
 				m_rcManager3D.SetDepthAwareMerging(rcs.useDepthAwareMerging);
 			}
 
-			if (ImGui::SliderFloat("Ray Length", &rcs.rayLength0, 0.1f, 1000.0f))
+			if (ImGui::SliderFloat("Ray Length", &rcs.rayLength0, 0.1f, 150.0f))
 			{
 				m_rcManager3D.SetRayLength(rcs.rayLength0);
 			}
@@ -1428,4 +1435,35 @@ InternalModelInstance& RadianceCascades::AddModelInstance(ModelID modelID)
 	}
 
 	return m_sceneModels.emplace_back(modelPtr, modelID);
+}
+
+std::unordered_map<ModelID, std::vector<Utils::GPUMatrix>> RadianceCascades::GetBLASInstances()
+{
+	std::unordered_map<ModelID, std::vector<Utils::GPUMatrix>> blasInstances = {};
+
+	for (InternalModelInstance& modelInstance : m_sceneModels)
+	{
+		ModelID modelID = modelInstance.underlyingModelID;
+		Math::Matrix4 mat = Math::Matrix4(modelInstance.GetTransform());
+		blasInstances[modelID].push_back(mat);
+	}
+
+	return blasInstances;
+}
+
+std::vector<TLASInstanceGroup> RadianceCascades::GetTLASInstanceGroups()
+{
+	std::unordered_map<ModelID, std::vector<Utils::GPUMatrix>> blasInstances = GetBLASInstances();
+
+	std::vector<TLASInstanceGroup> instanceGroups = {};
+	for (auto& [key, value] : blasInstances)
+	{
+		TLASInstanceGroup instanceGroup = {};
+		instanceGroup.blasBuffer = &RuntimeResourceManager::GetModelBLAS(key);
+		instanceGroup.instanceTransforms = value;
+
+		instanceGroups.push_back(instanceGroup);
+	}
+
+	return instanceGroups;
 }

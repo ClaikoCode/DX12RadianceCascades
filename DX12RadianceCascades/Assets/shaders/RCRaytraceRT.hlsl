@@ -20,15 +20,6 @@ RaytracingAccelerationStructure Scene : register(t0);
 RWTexture2D<float4> renderOutput : register(u0);
 SamplerState sourceSampler : register(s0);
 
-struct GlobalInfo
-{
-    matrix viewProjMatrix;
-    matrix invViewProjMatrix;
-    float3 cameraPos;
-    matrix invViewMatrix;
-    matrix invProjMatrix;
-};
-
 ConstantBuffer<GlobalInfo> globalInfo : register(b0);
 
 struct GeometryOffsets
@@ -126,7 +117,7 @@ inline RayDesc GenerateProbeRay(ProbeInfo3D probeInfo3D)
         
         // Add small distance towards the camera to avoid wall clipping.
         // This is incase probes spawn inside a wall and its rays will clip through the wall.
-        depthVal += 0.00000001f;
+        depthVal += 0.000001f;
         
         uint width;
         uint height;
@@ -223,7 +214,7 @@ void ClosestHitShader(inout RayPayload payload, in BuiltInTriangleIntersectionAt
     const float2 uv2 = LoadUVFromVertex(vertexByteOffsets.z, uvOffset);
     const float2 uv = BARYCENTRIC_NORMALIZATION(barycentrics, uv0, uv1, uv2);
     
-    float3 hitColor = emissiveTex.SampleLevel(sourceSampler, uv, 0).rgb;
+    float3 hitColor = emissiveTex.SampleLevel(sourceSampler, uv, 0).rgb * 10.0f;
     payload.result += float4(hitColor, 0.0f);
 }
 

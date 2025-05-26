@@ -19,6 +19,15 @@
 
 #define IsZero(x) (length(x) < EPSILON)
 
+struct GlobalInfo
+{
+    matrix viewProjMatrix;
+    matrix invViewProjMatrix;
+    float3 cameraPos;
+    matrix invViewMatrix;
+    matrix invProjMatrix;
+};
+
 struct BilinearSampleInfo
 {
     int2 basePixel;
@@ -74,8 +83,8 @@ float3 SimpleSunsetSky(float3 viewDir, float3 sunDir)
     
     // Create sky gradient
     float3 skyBaseColor = lerp(
-        float3(0.8, 0.4, 0.2) * 3.0, // Warm orange at horizon
-        float3(0.1, 0.2, 0.4) * 1.5, // Deep blue at zenith
+        float3(0.8, 0.4, 0.2) * 2.0, // Warm orange at horizon
+        float3(0.1, 0.2, 0.4) * 1.0, // Deep blue at zenith
         pow(height, 0.5)
     );
     
@@ -85,7 +94,7 @@ float3 SimpleSunsetSky(float3 viewDir, float3 sunDir)
     float sunGlow = pow(sunDot, 8.0);
     
     // Add sun and glow
-    float3 sunColor = float3(1.0, 0.6, 0.3) * 20.0; // HDR sun
+    float3 sunColor = float3(1.0, 0.6, 0.3) * 25.0; // HDR sun
     skyBaseColor += sunDisc * sunColor;
     skyBaseColor += sunGlow * float3(0.8, 0.5, 0.3) * (1.0 - height) * 0.8;
     
@@ -135,6 +144,20 @@ float ProjectLinePerpendicular(float3 A, float3 B, float3 p)
 {
     float3 BA = B - A;
     return dot(p - A, BA) / dot(BA, BA);
+}
+
+// This function is adapted from a shadertoy project by Alexander Sannikov on deptha aware upscaling: 
+// https://www.shadertoy.com/view/4XXSWS
+float2 GetBilinear3dRatioIter(float3 src_points[4], float3 dst_point, float2 init_ratio, const int it_count)
+{
+    float2 ratio = init_ratio;
+    for (int i = 0; i < it_count; i++)
+    {
+        ratio.x = saturate(ProjectLinePerpendicular(lerp(src_points[0], src_points[2], ratio.y), lerp(src_points[1], src_points[3], ratio.y), dst_point));
+        ratio.y = saturate(ProjectLinePerpendicular(lerp(src_points[0], src_points[1], ratio.x), lerp(src_points[2], src_points[3], ratio.x), dst_point));
+    }
+    
+    return ratio;
 }
 
 float2 ClampPixelPos(float2 pixelPos, int2 dims)

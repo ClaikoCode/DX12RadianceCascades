@@ -24,13 +24,6 @@ cbuffer Params : register(b0)
     float holeSize;
 };
 
-struct GlobalInfo
-{
-    matrix viewProjMatrix;
-    matrix invViewProjMatrix;
-    float3 cameraPos;
-};
-
 ConstantBuffer<GlobalInfo> globalInfo : register(b1);
 
 struct GeometryOffsets

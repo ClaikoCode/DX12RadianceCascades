@@ -32,7 +32,7 @@ void DrawProbe(int cascadeIndex, int2 probeIndex, float3 probeOrigin, float prob
     {
         if (probeRadius > EPSILON)
         {
-            DrawSphere(probeOrigin, probeRadius, float3(1.0f, 1.0f, 1.0f));
+            DrawSphere(probeOrigin, clamp(probeRadius, 0.0f, 2.0f), float3(1.0f, 1.0f, 1.0f));
         }
     }
 }
