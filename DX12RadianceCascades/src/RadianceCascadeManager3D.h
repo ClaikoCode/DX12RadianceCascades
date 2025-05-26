@@ -8,7 +8,7 @@ public:
 	RadianceCascadeManager3D() = default;
 
 	// Rays per probe needs to be power of 2 and larger than 8.
-	void Init(float rayLength0, uint32_t raysPerProbe0, uint32_t probesPerDim0, uint32_t cascadeIntervalCount, bool usePreAverage);
+	void Init(float rayLength0, uint32_t raysPerProbe0, uint32_t probesPerDim0, uint32_t cascadeIntervalCount, bool usePreAverage, bool useDepthAwareMerging);
 
 	void FillRCGlobalInfo(RCGlobals& rcGlobalInfo);
 
@@ -24,6 +24,7 @@ public:
 	ColorBuffer& GetCoalesceBuffer() { return m_coalescedResult; }
 	float GetRayLength() { return m_rayLength0; }
 	void SetRayLength(float rayLength) { m_rayLength0 = rayLength; }
+	void SetDepthAwareMerging(bool depthAwareMerging) { m_depthAwareMerging = depthAwareMerging; }
 
 	bool UsesPreAveragedIntervals() const { return m_preAveragedIntervals; }
 
@@ -43,4 +44,5 @@ private:
 
 	// Signifies that the cascade textures will be 1 / rayscalingfactor of the original size.
 	bool m_preAveragedIntervals;
+	bool m_depthAwareMerging;
 };

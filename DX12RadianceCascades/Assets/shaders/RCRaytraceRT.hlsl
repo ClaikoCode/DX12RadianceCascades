@@ -113,16 +113,20 @@ inline RayDesc GenerateProbeRay(ProbeInfo3D probeInfo3D)
     {
         uint cascadeIndex = cascadeInfo.cascadeIndex;
         int2 pixelPos = probeInfo3D.probeIndex;
-        // TODO: Check if loading this with discrete pixel positions is faulty.
+        
+        // TODO: Check if loading depth with discrete pixel positions is faulty.
         // The world pos from depth is based on middle of pixel whilst this is not. This is a discrepency in the math.
         // This may be faulty. Bind depth tex as a SRV instead and then use SampleLevel with 0.5 pixel offset
         // using the cascade interval offset (same number as in C++). 
         // Thinking about it further I think this is actually correct. The single value for a texel represents the depth of the probe and it is placed in the middle of the texel.
         // It should not be interpolated. You should still try.
+        
+        // NOTE: For this application, depth is reversed for the camera. This means that Z=1 is the near plane and Z=0 is the far plane.
         float depthVal = depthTex[pixelPos].g; // R is min, G is max.
+        
         // Add small distance towards the camera to avoid wall clipping.
-        // Otherwise, probes will spawn inside a wall and its rays wont interect any geometry.
-        depthVal += 0.000000001f;
+        // This is incase probes spawn inside a wall and its rays will clip through the wall.
+        depthVal += 0.00000001f;
         
         uint width;
         uint height;

@@ -51,8 +51,9 @@ struct RadianceCascadesSettings
 	int cascadeVisProbeSubset = 256;
 
 	float rayLength0 = 10.0f;
-	uint32_t raysPerProbe0 = 64u;
-	uint32_t probesPerDim0 = 512u;
+	bool useDepthAwareMerging = true;
+	uint32_t raysPerProbe0 = 16u;
+	uint32_t probesPerDim0 = 1024u;
 	uint32_t cascadeLevels = 7u;
 };
 
@@ -155,6 +156,8 @@ private:
 		RootEntryRC3DMergeCascadeNUAV,
 		RootEntryRC3DMergeRCGlobalsCB,
 		RootEntryRC3DMergeCascadeInfoCB,
+		RootEntryRC3DMergeMinMaxDepthSRV,
+		RootEntryRC3DMergeGlobalInfoCB,
 		RootEntryRC3DMergeCount,
 
 		RootEntryRC3DCoalesceCascade0SRV = 0,
@@ -191,7 +194,7 @@ private:
 	void RenderRaster(ColorBuffer& targetColor, DepthBuffer& targetDepth, Camera& camera, D3D12_VIEWPORT viewPort, D3D12_RECT scissor);
 	void RenderRaytracing(ColorBuffer& targetColor, Camera& camera);
 	void RunRCGather(Camera& camera);
-	void RunRCMerge();
+	void RunRCMerge(Math::Camera& cam, ColorBuffer& minMaxDepthBuffer);
 	void RenderDepthOnly(Camera& camera, DepthBuffer& targetDepth, D3D12_VIEWPORT viewPort, D3D12_RECT scissor, bool clearDepth = false);
 	void BuildMinMaxDepthBuffer(DepthBuffer& sourceDepthBuffer);
 	void RunComputeFlatlandScene();

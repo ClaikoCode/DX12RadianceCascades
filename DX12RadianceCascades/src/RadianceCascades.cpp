@@ -47,7 +47,7 @@ namespace
 		return Graphics::g_SceneColorBuffer.GetFormat();
 	}
 
-	void FillCameraInfo(GlobalInfo& globalInfo, const Camera& camera)
+	void FillGlobalInfo(GlobalInfo& globalInfo, const Camera& camera)
 	{
 		globalInfo.viewProjMatrix = camera.GetViewProjMatrix();
 
@@ -189,9 +189,9 @@ void RadianceCascades::RenderScene()
 	Camera renderCamera = m_camera;
 	if (m_settings.globalSettings.useDebugCam)
 	{
-		float offset = 100.0f;
+		float offset = 500.0f;
 		renderCamera.SetPosition(GetMainSceneModelCenter() + Math::Vector3(offset, 0.0f, 0.0f));
-		renderCamera.SetLookDirection(Math::Vector3(-1.0f, -1.0f, 0.0f), Math::Vector3(0.0f, 1.0f, 0.0f));
+		renderCamera.SetLookDirection(Math::Vector3(1.0f, 0.0f, 0.0f), Math::Vector3(0.0f, 1.0f, 0.0f));
 
 		renderCamera.Update();
 
@@ -227,7 +227,7 @@ void RadianceCascades::RenderScene()
 		}
 		else
 		{
-			RunRCMerge();
+			RunRCMerge(renderCamera, m_minMaxDepthMips);
 
 			if (m_settings.rcSettings.visualizeRC3DMergeCascades)
 			{
@@ -323,7 +323,6 @@ void RadianceCascades::InitializeScene()
 		const Vector3 eye = obb.GetCenter() + Vector3(modelRadius * 0.5f, 10.0f, 0.0f);
 		m_camera.SetEyeAtUp(eye, Vector3(kZero), Vector3(kYUnitVector));
 		m_camera.SetZRange(0.5f, 5000.0f);
-		
 		
 		m_cameraController.reset(new FlyingFPSCamera(m_camera, Vector3(kYUnitVector)));
 	}
@@ -526,6 +525,8 @@ void RadianceCascades::InitializePSOs()
 		rootSig[RootEntryRC3DMergeCascadeNUAV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 1);
 		rootSig[RootEntryRC3DMergeRCGlobalsCB].InitAsConstantBuffer(0);
 		rootSig[RootEntryRC3DMergeCascadeInfoCB].InitAsConstantBuffer(1);
+		rootSig[RootEntryRC3DMergeMinMaxDepthSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1);
+		rootSig[RootEntryRC3DMergeGlobalInfoCB].InitAsConstantBuffer(2);
 		{
 			SamplerDesc sampler = Graphics::SamplerLinearBorderDesc;
 			sampler.SetBorderColor(Color(0.0f, 0.0f, 0.0f, 1.0f)); // Alpha of 1 to set visibility term.
@@ -662,8 +663,9 @@ void RadianceCascades::InitializeRCResources()
 		m_settings.rcSettings.rayLength0,
 		m_settings.rcSettings.raysPerProbe0,
 		m_settings.rcSettings.probesPerDim0,
-		m_settings.rcSettings.cascadeLevels, 
-		true
+		m_settings.rcSettings.cascadeLevels,
+		true, 
+		m_settings.rcSettings.useDepthAwareMerging
 	);
 }
 
@@ -769,7 +771,7 @@ void RadianceCascades::RenderRaytracing(ColorBuffer& targetColor, Camera& camera
 	rtParams.holeSize = 0.0f;
 
 	GlobalInfo rtGlobalInfo = {};
-	::FillCameraInfo(rtGlobalInfo, camera);
+	::FillGlobalInfo(rtGlobalInfo, camera);
 
 	ComPtr<ID3D12GraphicsCommandList4> rtCommandList = nullptr;
 	RaytracingContext& rtContext = ::BeginRaytracingContext(L"Render Raytracing", rtCommandList);
@@ -799,7 +801,7 @@ void RadianceCascades::RenderRaytracing(ColorBuffer& targetColor, Camera& camera
 void RadianceCascades::RunRCGather(Camera& camera)
 {
 	GlobalInfo globalInfo = {};
-	::FillCameraInfo(globalInfo, camera);
+	::FillGlobalInfo(globalInfo, camera);
 
 	RCGlobals rcGlobalInfo = {};
 	m_rcManager3D.FillRCGlobalInfo(rcGlobalInfo);
@@ -885,7 +887,7 @@ void RadianceCascades::RunRCGather(Camera& camera)
 	rtContext.Finish(true);
 }
 
-void RadianceCascades::RunRCMerge()
+void RadianceCascades::RunRCMerge(Math::Camera& cam, ColorBuffer& minMaxDepthBuffer)
 {
 	ComputeContext& cmptContext = ComputeContext::Begin(L"RC Merge Compute");
 	ComputePSO& pso = RuntimeResourceManager::GetComputePSO(PSOIDRC3DMergePSO);
@@ -895,7 +897,14 @@ void RadianceCascades::RunRCMerge()
 	RCGlobals rcGlobals = {};
 	m_rcManager3D.FillRCGlobalInfo(rcGlobals);
 
+	GlobalInfo globalInfo = {};
+	::FillGlobalInfo(globalInfo, cam);
+
 	cmptContext.SetDynamicConstantBufferView(RootEntryRC3DMergeRCGlobalsCB, sizeof(RCGlobals), &rcGlobals);
+	cmptContext.SetDynamicConstantBufferView(RootEntryRC3DMergeGlobalInfoCB, sizeof(GlobalInfo), &globalInfo);
+
+	cmptContext.TransitionResource(minMaxDepthBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+	cmptContext.SetDynamicDescriptor(RootEntryRC3DMergeMinMaxDepthSRV, 0, minMaxDepthBuffer.GetSRV());
 
 #if defined(_DEBUGDRAWING)
 	DebugDrawer::BindDebugBuffers(cmptContext, RootEntryRC3DMergeCount);
@@ -1225,7 +1234,7 @@ void RadianceCascades::BuildUISettings()
 #pragma endregion
 	
 #pragma region CascadeSettings
-	// TODO: This feels a bit backwards. Almost all settings are taken from the Rc manager itself. 
+	// TODO: This feels a bit backwards. Almost all settings are taken from the RC manager itself. 
 	// Maybe its better to just have a function in the rc manager that calls GUI functions?
 	if (ImGui::CollapsingHeader("Radiance Cascade Settings", ImGuiTreeNodeFlags_DefaultOpen))
 	{
@@ -1234,15 +1243,20 @@ void RadianceCascades::BuildUISettings()
 
 		ImGui::Checkbox("Render RC 3D", &rcs.renderRC3D);
 
-		
-		if (ImGui::SliderFloat("Ray Length", &rcs.rayLength0, 0.1f, 1000.0f))
-		{
-			m_rcManager3D.SetRayLength(rcs.rayLength0);
-		}
-
 		if (rcs.renderRC3D)
 		{
 			ImGui::Separator();
+
+			if (ImGui::Checkbox("Use Depth Aware Merging", &rcs.useDepthAwareMerging))
+			{
+				m_rcManager3D.SetDepthAwareMerging(rcs.useDepthAwareMerging);
+			}
+
+			if (ImGui::SliderFloat("Ray Length", &rcs.rayLength0, 0.1f, 1000.0f))
+			{
+				m_rcManager3D.SetRayLength(rcs.rayLength0);
+			}
+
 			uint32_t cascadeResolution = m_rcManager3D.GetCascadeIntervalBuffer(0).GetWidth();
 
 			ImGui::Text("Cascade Count: %u", m_rcManager3D.GetCascadeIntervalCount());
