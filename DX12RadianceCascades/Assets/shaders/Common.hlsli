@@ -19,6 +19,33 @@
 
 #define IsZero(x) (length(x) < EPSILON)
 
+struct BilinearSampleInfo
+{
+    int2 basePixel;
+    float2 ratios;
+};
+
+BilinearSampleInfo GetBilinearSampleInfo(float2 pixelPos)
+{
+    BilinearSampleInfo sampleInfo;
+    
+    sampleInfo.basePixel = floor(pixelPos);
+    sampleInfo.ratios = frac(pixelPos);
+    
+    return sampleInfo;
+}
+
+// Weights taken from: https://en.wikipedia.org/wiki/Bilinear_interpolation#On_the_unit_square
+float4 GetBilinearSampleWeights(float2 ratios)
+{
+    return float4
+    (
+        (1.0f - ratios.x) * (1.0f - ratios.y), // Top left.
+        ratios.x * (1.0f - ratios.y), // Top right.
+        (1.0f - ratios.x) * ratios.y, // Bottom left.
+        ratios.x * ratios.y                     // Bottom right.
+    );
+}
 // Depth val should be between 0 and 1 (NO LINEARIZATION REQUIRED)
 float3 WorldPosFromDepth(float depthVal, float2 uv, matrix invProjMatrix, matrix invViewMatrix)
 {
@@ -65,23 +92,25 @@ float3 SimpleSunsetSky(float3 viewDir, float3 sunDir)
     return skyBaseColor;
 }
 
-int2 GetDims(RWTexture2D<float4> tex)
-{
-    uint texWidth;
-    uint texHeight;
-    tex.GetDimensions(texWidth, texHeight);
-    
-    return int2(texWidth, texHeight);
-}
+#define GetDims(tex, dimsOut) \
+    { \
+        uint texWidth; \
+        uint texHeight; \
+        tex.GetDimensions(texWidth, texHeight); \
+        dimsOut.x = texWidth; \
+        dimsOut.y = texHeight; \
+    }
 
-int2 GetDims(Texture2D tex)
-{
-    uint texWidth;
-    uint texHeight;
-    tex.GetDimensions(texWidth, texHeight);
-    
-    return int2(texWidth, texHeight);
-}
+
+#define GetMipDims(tex, mipLevel, dimsOut) \
+    { \
+        uint texWidth; \
+        uint texHeight; \
+        uint numMips; \
+        tex.GetDimensions(mipLevel, texWidth, texHeight, numMips); \
+        dimsOut.x = texWidth; \
+        dimsOut.y = texHeight; \
+    }
 
 int2 Translate1DTo2D(int coord1D, int2 dims)
 {
@@ -92,8 +121,27 @@ int2 Translate1DTo2D(int coord1D, int2 dims)
 // Order: (0, 0), (1, 0), (0, 1), (1, 1)
 int2 TranslateCoord4x1To2x2(int coord4x1)
 {    
-    return Translate1DTo2D(coord4x1, int2(2, 2));
+    static int2 coordOffsets[4] = {
+        int2(0, 0),
+        int2(1, 0),
+        int2(0, 1),
+        int2(1, 1)
+    };
+    
+    return coordOffsets[coord4x1];
 }
+
+float ProjectLinePerpendicular(float3 A, float3 B, float3 p)
+{
+    float3 BA = B - A;
+    return dot(p - A, BA) / dot(BA, BA);
+}
+
+float2 ClampPixelPos(float2 pixelPos, int2 dims)
+{
+    return clamp(pixelPos, int2(0, 0), dims);
+}
+
 
 
 #endif // COMMON_H

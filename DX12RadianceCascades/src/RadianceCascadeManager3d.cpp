@@ -6,7 +6,7 @@
 #include "GPUStructs.h"
 #include "RadianceCascadeManager3D.h"
 
-void RadianceCascadeManager3D::Init(float rayLength0, uint32_t raysPerProbe0, uint32_t probesPerDim0, uint32_t cascadeIntervalCount, bool usePreAverage)
+void RadianceCascadeManager3D::Init(float rayLength0, uint32_t raysPerProbe0, uint32_t probesPerDim0, uint32_t cascadeIntervalCount, bool usePreAverage, bool useDepthAwareMerging)
 {
 	Graphics::g_CommandManager.IdleGPU();
 
@@ -69,6 +69,7 @@ void RadianceCascadeManager3D::Init(float rayLength0, uint32_t raysPerProbe0, ui
 	m_raysPerProbe0 = raysPerProbe0;
 	m_probesPerDim0 = probeCountPerDim0;
 	m_preAveragedIntervals = usePreAverage;
+	m_depthAwareMerging = useDepthAwareMerging;
 }
 
 void RadianceCascadeManager3D::FillRCGlobalInfo(RCGlobals& rcGlobalInfo)
@@ -83,6 +84,7 @@ void RadianceCascadeManager3D::FillRCGlobalInfo(RCGlobals& rcGlobalInfo)
 	rcGlobalInfo.cascadeCount = GetCascadeIntervalCount();
 
 	rcGlobalInfo.usePreAveraging = m_preAveragedIntervals;
+	rcGlobalInfo.depthAwareMerging = m_depthAwareMerging;
 }
 
 void RadianceCascadeManager3D::ClearBuffers(GraphicsContext& gfxContext)

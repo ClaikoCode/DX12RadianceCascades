@@ -12,7 +12,8 @@ ConstantBuffer<RCGlobals> rcGlobals : register(b0);
 void main( uint3 DTid : SV_DispatchThreadID )
 {
     uint2 pixelPos = DTid.xy;
-    int2 outputDims = GetDims(outputTex);
+    int2 outputDims = 0;
+    GetDims(outputTex, outputDims);
     
     if (!OUT_OF_BOUNDS(pixelPos, outputDims))
     {

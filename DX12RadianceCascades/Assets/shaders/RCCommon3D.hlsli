@@ -15,6 +15,7 @@ struct RCGlobals
     float rayLength0;
     uint cascadeCount;
     bool usePreAveraging;
+    bool depthAwareMerging;
 };
 
 struct CascadeInfo

@@ -26,7 +26,7 @@ __declspec(align(16)) struct RTParams
 
 __declspec(align(16)) struct SourceInfo
 {
-	bool isFirstDepth;
+	BOOL isFirstDepth;
 	uint32_t sourceWidth;
 	uint32_t sourceHeight;
 };
@@ -39,12 +39,13 @@ __declspec(align(16)) struct RCGlobals
 	uint32_t rayCount0;
 	float rayLength0;
 	uint32_t cascadeCount;
-	bool usePreAveraging;
+	BOOL usePreAveraging;
+	BOOL depthAwareMerging;
 };
 
 __declspec(align(16)) struct CascadeVisInfo
 {
-	bool enableProbeVis;
+	BOOL enableProbeVis;
 	uint32_t cascadeVisIndex;
 	uint32_t probeSubset;
 };
