@@ -11,15 +11,6 @@ ConstantBuffer<CascadeInfo> cascadeInfo : register(b1);
 
 Texture2D<float2> minMaxDepthBuffer : register(t1);
 
-struct GlobalInfo
-{
-    matrix viewProjMatrix;
-    matrix invViewProjMatrix;
-    float3 cameraPos;
-    matrix invViewMatrix;
-    matrix invProjMatrix;
-};
-
 ConstantBuffer<GlobalInfo> globalInfo : register(b2);
 
 float4 ReadRadianceN1(float2 probeIndex, float2 rayIndex, float probeCountPerDimN1, float texWidthN1)
@@ -29,21 +20,6 @@ float4 ReadRadianceN1(float2 probeIndex, float2 rayIndex, float probeCountPerDim
 
     return cascadeN1.SampleLevel(linearSampler, sampleUV, 0);
 }
-
-// This function is adapted from a shadertoy project by Alexander Sannikov on deptha aware upscaling: 
-// https://www.shadertoy.com/view/4XXSWS
-float2 GetBilinear3dRatioIter(float3 src_points[4], float3 dst_point, float2 init_ratio, const int it_count)
-{
-    float2 ratio = init_ratio;
-    for (int i = 0; i < it_count; i++)
-    {
-        ratio.x = saturate(ProjectLinePerpendicular(lerp(src_points[0], src_points[2], ratio.y), lerp(src_points[1], src_points[3], ratio.y), dst_point));
-        ratio.y = saturate(ProjectLinePerpendicular(lerp(src_points[0], src_points[1], ratio.x), lerp(src_points[2], src_points[3], ratio.x), dst_point));
-    }
-    
-    return ratio;
-}
-
 
 [numthreads(8, 8, 1)]
 void main( uint3 DTid : SV_DispatchThreadID )
@@ -106,7 +82,7 @@ void main( uint3 DTid : SV_DispatchThreadID )
                 sourceDepths[i] = length(sourcePoints[i] - globalInfo.cameraPos) / 5000.0f;
             }
             
-            float2 ratios = GetBilinearSampleInfo(probeInfoN.probeIndex).ratios;
+            float2 ratios = GetBilinearSampleInfo(probeInfoN.probeIndex - 0.5f).ratios;
             float4 weights3D = GetBilinearSampleWeights(GetBilinear3dRatioIter(sourcePoints, cascadeNWorldPos, ratios, 2));
             
             //weights3D = 0.25f;
