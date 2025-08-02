@@ -27,6 +27,7 @@ static const std::wstring s_BackupModelPath = L"models\\Testing\\SphereTest.gltf
 
 #define SAMPLE_LEN_0 20.0f
 #define RAYS_PER_PROBE_0 4.0f
+#define CAM_FOV 90.0f
 
 typedef ComputeContext RaytracingContext;
 
@@ -323,7 +324,7 @@ void RadianceCascades::InitializeScene()
 	{
 		float heightOverWidth = (float)::GetSceneColorHeight() / (float)::GetSceneColorWidth();
 		m_camera.SetAspectRatio(heightOverWidth);
-		m_camera.SetFOV(Utils::HorizontalFovToVerticalFov(Math::XMConvertToRadians(90.0f), 1.0f / heightOverWidth));
+		m_camera.SetFOV(Utils::HorizontalFovToVerticalFov(Math::XMConvertToRadians(CAM_FOV), 1.0f / heightOverWidth));
 
 		OrientedBox obb = GetMainSceneModelInstance().GetBoundingBox();
 		float modelRadius = Length(obb.GetDimensions()) * 0.5f;
