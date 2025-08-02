@@ -96,6 +96,9 @@
     <ClInclude Include="src\AppGUI\AppGUI.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="src\Profiling\GPUProfiler.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\Main.cpp">
@@ -159,6 +162,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\AppGUI\AppGUI.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Profiling\GPUProfiler.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
