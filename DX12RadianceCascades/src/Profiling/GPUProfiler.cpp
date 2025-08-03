@@ -21,7 +21,7 @@ GPUProfiler::GPUProfiler()
 		IID_PPV_ARGS(m_queryHeap.GetAddressOf())
 	));
 
-	// Each entry is a 64 byte timestamp value.
+	// Each entry is a 64 bit timestamp value.
 	m_queryResultBuffer.Create(L"GPUProfiler Readback buffer", MaxQueries, sizeof(uint64_t));
 	m_queryHeapMemory = reinterpret_cast<uint64_t*>(m_queryResultBuffer.Map());
 }
@@ -34,7 +34,19 @@ void GPUProfiler::DestroyImpl()
 	m_queryResultBuffer.Destroy();
 }
 
-uint32_t GPUProfiler::StartProfile(ID3D12GraphicsCommandList* commandList, const char* name)
+uint64_t GPUProfiler::GetCurrentVRAMUsageBytes()
+{
+	DXGI_QUERY_VIDEO_MEMORY_INFO videoMemoryInfo = {};
+	ThrowIfFailed(m_vramAdapter->QueryVideoMemoryInfo(
+		0,
+		DXGI_MEMORY_SEGMENT_GROUP_LOCAL,
+		&videoMemoryInfo
+	));
+
+	return videoMemoryInfo.CurrentUsage;
+}
+
+uint32_t GPUProfiler::StartPerformanceProfile(ID3D12GraphicsCommandList* commandList, const char* name)
 {
 	ASSERT(commandList != nullptr && name != nullptr);
 
@@ -64,7 +76,7 @@ uint32_t GPUProfiler::StartProfile(ID3D12GraphicsCommandList* commandList, const
 	return profileIndex;
 }
 
-void GPUProfiler::EndProfile(ID3D12GraphicsCommandList* commandList, uint32_t profileIndex)
+void GPUProfiler::EndPerformanceProfile(ID3D12GraphicsCommandList* commandList, uint32_t profileIndex)
 {
 	ASSERT(commandList != nullptr && profileIndex < m_profiles.size());
 
@@ -86,19 +98,25 @@ void GPUProfiler::EndProfile(ID3D12GraphicsCommandList* commandList, uint32_t pr
 	m_profiles[profileIndex].isQuerying = false;
 }
 
-float GPUProfiler::GetCurrentMemory(MemoryUnit memoryUnit /* = MegaByte */)
+void GPUProfiler::PushMemoryEntry(const char* name)
 {
-	DXGI_QUERY_VIDEO_MEMORY_INFO videoMemoryInfo;
-	ThrowIfFailed(m_vramAdapter->QueryVideoMemoryInfo(
-		0,
-		DXGI_MEMORY_SEGMENT_GROUP_LOCAL,
-		&videoMemoryInfo
-	));
-
-	return videoMemoryInfo.CurrentUsage / (float)memoryUnit;
+	m_memoryEntries.push_back({
+		name,
+		GetCurrentVRAMUsageBytes()
+	});
 }
 
-void GPUProfiler::UpdateProfiles(uint64_t timestampFrequency)
+void GPUProfiler::PopMemoryEntry()
+{
+	m_memoryEntries.pop_back();
+}
+
+float GPUProfiler::GetCurrentVRAMUsage(MemoryUnit memoryUnit /* = MegaByte */)
+{
+	return GetCurrentVRAMUsageBytes() / (float)memoryUnit;
+}
+
+void GPUProfiler::UpdatePerformanceProfiles(uint64_t timestampFrequency)
 {
 	ASSERT(m_queryHeapMemory != nullptr);
 
@@ -120,41 +138,100 @@ void GPUProfiler::UpdateProfiles(uint64_t timestampFrequency)
 	}
 }
 
-void GPUProfiler::DrawProfileUI()
+void GPUProfiler::UpdateMemoryEntries()
+{
+	for (int i = (int)m_memoryEntries.size() - 1; i >= 0; i--)
+	{
+		MemoryEntry& memEntry = m_memoryEntries[i];
+		
+		// Calculates the diff between the current mem entry and the previous.
+		uint64_t memDiff = i > 0 ? memEntry.currentVRAMUsage - m_memoryEntries[i - 1].currentVRAMUsage : memEntry.currentVRAMUsage;
+
+		// The mem diff is the mem usage of that section.
+		memEntry.thisVRAMUsage = memDiff;
+	}
+}
+
+void GPUProfiler::UpdateData(uint64_t timestampFrequency)
+{
+	UpdatePerformanceProfiles(timestampFrequency);
+	UpdateMemoryEntries();
+}
+
+void GPUProfiler::DrawProfilerUI()
 {
 	ImGui::Begin("Performance Statistics");
 
-	for (PerfProfile& perfProfile : m_profiles)
+	if(ImGui::CollapsingHeader("Frametime"))
 	{
-		if (perfProfile.name == nullptr)
+		for (PerfProfile& perfProfile : m_profiles)
 		{
-			continue;
-		}
-		
-		// Moved by MaxSampleCount to avoid underflow if current sample count is 0.
-		const uint32_t lastSampleIndex = (perfProfile.currentSampleCount + MaxSampleCount - 1) % MaxSampleCount;
-		float lastSampleTime = perfProfile.timeSamples[lastSampleIndex];
+			if (perfProfile.name == nullptr)
+			{
+				continue;
+			}
 
-		float timeSum = 0.0f;
-		for (float timeSample : perfProfile.timeSamples)
+			// Moved by MaxSampleCount to avoid underflow if current sample count is 0.
+			const uint32_t lastSampleIndex = (perfProfile.currentSampleCount + MaxSampleCount - 1) % MaxSampleCount;
+			float lastSampleTime = perfProfile.timeSamples[lastSampleIndex];
+
+			float timeSum = 0.0f;
+			for (float timeSample : perfProfile.timeSamples)
+			{
+				timeSum += timeSample;
+			}
+			float averageTime = timeSum / perfProfile.timeSamples.size();
+
+			char msValue[64] = { 0 };
+			sprintf_s(msValue, " (%.3f ms | Avg: %.3f ms)", lastSampleTime, averageTime);
+			std::string plotName = std::string(perfProfile.name) + msValue;
+			ImGui::PlotLines(
+				plotName.c_str(),
+				perfProfile.timeSamples.data(),
+				(int)perfProfile.timeSamples.size(),
+				perfProfile.currentSampleCount,
+				"",
+				0.0f,
+				15.0f,
+				ImVec2(400.0f, 60.0f)
+			);
+		}
+	}
+
+	if (ImGui::CollapsingHeader("Memory"))
+	{
+		const MemoryUnit defaultMemoryUnit = MemoryUnit::MegaByte;
+
+		if (ImGui::BeginTable("Memory table", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_NoHostExtendX))
 		{
-			timeSum += timeSample;
-		}
-		float averageTime = timeSum / perfProfile.timeSamples.size();
+			ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed);
+			ImGui::TableSetupColumn("VRAM Usage (MB)", ImGuiTableColumnFlags_WidthFixed);
+			ImGui::TableHeadersRow();
 
-		char msValue[64] = { 0 };
-		sprintf_s(msValue, " (%.3f ms | Avg: %.3f ms)", lastSampleTime, averageTime);
-		std::string plotName = std::string(perfProfile.name) + msValue;
-		ImGui::PlotLines(
-			plotName.c_str(),
-			perfProfile.timeSamples.data(),
-			(int)perfProfile.timeSamples.size(),
-			perfProfile.currentSampleCount,
-			"",
-			0.0f,
-			15.0f,
-			ImVec2(400.0f, 60.0f)
-		);
+			// First table entry is current mem usage.
+			{
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				ImGui::Text("Current usage");
+
+				ImGui::TableSetColumnIndex(1);
+				ImGui::Text("%.1f", GetCurrentVRAMUsage(defaultMemoryUnit));
+			}
+
+			for (size_t i = 0; i < m_memoryEntries.size(); i++)
+			{
+				const MemoryEntry& memEntry = m_memoryEntries[i];
+
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				ImGui::Text("%s", memEntry.name);
+
+				ImGui::TableSetColumnIndex(1);
+				ImGui::Text("%.2f", memEntry.thisVRAMUsage / (float)defaultMemoryUnit);
+			}
+
+			ImGui::EndTable();
+		}
 	}
 
 	ImGui::End();
@@ -163,12 +240,12 @@ void GPUProfiler::DrawProfileUI()
 ProfileBlock::ProfileBlock(CommandContext& commandContext, const char* name)
 {
 	commandList = commandContext.GetCommandList();
-	profileIndex = GPUProfiler::Get().StartProfile(commandList, name);
+	profileIndex = GPUProfiler::Get().StartPerformanceProfile(commandList, name);
 }
 
 ProfileBlock::~ProfileBlock()
 {
 	ASSERT(commandList != nullptr && profileIndex != uint32_t(-1));
 
-	GPUProfiler::Get().EndProfile(commandList, profileIndex);
+	GPUProfiler::Get().EndPerformanceProfile(commandList, profileIndex);
 }
