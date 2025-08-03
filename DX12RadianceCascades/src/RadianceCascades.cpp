@@ -124,10 +124,14 @@ void RadianceCascades::Startup()
 
 	UpdateViewportAndScissor();
 
+	GPUProfiler::Get().PushMemoryEntry("Scene");
 	InitializeScene();
+	GPUProfiler::Get().PushMemoryEntry("PSOs");
 	InitializePSOs();
+	GPUProfiler::Get().PushMemoryEntry("RC Resources");
 	InitializeRCResources();
 
+	GPUProfiler::Get().PushMemoryEntry("RT Resources");
 	InitializeRT();
 
 	{
@@ -287,7 +291,8 @@ void RadianceCascades::RenderUI(GraphicsContext& uiContext)
 {
 	uint64_t timestampFrequency;
 	ThrowIfFailed(Graphics::g_CommandManager.GetCommandQueue()->GetTimestampFrequency(&timestampFrequency));
-	GPUProfiler::Get().UpdateProfiles(timestampFrequency);
+
+	GPUProfiler::Get().UpdateData(timestampFrequency);
 
 	AppGUI::NewFrame();
 
@@ -295,7 +300,7 @@ void RadianceCascades::RenderUI(GraphicsContext& uiContext)
 	BuildUISettings();
 
 #if defined(_DEBUG)
-	GPUProfiler::Get().DrawProfileUI();
+	GPUProfiler::Get().DrawProfilerUI();
 #endif
 
 	// Render UI

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <stack>
 
 #include "Core\ReadbackBuffer.h"
 #include "Core\CommandContext.h"
@@ -8,10 +9,10 @@
 constexpr uint32_t MaxProfiles = 16u;
 constexpr uint32_t MaxQueries = MaxProfiles * 2; // Two queries per profile.
 
-constexpr uint32_t MaxSampleCount = 128u;
+constexpr uint32_t MaxSampleCount = 256u;
 
 #if defined(_DEBUG)
-	#define GPU_PROFILE_BLOCK(name, context) ProfileBlock profileBlock(context, name);
+	#define GPU_PROFILE_BLOCK(name, context) ProfileBlock profileBlock(context, name)
 #else
 	#define GPU_PROFILE_BLOCK(name, context)
 #endif
@@ -35,6 +36,13 @@ struct PerfProfile
 	uint32_t currentSampleCount = 0u;
 };
 
+struct MemoryEntry
+{
+	const char* name = nullptr;
+	uint64_t currentVRAMUsage = 0u; // In bytes
+	uint64_t thisVRAMUsage = 0u; // In bytes
+};
+
 // Singleton class
 class GPUProfiler
 {
@@ -55,21 +63,26 @@ public:
 	static void Destroy()
 	{
 		Get().DestroyImpl();
-
-		
 	}
 
 public:
 
 	// Will return a profile index.
-	uint32_t StartProfile(ID3D12GraphicsCommandList* commandList, const char* name);
-	void EndProfile(ID3D12GraphicsCommandList* commandList, uint32_t profileIndex);
+	uint32_t StartPerformanceProfile(ID3D12GraphicsCommandList* commandList, const char* name);
+	void EndPerformanceProfile(ID3D12GraphicsCommandList* commandList, uint32_t profileIndex);
 
-	float GetCurrentMemory(MemoryUnit memoryUnit = MemoryUnit::MegaByte);
+	void PushMemoryEntry(const char* name);
+	void PopMemoryEntry();
 
-	void UpdateProfiles(uint64_t timestampFrequency);
+	float GetCurrentVRAMUsage(MemoryUnit memoryUnit = MemoryUnit::MegaByte);
 
-	void DrawProfileUI();
+
+	void UpdatePerformanceProfiles(uint64_t timestampFrequency);
+	void UpdateMemoryEntries();
+
+	void UpdateData(uint64_t timestampFrequency);
+	void DrawProfilerUI();
+
 
 private:
 
@@ -77,10 +90,14 @@ private:
 
 	void DestroyImpl();
 
+	uint64_t GetCurrentVRAMUsageBytes();
+
 private:
 
 	std::array<PerfProfile, MaxProfiles> m_profiles;
 	uint32_t m_profileCount = 0;
+	
+	std::vector<MemoryEntry> m_memoryEntries;
 	
 	Microsoft::WRL::ComPtr<IDXGIAdapter3> m_vramAdapter = nullptr;
 	// Each query profile reserves two consecutive entries. One for start and one for end.
@@ -98,3 +115,4 @@ struct ProfileBlock
 	ID3D12GraphicsCommandList* commandList = nullptr;
 	uint32_t profileIndex = uint32_t(-1);
 };
+
