@@ -1,9 +1,17 @@
 #include "rcpch.h"
 #include "GPUProfiler.h"
 
+#include <unordered_map>
 #include "AppGUI\AppGUI.h"
 
 using namespace Microsoft::WRL;
+
+static std::unordered_map<MemoryUnit, const char*> sMemoryUnitNames = {
+	{Byte, "Bytes"},
+	{KiloByte, "KB"},
+	{MegaByte, "MB"},
+	{GigaByte, "GB"}
+};
 
 GPUProfiler::GPUProfiler()
 {
@@ -178,7 +186,7 @@ void GPUProfiler::DrawProfilerUI()
 			float averageTime = timeSum / perfProfile.timeSamples.size();
 
 			char msValue[64] = { 0 };
-			sprintf_s(msValue, " (%.2f ms | Avg: %.2f ms)", lastSampleTime, averageTime);
+			sprintf_s(msValue, " (%5.2f ms | Avg: %5.2f ms)", lastSampleTime, averageTime);
 			std::string plotName = std::string(perfProfile.name) + msValue;
 			ImGui::PlotLines(
 				plotName.c_str(),
@@ -196,6 +204,8 @@ void GPUProfiler::DrawProfilerUI()
 	if (ImGui::CollapsingHeader("Memory", ImGuiTreeNodeFlags_DefaultOpen))
 	{
 		const MemoryUnit defaultMemoryUnit = MemoryUnit::MegaByte;
+		const char* defaultMemoryUnitString = sMemoryUnitNames[defaultMemoryUnit];
+
 		static ImGuiTreeNodeFlags baseFlags = 
 			ImGuiTreeNodeFlags_DrawLinesToNodes |
 			ImGuiTreeNodeFlags_DefaultOpen | 
@@ -203,7 +213,7 @@ void GPUProfiler::DrawProfilerUI()
 			ImGuiTreeNodeFlags_Bullet;
 
 		uint32_t currentDepth = 0u;
-		const char* formatString = "%.1f (MB)";
+		const char* formatString = "%.1f %s";
 		for (int i = 0; i < m_memoryProfiles.size(); i++)
 		{
 			const MemoryProfile& memProfile = m_memoryProfiles[i];
@@ -218,14 +228,14 @@ void GPUProfiler::DrawProfilerUI()
 				{
 					if (ImGui::TreeNodeEx(memProfile.name, baseFlags))
 					{
-						ImGui::Text(formatString, vramUsed);
+						ImGui::Text(formatString, vramUsed, defaultMemoryUnitString);
 					}
 				}
 				else if(nextDepth == currentDepth)
 				{
 					if (ImGui::TreeNodeEx(memProfile.name, baseFlags))
 					{
-						ImGui::Text(formatString, vramUsed);
+						ImGui::Text(formatString, vramUsed, defaultMemoryUnitString);
 						ImGui::TreePop();
 					}
 				}
@@ -246,7 +256,7 @@ void GPUProfiler::DrawProfilerUI()
 			{
 				if (ImGui::TreeNodeEx(memProfile.name, baseFlags))
 				{
-					ImGui::Text(formatString, vramUsed);
+					ImGui::Text(formatString, vramUsed, defaultMemoryUnitString);
 					ImGui::TreePop();
 				}
 			}
