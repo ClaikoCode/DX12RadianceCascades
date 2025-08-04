@@ -226,7 +226,7 @@ void MissShader(inout RayPayload payload)
     float3 missColor;
     if (cascadeInfo.cascadeIndex == (rcGlobals.cascadeCount - 1))
     {
-        float3 sunDir = normalize(float3(0.5, 0.9, 0.5));
+        float3 sunDir = normalize(float3(1.0, 1.0, 1.0));
         missColor = SimpleSunsetSky(WorldRayDirection(), sunDir);
     }
     else

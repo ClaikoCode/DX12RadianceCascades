@@ -231,21 +231,22 @@ void GPUProfiler::DrawProfilerUI()
 						ImGui::Text(formatString, vramUsed, defaultMemoryUnitString);
 					}
 				}
-				else if(nextDepth == currentDepth)
+				else
 				{
 					if (ImGui::TreeNodeEx(memProfile.name, baseFlags))
 					{
 						ImGui::Text(formatString, vramUsed, defaultMemoryUnitString);
 						ImGui::TreePop();
 					}
-				}
-				else // nextDepth < currentDepth
-				{
-					int depthDiff = currentDepth - nextDepth;
 
-					for (int i = 0; i < depthDiff; i++)
+					if (nextDepth < currentDepth)
 					{
-						ImGui::TreePop();
+						int depthDiff = currentDepth - nextDepth;
+
+						for (int i = 0; i < depthDiff; i++)
+						{
+							ImGui::TreePop();
+						}
 					}
 				}
 

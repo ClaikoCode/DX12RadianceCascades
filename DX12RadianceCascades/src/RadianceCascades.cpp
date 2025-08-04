@@ -137,16 +137,12 @@ void RadianceCascades::Startup()
 		InitializeRT();
 
 		{
+			GPU_MEMORY_BLOCK("Misc");
+
 			m_albedoBuffer.Create(L"Albedo Buffer", ::GetSceneColorWidth(), ::GetSceneColorHeight(), 1, ::GetSceneColorFormat());
-		}
 
-		{
 			DepthBuffer& sceneDepthBuff = Graphics::g_SceneDepthBuffer;
-
 			m_debugCamDepthBuffer.Create(L"Debug Cam Depth Buffer", sceneDepthBuff.GetWidth(), sceneDepthBuff.GetHeight(), sceneDepthBuff.GetFormat());
-
-			m_minMaxDepthCopy.Create(L"Min Max Depth Copy", sceneDepthBuff.GetWidth(), sceneDepthBuff.GetHeight(), 1, DXGI_FORMAT_R32_FLOAT);
-			m_minMaxDepthMips.Create(L"Min Max Depth Mips", sceneDepthBuff.GetWidth() / 2, sceneDepthBuff.GetHeight() / 2, 0, DXGI_FORMAT_R32G32_FLOAT);
 		}
 	}
 	
@@ -696,19 +692,34 @@ void RadianceCascades::InitializeRCResources()
 {
 	GPU_MEMORY_BLOCK("RC Resources");
 
-	m_flatlandScene.Create(L"Flatland Scene", ::GetSceneColorWidth(), ::GetSceneColorHeight(), 1, s_FlatlandSceneFormat);
+	// RC 2D
+	{
+		GPU_MEMORY_BLOCK("RC 2D");
+		
+		m_flatlandScene.Create(L"Flatland Scene", ::GetSceneColorWidth(), ::GetSceneColorHeight(), 1, s_FlatlandSceneFormat);
 
-	float diag = Math::Length({ (float)::GetSceneColorWidth(), (float)::GetSceneColorHeight(), 0.0f });
-	m_rcManager2D.Init(SAMPLE_LEN_0, RAYS_PER_PROBE_0, diag);
+		float diag = Math::Length({ (float)::GetSceneColorWidth(), (float)::GetSceneColorHeight(), 0.0f });
+		m_rcManager2D.Init(SAMPLE_LEN_0, RAYS_PER_PROBE_0, diag);
+	}
+	
+	// RC 3D
+	{
+		GPU_MEMORY_BLOCK("RC 3D");
 
-	m_rcManager3D.Init(
-		m_settings.rcSettings.rayLength0,
-		m_settings.rcSettings.raysPerProbe0,
-		m_settings.rcSettings.probesPerDim0,
-		m_settings.rcSettings.cascadeLevels,
-		true, 
-		m_settings.rcSettings.useDepthAwareMerging
-	);
+		DepthBuffer& sceneDepthBuff = Graphics::g_SceneDepthBuffer;
+		m_minMaxDepthCopy.Create(L"Min Max Depth Copy", sceneDepthBuff.GetWidth(), sceneDepthBuff.GetHeight(), 1, DXGI_FORMAT_R32_FLOAT);
+		m_minMaxDepthMips.Create(L"Min Max Depth Mips", sceneDepthBuff.GetWidth() / 2, sceneDepthBuff.GetHeight() / 2, 0, DXGI_FORMAT_R32G32_FLOAT);
+
+		m_rcManager3D.Init(
+			m_settings.rcSettings.rayLength0,
+			m_settings.rcSettings.raysPerProbe0,
+			m_settings.rcSettings.probesPerDim0,
+			m_settings.rcSettings.cascadeLevels,
+			true,
+			m_settings.rcSettings.useDepthAwareMerging
+		);
+	}
+	
 }
 
 void RadianceCascades::InitializeRT()
