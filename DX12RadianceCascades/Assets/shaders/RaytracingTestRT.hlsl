@@ -187,7 +187,7 @@ void ClosestHitShader(inout RayPayload payload, in BuiltInTriangleIntersectionAt
 [shader("miss")]
 void MissShader(inout RayPayload payload)
 {
-    float3 sunDir = normalize(float3(0.5, 0.9, 0.5));
+    float3 sunDir = normalize(float3(0.2, 0.9, 0.2));
     renderOutput[DispatchRaysIndex().xy] = float4(SimpleSunsetSky(WorldRayDirection(), sunDir), 1.0f);
 
 }
