@@ -32,6 +32,11 @@ GPUProfiler::GPUProfiler()
 	// Each entry is a 64 bit timestamp value.
 	m_queryResultBuffer.Create(L"GPUProfiler Readback buffer", MaxQueries, sizeof(uint64_t));
 	m_queryHeapMemory = reinterpret_cast<uint64_t*>(m_queryResultBuffer.Map());
+
+	// Create root of memory profile tree.
+	MemoryProfileNode memProfileRoot = {};
+	memProfileRoot.value.name = "Root";
+	m_memoryRoot = std::make_shared<MemoryProfileNode>(memProfileRoot);
 }
 
 void GPUProfiler::DestroyImpl()
@@ -52,6 +57,49 @@ uint64_t GPUProfiler::GetCurrentVRAMUsageBytes()
 	));
 
 	return videoMemoryInfo.CurrentUsage;
+}
+
+void GPUProfiler::DrawMemoryProfileTree(std::shared_ptr<MemoryProfileNode> root, MemoryUnit defaultMemoryUnit)
+{
+	const char* defaultMemoryUnitString = sMemoryUnitNames[defaultMemoryUnit];
+
+	static const char* formatString = "%.1f %s";
+	static ImGuiTreeNodeFlags baseFlags =
+		ImGuiTreeNodeFlags_DrawLinesToNodes |
+		ImGuiTreeNodeFlags_DefaultOpen |
+		ImGuiTreeNodeFlags_Leaf |
+		ImGuiTreeNodeFlags_Bullet;
+
+
+	if (ImGui::TreeNodeEx(root->value.name, baseFlags))
+	{
+		uint64_t childrenVRAMSum = 0u;
+		for (auto& child : root->children)
+		{
+			childrenVRAMSum += child->value.totalVRAM;
+		}
+
+		const float vramUsed = root->value.totalVRAM / (float)defaultMemoryUnit;
+		ImGui::Text(formatString, vramUsed, defaultMemoryUnitString);
+
+		if (!root->children.empty() && childrenVRAMSum != root->value.totalVRAM)
+		{
+			float memoryDiff = float((double(root->value.totalVRAM) - double(childrenVRAMSum)) / (float)defaultMemoryUnit);
+
+			if (ImGui::TreeNodeEx("Unknown Source", baseFlags))
+			{
+				ImGui::Text(formatString, memoryDiff, defaultMemoryUnitString);
+				ImGui::TreePop();
+			}
+		}
+
+		for (auto& child : root->children)
+		{
+			DrawMemoryProfileTree(child);
+		}
+
+		ImGui::TreePop();
+	}
 }
 
 uint32_t GPUProfiler::StartPerformanceProfile(ID3D12GraphicsCommandList* commandList, const char* name)
@@ -106,27 +154,34 @@ void GPUProfiler::EndPerformanceProfile(ID3D12GraphicsCommandList* commandList, 
 	m_profiles[profileIndex].isQuerying = false;
 }
 
-void GPUProfiler::PushMemoryEntry(const char* name)
+std::shared_ptr<MemoryProfileNode> GPUProfiler::PushMemoryProfile(const char* name)
 {
-	MemoryProfile memProfile = {};
-	memProfile.name = name;
-	memProfile.treeDepth = uint16_t(m_memoryFrames.size());
-	m_memoryProfiles.push_back(memProfile);
+	if (m_memoryRootHead == nullptr)
+	{
+		m_memoryRootHead = m_memoryRoot;
+	}
 
-	m_memoryFrames.push_back({
-		GetCurrentVRAMUsageBytes(),
-		uint32_t(m_memoryProfiles.size() - 1)
-	});
+	auto memProfileNodeChild = std::make_shared<MemoryProfileNode>();
+
+	memProfileNodeChild->parent = m_memoryRootHead;
+	memProfileNodeChild->value = {
+		.name = name,
+		.currentVRAMUsage = GetCurrentVRAMUsageBytes()
+	};
+
+	m_memoryRootHead->children.push_back(memProfileNodeChild);
+	m_memoryRootHead = memProfileNodeChild;
+
+	return memProfileNodeChild;
 }
 
-void GPUProfiler::PopMemoryEntry()
+void GPUProfiler::PopMemoryProfile(std::shared_ptr<MemoryProfileNode> memProfileNode)
 {
-	const MemoryFrame& memFrame = m_memoryFrames.back();
+	ASSERT(memProfileNode != nullptr);
 
-	// Update how much VRAM has been allocated between push and pop.
-	m_memoryProfiles[memFrame.profileIndex].totalVRAM = GetCurrentVRAMUsageBytes() - memFrame.currentVRAMUsage;
+	memProfileNode->value.totalVRAM = GetCurrentVRAMUsageBytes() - memProfileNode->value.currentVRAMUsage;
 
-	m_memoryFrames.pop_back();
+	m_memoryRootHead = memProfileNode->parent;
 }
 
 float GPUProfiler::GetCurrentVRAMUsage(MemoryUnit memoryUnit /* = MegaByte */)
@@ -167,6 +222,22 @@ void GPUProfiler::DrawProfilerUI()
 
 	if(ImGui::CollapsingHeader("Frametime", ImGuiTreeNodeFlags_DefaultOpen))
 	{
+		// Used for dynamic text formatting.
+		int longestProfileName = 0;
+		const size_t longestAllowedLength = 40;
+		for (PerfProfile& perfProfile : m_profiles)
+		{
+			if (perfProfile.name != nullptr)
+			{
+				int profileNameLength = int(strnlen_s(perfProfile.name, longestAllowedLength));
+
+				if (profileNameLength > longestProfileName)
+				{
+					longestProfileName = profileNameLength;
+				}
+			}
+		}
+
 		for (PerfProfile& perfProfile : m_profiles)
 		{
 			if (perfProfile.name == nullptr)
@@ -185,11 +256,11 @@ void GPUProfiler::DrawProfilerUI()
 			}
 			float averageTime = timeSum / perfProfile.timeSamples.size();
 
-			char msValue[64] = { 0 };
-			sprintf_s(msValue, " (%5.2f ms | Avg: %5.2f ms)", lastSampleTime, averageTime);
-			std::string plotName = std::string(perfProfile.name) + msValue;
+			char formattedPlotName[128] = { 0 };
+			sprintf_s(formattedPlotName, "%-*s (% 6.2f ms | Avg: % 6.2f ms)", longestProfileName, perfProfile.name, lastSampleTime, averageTime);
+
 			ImGui::PlotLines(
-				plotName.c_str(),
+				formattedPlotName,
 				perfProfile.timeSamples.data(),
 				(int)perfProfile.timeSamples.size(),
 				perfProfile.currentSampleCount,
@@ -204,68 +275,13 @@ void GPUProfiler::DrawProfilerUI()
 	if (ImGui::CollapsingHeader("Memory", ImGuiTreeNodeFlags_DefaultOpen))
 	{
 		const MemoryUnit defaultMemoryUnit = MemoryUnit::MegaByte;
-		const char* defaultMemoryUnitString = sMemoryUnitNames[defaultMemoryUnit];
 
-		static ImGuiTreeNodeFlags baseFlags = 
-			ImGuiTreeNodeFlags_DrawLinesToNodes |
-			ImGuiTreeNodeFlags_DefaultOpen | 
-			ImGuiTreeNodeFlags_Leaf | 
-			ImGuiTreeNodeFlags_Bullet;
+		ASSERT(m_memoryRoot != nullptr && m_memoryRoot == m_memoryRootHead);
 
-		uint32_t currentDepth = 0u;
-		const char* formatString = "%.1f %s";
-		for (int i = 0; i < m_memoryProfiles.size(); i++)
+		// Skip drawing from root as it its only purpose is to begin building the tree.
+		for (auto& child : m_memoryRoot->children)
 		{
-			const MemoryProfile& memProfile = m_memoryProfiles[i];
-			float vramUsed = memProfile.totalVRAM / (float)defaultMemoryUnit;
-
-			if (i < (m_memoryProfiles.size() - 1))
-			{
-				const MemoryProfile& nextMemProfile = m_memoryProfiles[i + 1];
-				const uint16_t nextDepth = nextMemProfile.treeDepth;
-
-				if (nextDepth > currentDepth)
-				{
-					if (ImGui::TreeNodeEx(memProfile.name, baseFlags))
-					{
-						ImGui::Text(formatString, vramUsed, defaultMemoryUnitString);
-					}
-				}
-				else
-				{
-					if (ImGui::TreeNodeEx(memProfile.name, baseFlags))
-					{
-						ImGui::Text(formatString, vramUsed, defaultMemoryUnitString);
-						ImGui::TreePop();
-					}
-
-					if (nextDepth < currentDepth)
-					{
-						int depthDiff = currentDepth - nextDepth;
-
-						for (int i = 0; i < depthDiff; i++)
-						{
-							ImGui::TreePop();
-						}
-					}
-				}
-
-				currentDepth = nextDepth;
-				continue;
-			}
-			else
-			{
-				if (ImGui::TreeNodeEx(memProfile.name, baseFlags))
-				{
-					ImGui::Text(formatString, vramUsed, defaultMemoryUnitString);
-					ImGui::TreePop();
-				}
-			}
-
-			for (uint32_t i = 0; i < currentDepth; i++)
-			{
-				ImGui::TreePop();
-			}
+			DrawMemoryProfileTree(child);
 		}
 	}
 
@@ -287,10 +303,12 @@ PerfProfileBlock::~PerfProfileBlock()
 
 MemProfileBlock::MemProfileBlock(const char* name)
 {
-	GPUProfiler::Get().PushMemoryEntry(name);
+	targetMemProfileNode = GPUProfiler::Get().PushMemoryProfile(name);
 }
 
 MemProfileBlock::~MemProfileBlock()
 {
-	GPUProfiler::Get().PopMemoryEntry();
+	ASSERT(targetMemProfileNode != nullptr);
+
+	GPUProfiler::Get().PopMemoryProfile(targetMemProfileNode);
 }

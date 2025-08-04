@@ -99,3 +99,13 @@ namespace Utils
 		DirectX::XMFLOAT4X4 gpuMat;
 	};
 }
+
+// Generic tree structure container
+template <typename T>
+struct TreeNode
+{
+	T value;
+
+	std::shared_ptr<TreeNode<T>> parent = nullptr;
+	std::vector<std::shared_ptr<TreeNode<T>>> children = {};
+};
