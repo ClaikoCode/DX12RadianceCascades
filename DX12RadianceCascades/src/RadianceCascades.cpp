@@ -114,34 +114,43 @@ RadianceCascades::~RadianceCascades()
 
 void RadianceCascades::Startup()
 {
-	Renderer::Initialize();
-	AppGUI::Initialize(GameCore::g_hWnd);
 	GPUProfiler::Initialize();
+	GPU_MEMORY_BLOCK("Startup");
 
 	{
-		m_albedoBuffer.Create(L"Albedo Buffer", ::GetSceneColorWidth(), ::GetSceneColorHeight(), 1, ::GetSceneColorFormat());
+		GPU_MEMORY_BLOCK("Microsoft Renderer");
+		Renderer::Initialize();
 	}
+	
+	{
+		GPU_MEMORY_BLOCK("Program Specific Resources");
 
+		{
+			GPU_MEMORY_BLOCK("App GUI");
+			AppGUI::Initialize(GameCore::g_hWnd);
+		}
+
+		InitializeScene();
+		InitializePSOs();
+		InitializeRCResources();
+
+		InitializeRT();
+
+		{
+			m_albedoBuffer.Create(L"Albedo Buffer", ::GetSceneColorWidth(), ::GetSceneColorHeight(), 1, ::GetSceneColorFormat());
+		}
+
+		{
+			DepthBuffer& sceneDepthBuff = Graphics::g_SceneDepthBuffer;
+
+			m_debugCamDepthBuffer.Create(L"Debug Cam Depth Buffer", sceneDepthBuff.GetWidth(), sceneDepthBuff.GetHeight(), sceneDepthBuff.GetFormat());
+
+			m_minMaxDepthCopy.Create(L"Min Max Depth Copy", sceneDepthBuff.GetWidth(), sceneDepthBuff.GetHeight(), 1, DXGI_FORMAT_R32_FLOAT);
+			m_minMaxDepthMips.Create(L"Min Max Depth Mips", sceneDepthBuff.GetWidth() / 2, sceneDepthBuff.GetHeight() / 2, 0, DXGI_FORMAT_R32G32_FLOAT);
+		}
+	}
+	
 	UpdateViewportAndScissor();
-
-	GPUProfiler::Get().PushMemoryEntry("Scene");
-	InitializeScene();
-	GPUProfiler::Get().PushMemoryEntry("PSOs");
-	InitializePSOs();
-	GPUProfiler::Get().PushMemoryEntry("RC Resources");
-	InitializeRCResources();
-
-	GPUProfiler::Get().PushMemoryEntry("RT Resources");
-	InitializeRT();
-
-	{
-		DepthBuffer& sceneDepthBuff = Graphics::g_SceneDepthBuffer;
-
-		m_debugCamDepthBuffer.Create(L"Debug Cam Depth Buffer", sceneDepthBuff.GetWidth(), sceneDepthBuff.GetHeight(), sceneDepthBuff.GetFormat());
-
-		m_minMaxDepthCopy.Create(L"Min Max Depth Copy", sceneDepthBuff.GetWidth(), sceneDepthBuff.GetHeight(), 1, DXGI_FORMAT_R32_FLOAT);
-		m_minMaxDepthMips.Create(L"Min Max Depth Mips", sceneDepthBuff.GetWidth() / 2, sceneDepthBuff.GetHeight() / 2, 0, DXGI_FORMAT_R32G32_FLOAT);
-	}
 }
 
 void RadianceCascades::Cleanup()
@@ -309,6 +318,8 @@ void RadianceCascades::RenderUI(GraphicsContext& uiContext)
 
 void RadianceCascades::InitializeScene()
 {
+	GPU_MEMORY_BLOCK("Scene");
+
 	// Setup scene.
 	{
 		ModelInstance& modelInstance = AddModelInstance(ModelIDSponza);
@@ -354,6 +365,8 @@ void RadianceCascades::InitializeScene()
 
 void RadianceCascades::InitializePSOs()
 {
+	GPU_MEMORY_BLOCK("PSOs");
+
 	// Pointers to used PSOs
 	{
 		RuntimeResourceManager::RegisterPSO(PSOIDFirstExternalPSO,			&Renderer::sm_PSOs[9],			PSOTypeGraphics);
@@ -681,6 +694,8 @@ void RadianceCascades::InitializePSOs()
 
 void RadianceCascades::InitializeRCResources()
 {
+	GPU_MEMORY_BLOCK("RC Resources");
+
 	m_flatlandScene.Create(L"Flatland Scene", ::GetSceneColorWidth(), ::GetSceneColorHeight(), 1, s_FlatlandSceneFormat);
 
 	float diag = Math::Length({ (float)::GetSceneColorWidth(), (float)::GetSceneColorHeight(), 0.0f });
@@ -698,6 +713,8 @@ void RadianceCascades::InitializeRCResources()
 
 void RadianceCascades::InitializeRT()
 {
+	GPU_MEMORY_BLOCK("RT Resources");
+
 	// Initialize TLASes.
 	std::unordered_map<ModelID, std::vector<Utils::GPUMatrix>> blasInstances = GetBLASInstances();
 

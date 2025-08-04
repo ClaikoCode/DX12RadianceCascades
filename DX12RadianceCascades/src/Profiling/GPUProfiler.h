@@ -12,9 +12,11 @@ constexpr uint32_t MaxQueries = MaxProfiles * 2; // Two queries per profile.
 constexpr uint32_t MaxSampleCount = 256u;
 
 #if defined(_DEBUG)
-	#define GPU_PROFILE_BLOCK(name, context) ProfileBlock profileBlock(context, name)
+	#define GPU_PROFILE_BLOCK(name, context) PerfProfileBlock CONCAT(profileBlock, __LINE__)(context, name)
+	#define GPU_MEMORY_BLOCK(name) MemProfileBlock CONCAT(memProfileBlock, __LINE__)(name)
 #else
 	#define GPU_PROFILE_BLOCK(name, context)
+	#define GPU_MEMORY_BLOCK(name)
 #endif
 
 enum MemoryUnit : unsigned int
@@ -36,12 +38,19 @@ struct PerfProfile
 	uint32_t currentSampleCount = 0u;
 };
 
-struct MemoryEntry
+struct MemoryFrame
+{
+	uint64_t currentVRAMUsage = 0u; // In bytes
+	uint32_t profileIndex = uint32_t(-1);
+};
+
+struct MemoryProfile
 {
 	const char* name = nullptr;
-	uint64_t currentVRAMUsage = 0u; // In bytes
-	uint64_t thisVRAMUsage = 0u; // In bytes
+	uint64_t totalVRAM = 0u; // In bytes
+	uint16_t treeDepth = 0u;
 };
+
 
 // Singleton class
 class GPUProfiler
@@ -76,9 +85,7 @@ public:
 
 	float GetCurrentVRAMUsage(MemoryUnit memoryUnit = MemoryUnit::MegaByte);
 
-
 	void UpdatePerformanceProfiles(uint64_t timestampFrequency);
-	void UpdateMemoryEntries();
 
 	void UpdateData(uint64_t timestampFrequency);
 	void DrawProfilerUI();
@@ -97,7 +104,9 @@ private:
 	std::array<PerfProfile, MaxProfiles> m_profiles;
 	uint32_t m_profileCount = 0;
 	
-	std::vector<MemoryEntry> m_memoryEntries;
+	// This vector is used as a stack for memory frames.
+	std::vector<MemoryFrame> m_memoryFrames;
+	std::vector<MemoryProfile> m_memoryProfiles;
 	
 	Microsoft::WRL::ComPtr<IDXGIAdapter3> m_vramAdapter = nullptr;
 	// Each query profile reserves two consecutive entries. One for start and one for end.
@@ -107,12 +116,20 @@ private:
 	uint64_t* m_queryHeapMemory = nullptr;
 };
 
-struct ProfileBlock
+struct PerfProfileBlock
 {
-	ProfileBlock(CommandContext& commandContext, const char* name);
-	~ProfileBlock();
+	PerfProfileBlock(CommandContext& commandContext, const char* name);
+	~PerfProfileBlock();
 
 	ID3D12GraphicsCommandList* commandList = nullptr;
 	uint32_t profileIndex = uint32_t(-1);
 };
+
+struct MemProfileBlock
+{
+	MemProfileBlock(const char* name);
+	~MemProfileBlock();
+};
+
+
 
