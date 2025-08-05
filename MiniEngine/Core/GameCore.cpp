@@ -60,8 +60,6 @@ namespace GameCore
 
     bool UpdateApplication( IGameApp& game )
     {
-        EngineProfiling::Update();
-
         float DeltaTime = Graphics::GetFrameTime();
     
         GameInput::Update(DeltaTime);
@@ -73,15 +71,12 @@ namespace GameCore
         PostEffects::Render();
 
         GraphicsContext& UiContext = GraphicsContext::Begin(L"Render UI");
+
         UiContext.TransitionResource(g_OverlayBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET, true);
         UiContext.ClearColor(g_OverlayBuffer);
         UiContext.SetRenderTarget(g_OverlayBuffer.GetRTV());
         UiContext.SetViewportAndScissor(0, 0, g_OverlayBuffer.GetWidth(), g_OverlayBuffer.GetHeight());
         game.RenderUI(UiContext);
-        
-        UiContext.SetRenderTarget(g_OverlayBuffer.GetRTV());
-        UiContext.SetViewportAndScissor(0, 0, g_OverlayBuffer.GetWidth(), g_OverlayBuffer.GetHeight());
-        EngineTuning::Display( UiContext, 10.0f, 40.0f, 1900.0f, 1040.0f );
         
         UiContext.Finish();
 
