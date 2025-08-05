@@ -1,5 +1,7 @@
 #pragma once
 
+#include <functional>
+
 #include "Core\GameCore.h"
 #include "Core\ColorBuffer.h"
 #include "Core\DepthBuffer.h"
@@ -23,6 +25,7 @@
 #define ENABLE_DEBUG_DRAW 0
 #endif
 
+typedef std::function<void(ModelInstance*, float, float)> UpdateScript;
 
 class InternalModelInstance : public ModelInstance
 {
@@ -35,7 +38,25 @@ public:
 		underlyingModelID = modelID;
 	}
 
+	void UpdateInstance(GraphicsContext& gfxContext, float deltaTime, float time)
+	{ 
+		if (updateScript) 
+		{ 
+			updateScript(this, deltaTime, time); 
+		}
+
+		Update(gfxContext, deltaTime);
+	}
+
 	ModelID underlyingModelID;
+	UpdateScript updateScript;
+};
+
+struct ModelInstanceDesc
+{
+	float scale = 1.0f;
+	Math::Vector3 position = { 0.0f, 0.0f, 0.0f };
+	UpdateScript updateScript = {};
 };
 
 struct RadianceCascadesSettings
@@ -217,7 +238,8 @@ private:
 	void FullScreenCopyCompute(PixelBuffer& source, D3D12_CPU_DESCRIPTOR_HANDLE sourceSRV, ColorBuffer& dest);
 	void FullScreenCopyCompute(ColorBuffer& source, ColorBuffer& dest);
 
-	InternalModelInstance& AddModelInstance(ModelID modelID);
+	InternalModelInstance* AddModelInstance(ModelID modelID);
+	void AddSceneModel(ModelID modelID, const ModelInstanceDesc& modelInstanceDesc);
 
 	// Main scene model instance is defined as the first instance added.
 	InternalModelInstance& GetMainSceneModelInstance()
@@ -232,7 +254,7 @@ private:
 	}
 
 	// EXTREMELY wasteful but it gets the job done for how much energy I have currently.
-	std::unordered_map<ModelID, std::vector<Utils::GPUMatrix>> GetBLASInstances();
+	std::unordered_map<ModelID, std::vector<Utils::GPUMatrix>> GetGroupedModelInstances();
 	std::vector<TLASInstanceGroup> GetTLASInstanceGroups();
 
 private:
