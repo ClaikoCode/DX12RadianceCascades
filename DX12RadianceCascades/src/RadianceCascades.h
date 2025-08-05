@@ -50,11 +50,11 @@ struct RadianceCascadesSettings
 	int cascadeVisProbeIntervalIndex = 0;
 	int cascadeVisProbeSubset = 256;
 
-	float rayLength0 = 10.0f;
+	float rayLength0 = 6.0f;
 	bool useDepthAwareMerging = true;
 	uint32_t raysPerProbe0 = 16u;
 	uint32_t probesPerDim0 = 1024u;
-	uint32_t cascadeLevels = 6u;
+	uint32_t cascadeLevels = 7u;
 };
 
 #define ENABLE_RT (false)

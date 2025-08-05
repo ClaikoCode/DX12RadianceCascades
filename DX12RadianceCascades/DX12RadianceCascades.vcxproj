@@ -187,6 +187,7 @@ if %errorlevel% leq 3 exit 0</Command>
     <ClInclude Include="src\DebugDrawer.h" />
     <ClInclude Include="src\GPUStructs.h" />
     <ClInclude Include="src\Logger.h" />
+    <ClInclude Include="src\Profiling\GPUProfiler.h" />
     <ClInclude Include="src\RadianceCascadeManager3D.h" />
     <ClInclude Include="src\RadianceCascades.h" />
     <ClInclude Include="src\RadianceCascadesManager2D.h" />
@@ -227,6 +228,7 @@ if %errorlevel% leq 3 exit 0</Command>
     </ClCompile>
     <ClCompile Include="src\DebugDrawer.cpp" />
     <ClCompile Include="src\Main.cpp" />
+    <ClCompile Include="src\Profiling\GPUProfiler.cpp" />
     <ClCompile Include="src\RadianceCascadeManager3d.cpp" />
     <ClCompile Include="src\RadianceCascades.cpp" />
     <ClCompile Include="src\RadianceCascadesManager2D.cpp" />

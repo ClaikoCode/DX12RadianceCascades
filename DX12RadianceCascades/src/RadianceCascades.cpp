@@ -13,6 +13,7 @@
 #include "ShaderCompilation\ShaderCompilationManager.h"
 
 #include "AppGUI\AppGUI.h"
+#include "Profiling\GPUProfiler.h"
 
 #include "RadianceCascades.h"
 
@@ -113,29 +114,39 @@ RadianceCascades::~RadianceCascades()
 
 void RadianceCascades::Startup()
 {
-	Renderer::Initialize();
-	AppGUI::Initialize(GameCore::g_hWnd);
+	GPUProfiler::Initialize();
+	GPU_MEMORY_BLOCK("Startup");
 
 	{
-		m_albedoBuffer.Create(L"Albedo Buffer", ::GetSceneColorWidth(), ::GetSceneColorHeight(), 1, ::GetSceneColorFormat());
+		GPU_MEMORY_BLOCK("Microsoft Renderer");
+		Renderer::Initialize();
 	}
+	
+	{
+		GPU_MEMORY_BLOCK("Program Specific Resources");
 
+		{
+			GPU_MEMORY_BLOCK("App GUI");
+			AppGUI::Initialize(GameCore::g_hWnd);
+		}
+
+		InitializeScene();
+		InitializePSOs();
+		InitializeRCResources();
+
+		InitializeRT();
+
+		{
+			GPU_MEMORY_BLOCK("Misc");
+
+			m_albedoBuffer.Create(L"Albedo Buffer", ::GetSceneColorWidth(), ::GetSceneColorHeight(), 1, ::GetSceneColorFormat());
+
+			DepthBuffer& sceneDepthBuff = Graphics::g_SceneDepthBuffer;
+			m_debugCamDepthBuffer.Create(L"Debug Cam Depth Buffer", sceneDepthBuff.GetWidth(), sceneDepthBuff.GetHeight(), sceneDepthBuff.GetFormat());
+		}
+	}
+	
 	UpdateViewportAndScissor();
-
-	InitializeScene();
-	InitializePSOs();
-	InitializeRCResources();
-
-	InitializeRT();
-
-	{
-		DepthBuffer& sceneDepthBuff = Graphics::g_SceneDepthBuffer;
-
-		m_debugCamDepthBuffer.Create(L"Debug Cam Depth Buffer", sceneDepthBuff.GetWidth(), sceneDepthBuff.GetHeight(), sceneDepthBuff.GetFormat());
-
-		m_minMaxDepthCopy.Create(L"Min Max Depth Copy", sceneDepthBuff.GetWidth(), sceneDepthBuff.GetHeight(), 1, DXGI_FORMAT_R32_FLOAT);
-		m_minMaxDepthMips.Create(L"Min Max Depth Mips", sceneDepthBuff.GetWidth() / 2, sceneDepthBuff.GetHeight() / 2, 0, DXGI_FORMAT_R32G32_FLOAT);
-	}
 }
 
 void RadianceCascades::Cleanup()
@@ -146,6 +157,7 @@ void RadianceCascades::Cleanup()
 	// TODO: It might make more sense for an outer scope to execute this as this class is not responsible for their initialization.
 	DebugDrawer::Destroy();
 	RuntimeResourceManager::Destroy();
+	GPUProfiler::Destroy();
 
 	Renderer::Shutdown();
 }
@@ -282,10 +294,19 @@ void RadianceCascades::RenderScene()
 
 void RadianceCascades::RenderUI(GraphicsContext& uiContext)
 {
+	uint64_t timestampFrequency;
+	ThrowIfFailed(Graphics::g_CommandManager.GetCommandQueue()->GetTimestampFrequency(&timestampFrequency));
+
+	GPUProfiler::Get().UpdateData(timestampFrequency);
+
 	AppGUI::NewFrame();
 
 	// Run UI code.
 	BuildUISettings();
+
+#if defined(_DEBUG)
+	GPUProfiler::Get().DrawProfilerUI();
+#endif
 
 	// Render UI
 	AppGUI::Render(uiContext);
@@ -293,6 +314,8 @@ void RadianceCascades::RenderUI(GraphicsContext& uiContext)
 
 void RadianceCascades::InitializeScene()
 {
+	GPU_MEMORY_BLOCK("Scene");
+
 	// Setup scene.
 	{
 		ModelInstance& modelInstance = AddModelInstance(ModelIDSponza);
@@ -338,6 +361,8 @@ void RadianceCascades::InitializeScene()
 
 void RadianceCascades::InitializePSOs()
 {
+	GPU_MEMORY_BLOCK("PSOs");
+
 	// Pointers to used PSOs
 	{
 		RuntimeResourceManager::RegisterPSO(PSOIDFirstExternalPSO,			&Renderer::sm_PSOs[9],			PSOTypeGraphics);
@@ -665,23 +690,42 @@ void RadianceCascades::InitializePSOs()
 
 void RadianceCascades::InitializeRCResources()
 {
-	m_flatlandScene.Create(L"Flatland Scene", ::GetSceneColorWidth(), ::GetSceneColorHeight(), 1, s_FlatlandSceneFormat);
+	GPU_MEMORY_BLOCK("RC Resources");
 
-	float diag = Math::Length({ (float)::GetSceneColorWidth(), (float)::GetSceneColorHeight(), 0.0f });
-	m_rcManager2D.Init(SAMPLE_LEN_0, RAYS_PER_PROBE_0, diag);
+	// RC 2D
+	{
+		GPU_MEMORY_BLOCK("RC 2D");
+		
+		m_flatlandScene.Create(L"Flatland Scene", ::GetSceneColorWidth(), ::GetSceneColorHeight(), 1, s_FlatlandSceneFormat);
 
-	m_rcManager3D.Init(
-		m_settings.rcSettings.rayLength0,
-		m_settings.rcSettings.raysPerProbe0,
-		m_settings.rcSettings.probesPerDim0,
-		m_settings.rcSettings.cascadeLevels,
-		true, 
-		m_settings.rcSettings.useDepthAwareMerging
-	);
+		float diag = Math::Length({ (float)::GetSceneColorWidth(), (float)::GetSceneColorHeight(), 0.0f });
+		m_rcManager2D.Init(SAMPLE_LEN_0, RAYS_PER_PROBE_0, diag);
+	}
+	
+	// RC 3D
+	{
+		GPU_MEMORY_BLOCK("RC 3D");
+
+		DepthBuffer& sceneDepthBuff = Graphics::g_SceneDepthBuffer;
+		m_minMaxDepthCopy.Create(L"Min Max Depth Copy", sceneDepthBuff.GetWidth(), sceneDepthBuff.GetHeight(), 1, DXGI_FORMAT_R32_FLOAT);
+		m_minMaxDepthMips.Create(L"Min Max Depth Mips", sceneDepthBuff.GetWidth() / 2, sceneDepthBuff.GetHeight() / 2, 0, DXGI_FORMAT_R32G32_FLOAT);
+
+		m_rcManager3D.Init(
+			m_settings.rcSettings.rayLength0,
+			m_settings.rcSettings.raysPerProbe0,
+			m_settings.rcSettings.probesPerDim0,
+			m_settings.rcSettings.cascadeLevels,
+			true,
+			m_settings.rcSettings.useDepthAwareMerging
+		);
+	}
+	
 }
 
 void RadianceCascades::InitializeRT()
 {
+	GPU_MEMORY_BLOCK("RT Resources");
+
 	// Initialize TLASes.
 	std::unordered_map<ModelID, std::vector<Utils::GPUMatrix>> blasInstances = GetBLASInstances();
 
@@ -734,12 +778,16 @@ void RadianceCascades::RenderRaster(ColorBuffer& targetColor, DepthBuffer& targe
 
 	// Zpass
 	{
+		GPU_PROFILE_BLOCK("Z Pass", gfxContext);
+
 		gfxContext.TransitionResource(targetDepth, D3D12_RESOURCE_STATE_DEPTH_WRITE, true);
 		meshSorter.RenderMeshes(Renderer::MeshSorter::kZPass, gfxContext, globals);
 	}
 	
 	// Opaque pass
 	{
+		GPU_PROFILE_BLOCK("Opaque Pass", gfxContext);
+
 		gfxContext.TransitionResource(targetDepth, D3D12_RESOURCE_STATE_DEPTH_READ, true);
 		gfxContext.TransitionResource(targetColor, D3D12_RESOURCE_STATE_RENDER_TARGET, true);
 
@@ -772,24 +820,30 @@ void RadianceCascades::RenderRaytracing(ColorBuffer& targetColor, Camera& camera
 	ComPtr<ID3D12GraphicsCommandList4> rtCommandList = nullptr;
 	RaytracingContext& rtContext = ::BeginRaytracingContext(L"Render Raytracing", rtCommandList);
 
-	// Transition resources
 	{
-		rtContext.TransitionResource(targetColor, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
-	}
+		GPU_PROFILE_BLOCK("RT Pass", rtContext);
 
-	ID3D12DescriptorHeap* pDescriptorHeaps[] = { RuntimeResourceManager::GetDescriptorHeapPtr() };
-	rtCommandList->SetDescriptorHeaps(1, pDescriptorHeaps);
-	rtCommandList->SetComputeRootSignature(m_rtTestGlobalRootSig.GetSignature());
-	rtCommandList->SetComputeRootShaderResourceView(RootEntryRTGSRV, m_sceneTLAS.GetBVH());
-	rtCommandList->SetComputeRootDescriptorTable(RootEntryRTGUAV, colorDescriptorHandle);
-	rtContext.SetDynamicConstantBufferView(RootEntryRTGParamCB, sizeof(RTParams), &rtParams);
-	rtContext.SetDynamicConstantBufferView(RootEntryRTGInfoCB, sizeof(GlobalInfo), &rtGlobalInfo);
+		// Transition resources
+		{
+			rtContext.TransitionResource(targetColor, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
+		}
+
+		ID3D12DescriptorHeap* pDescriptorHeaps[] = { RuntimeResourceManager::GetDescriptorHeapPtr() };
+		rtCommandList->SetDescriptorHeaps(1, pDescriptorHeaps);
+		rtCommandList->SetComputeRootSignature(m_rtTestGlobalRootSig.GetSignature());
+		rtCommandList->SetComputeRootShaderResourceView(RootEntryRTGSRV, m_sceneTLAS.GetBVH());
+		rtCommandList->SetComputeRootDescriptorTable(RootEntryRTGUAV, colorDescriptorHandle);
+		rtContext.SetDynamicConstantBufferView(RootEntryRTGParamCB, sizeof(RTParams), &rtParams);
+		rtContext.SetDynamicConstantBufferView(RootEntryRTGInfoCB, sizeof(GlobalInfo), &rtGlobalInfo);
 
 #if defined(_DEBUGDRAWING)
-	DebugDrawer::BindDebugBuffers(rtContext, RootEntryRTGCount);
+		DebugDrawer::BindDebugBuffers(rtContext, RootEntryRTGCount);
 #endif
 
-	::DispatchRays(RayDispatchIDTest, targetColor.GetWidth(), targetColor.GetHeight(), rtCommandList);
+		::DispatchRays(RayDispatchIDTest, targetColor.GetWidth(), targetColor.GetHeight(), rtCommandList);
+	}
+
+	
 
 	rtContext.Finish(true);
 }
@@ -804,126 +858,135 @@ void RadianceCascades::RunRCGather(Camera& camera)
 
 	ComPtr<ID3D12GraphicsCommandList4> rtCommandList = nullptr;
 	RaytracingContext& rtContext = ::BeginRaytracingContext(L"Render RC Raytracing", rtCommandList);
-	
-	ID3D12DescriptorHeap* pDescriptorHeaps[] = { RuntimeResourceManager::GetDescriptorHeapPtr() };
-	rtCommandList->SetDescriptorHeaps(1, pDescriptorHeaps);
-
-	// TODO: Add this to ::DispatchRays() by saving the global root sig with a specific PSO so they can be fetched together.
-	rtCommandList->SetComputeRootSignature(m_rcRaytraceGlobalRootSig.GetSignature());
 
 	{
-		rtCommandList->SetComputeRootShaderResourceView(RootEntryRCRaytracingRTGSceneSRV, m_sceneTLAS.GetBVH());
-		rtContext.SetDynamicConstantBufferView(RootEntryRCRaytracingRTGGlobalInfoCB, sizeof(GlobalInfo), &globalInfo);
-		rtContext.SetDynamicConstantBufferView(RootEntryRCRaytracingRTGRCGlobalsCB, sizeof(RCGlobals), &rcGlobalInfo);
+		GPU_PROFILE_BLOCK("RC Gather", rtContext);
+
+		ID3D12DescriptorHeap* pDescriptorHeaps[] = { RuntimeResourceManager::GetDescriptorHeapPtr() };
+		rtCommandList->SetDescriptorHeaps(1, pDescriptorHeaps);
+
+		// TODO: Add this to ::DispatchRays() by saving the global root sig with a specific PSO so they can be fetched together.
+		rtCommandList->SetComputeRootSignature(m_rcRaytraceGlobalRootSig.GetSignature());
+
+		{
+			rtCommandList->SetComputeRootShaderResourceView(RootEntryRCRaytracingRTGSceneSRV, m_sceneTLAS.GetBVH());
+			rtContext.SetDynamicConstantBufferView(RootEntryRCRaytracingRTGGlobalInfoCB, sizeof(GlobalInfo), &globalInfo);
+			rtContext.SetDynamicConstantBufferView(RootEntryRCRaytracingRTGRCGlobalsCB, sizeof(RCGlobals), &rcGlobalInfo);
 
 #if defined(_DEBUG)
-		
-		CascadeVisInfo cascadeVisInfo = {};
-		cascadeVisInfo.enableProbeVis = m_settings.rcSettings.enableCascadeProbeVis;
-		cascadeVisInfo.cascadeVisIndex = m_settings.rcSettings.cascadeVisProbeIntervalIndex;
-		cascadeVisInfo.probeSubset = m_settings.rcSettings.cascadeVisProbeSubset;
-		
-		rtContext.SetDynamicConstantBufferView(RootEntryRCRaytracingRTGRCVisCB, sizeof(CascadeVisInfo), &cascadeVisInfo);
+
+			CascadeVisInfo cascadeVisInfo = {};
+			cascadeVisInfo.enableProbeVis = m_settings.rcSettings.enableCascadeProbeVis;
+			cascadeVisInfo.cascadeVisIndex = m_settings.rcSettings.cascadeVisProbeIntervalIndex;
+			cascadeVisInfo.probeSubset = m_settings.rcSettings.cascadeVisProbeSubset;
+
+			rtContext.SetDynamicConstantBufferView(RootEntryRCRaytracingRTGRCVisCB, sizeof(CascadeVisInfo), &cascadeVisInfo);
 #endif
 
 #if defined(_DEBUGDRAWING)
-		DebugDrawer::BindDebugBuffers(rtContext, RootEntryRCRaytracingRTGCount);
+			DebugDrawer::BindDebugBuffers(rtContext, RootEntryRCRaytracingRTGCount);
 #endif
-	}
+		}
 
-	// Transition resources
-	{
-		rtContext.TransitionResource(m_minMaxDepthMips, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
-	}
-
-	// Will offset the target UAV to start at the minmax depth resolution that is correct.
-	// Each texel in the depth needs to correspond to a probe.
-	uint32_t depthIndexOffset = 0;
-	{
-		const uint32_t probePerDim0 = (uint32_t)Math::Sqrt((float)m_rcManager3D.GetProbeCount(0));
-		const uint32_t probeScalingFactor = m_rcManager3D.GetProbeScalingFactor();
-
-		uint32_t depthTopWidth = m_minMaxDepthMips.GetWidth();
-		while (depthTopWidth != probePerDim0)
+		// Transition resources
 		{
-			depthTopWidth /= probeScalingFactor;
-			depthIndexOffset++;
+			rtContext.TransitionResource(m_minMaxDepthMips, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
+		}
 
-			// If this occurs, some dimension is wrong. Either adjust depth min max dimensions or probe scaling.
-			ASSERT(depthTopWidth != 1);
+		// Will offset the target UAV to start at the minmax depth resolution that is correct.
+		// Each texel in the depth needs to correspond to a probe.
+		uint32_t depthIndexOffset = 0;
+		{
+			const uint32_t probePerDim0 = (uint32_t)Math::Sqrt((float)m_rcManager3D.GetProbeCount(0));
+			const uint32_t probeScalingFactor = m_rcManager3D.GetProbeScalingFactor();
+
+			uint32_t depthTopWidth = m_minMaxDepthMips.GetWidth();
+			while (depthTopWidth != probePerDim0)
+			{
+				depthTopWidth /= probeScalingFactor;
+				depthIndexOffset++;
+
+				// If this occurs, some dimension is wrong. Either adjust depth min max dimensions or probe scaling.
+				ASSERT(depthTopWidth != 1);
+			}
+		}
+
+		const D3D12_CPU_DESCRIPTOR_HANDLE* depthUAVStart = &m_minMaxDepthMips.GetUAV();
+		for (uint32_t cascadeIndex = 0; cascadeIndex < m_rcManager3D.GetCascadeIntervalCount(); cascadeIndex++)
+		{
+			CascadeInfo cascadeInfo = {};
+			cascadeInfo.cascadeIndex = cascadeIndex;
+
+			rtContext.SetDynamicConstantBufferView(RootEntryRCRaytracingRTGCascadeInfoCB, sizeof(CascadeInfo), &cascadeInfo);
+
+			ColorBuffer& cascadeBuffer = m_rcManager3D.GetCascadeIntervalBuffer(cascadeIndex);
+			rtContext.TransitionResource(cascadeBuffer, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
+
+			const DescriptorHandle& rcBufferUAV = RuntimeResourceManager::GetDescCopy(cascadeBuffer.GetUAV());
+			rtCommandList->SetComputeRootDescriptorTable(RootEntryRCRaytracingRTGOutputUAV, rcBufferUAV);
+
+			const DescriptorHandle& depthCascadeUAV = RuntimeResourceManager::GetDescCopy(*(depthUAVStart + cascadeIndex + depthIndexOffset));
+			rtCommandList->SetComputeRootDescriptorTable(RootEntryRCRaytracingRTGDepthTextureUAV, depthCascadeUAV);
+
+			uint32_t dispatchDims = cascadeBuffer.GetWidth();
+			::DispatchRays(
+				RayDispatchIDRCRaytracing,
+				dispatchDims,
+				dispatchDims,
+				rtCommandList
+			);
 		}
 	}
-
-	const D3D12_CPU_DESCRIPTOR_HANDLE* depthUAVStart = &m_minMaxDepthMips.GetUAV();
-	for (uint32_t cascadeIndex = 0; cascadeIndex < m_rcManager3D.GetCascadeIntervalCount(); cascadeIndex++)
-	{
-		CascadeInfo cascadeInfo = {};
-		cascadeInfo.cascadeIndex = cascadeIndex;
-		
-		rtContext.SetDynamicConstantBufferView(RootEntryRCRaytracingRTGCascadeInfoCB, sizeof(CascadeInfo), &cascadeInfo);
-		
-		ColorBuffer& cascadeBuffer = m_rcManager3D.GetCascadeIntervalBuffer(cascadeIndex);
-		rtContext.TransitionResource(cascadeBuffer, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
-
-		const DescriptorHandle& rcBufferUAV = RuntimeResourceManager::GetDescCopy(cascadeBuffer.GetUAV());
-		rtCommandList->SetComputeRootDescriptorTable(RootEntryRCRaytracingRTGOutputUAV, rcBufferUAV);
-
-		const DescriptorHandle& depthCascadeUAV = RuntimeResourceManager::GetDescCopy(*(depthUAVStart + cascadeIndex + depthIndexOffset));
-		rtCommandList->SetComputeRootDescriptorTable(RootEntryRCRaytracingRTGDepthTextureUAV, depthCascadeUAV);
-
-		uint32_t dispatchDims = cascadeBuffer.GetWidth();
-		::DispatchRays(
-			RayDispatchIDRCRaytracing, 
-			dispatchDims,
-			dispatchDims,
-			rtCommandList
-		);
-	}
-
+	
 	rtContext.Finish(true);
 }
 
 void RadianceCascades::RunRCMerge(Math::Camera& cam, ColorBuffer& minMaxDepthBuffer)
 {
 	ComputeContext& cmptContext = ComputeContext::Begin(L"RC Merge Compute");
-	ComputePSO& pso = RuntimeResourceManager::GetComputePSO(PSOIDRC3DMergePSO);
-	cmptContext.SetPipelineState(pso);
-	cmptContext.SetRootSignature(pso.GetRootSignature());
 
-	RCGlobals rcGlobals = {};
-	m_rcManager3D.FillRCGlobalInfo(rcGlobals);
+	{
+		GPU_PROFILE_BLOCK("RC Merge Pass", cmptContext);
 
-	GlobalInfo globalInfo = {};
-	::FillGlobalInfo(globalInfo, cam);
+		ComputePSO& pso = RuntimeResourceManager::GetComputePSO(PSOIDRC3DMergePSO);
+		cmptContext.SetPipelineState(pso);
+		cmptContext.SetRootSignature(pso.GetRootSignature());
 
-	cmptContext.SetDynamicConstantBufferView(RootEntryRC3DMergeRCGlobalsCB, sizeof(RCGlobals), &rcGlobals);
-	cmptContext.SetDynamicConstantBufferView(RootEntryRC3DMergeGlobalInfoCB, sizeof(GlobalInfo), &globalInfo);
+		RCGlobals rcGlobals = {};
+		m_rcManager3D.FillRCGlobalInfo(rcGlobals);
 
-	cmptContext.TransitionResource(minMaxDepthBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-	cmptContext.SetDynamicDescriptor(RootEntryRC3DMergeMinMaxDepthSRV, 0, minMaxDepthBuffer.GetSRV());
+		GlobalInfo globalInfo = {};
+		::FillGlobalInfo(globalInfo, cam);
+
+		cmptContext.SetDynamicConstantBufferView(RootEntryRC3DMergeRCGlobalsCB, sizeof(RCGlobals), &rcGlobals);
+		cmptContext.SetDynamicConstantBufferView(RootEntryRC3DMergeGlobalInfoCB, sizeof(GlobalInfo), &globalInfo);
+
+		cmptContext.TransitionResource(minMaxDepthBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+		cmptContext.SetDynamicDescriptor(RootEntryRC3DMergeMinMaxDepthSRV, 0, minMaxDepthBuffer.GetSRV());
 
 #if defined(_DEBUGDRAWING)
-	DebugDrawer::BindDebugBuffers(cmptContext, RootEntryRC3DMergeCount);
+		DebugDrawer::BindDebugBuffers(cmptContext, RootEntryRC3DMergeCount);
 #endif
 
-	for (uint32_t i = m_rcManager3D.GetCascadeIntervalCount() - 1; i >= 1; i--)
-	{
-		CascadeInfo cascadeInfo = {};
-		cascadeInfo.cascadeIndex = i - 1;
+		for (uint32_t i = m_rcManager3D.GetCascadeIntervalCount() - 1; i >= 1; i--)
+		{
+			CascadeInfo cascadeInfo = {};
+			cascadeInfo.cascadeIndex = i - 1;
 
-		cmptContext.SetDynamicConstantBufferView(RootEntryRC3DMergeCascadeInfoCB, sizeof(CascadeInfo), &cascadeInfo);
+			cmptContext.SetDynamicConstantBufferView(RootEntryRC3DMergeCascadeInfoCB, sizeof(CascadeInfo), &cascadeInfo);
 
-		ColorBuffer& cascadeN1 = m_rcManager3D.GetCascadeIntervalBuffer(i);
-		ColorBuffer& cascadeN = m_rcManager3D.GetCascadeIntervalBuffer(i - 1);
+			ColorBuffer& cascadeN1 = m_rcManager3D.GetCascadeIntervalBuffer(i);
+			ColorBuffer& cascadeN = m_rcManager3D.GetCascadeIntervalBuffer(i - 1);
 
-		cmptContext.TransitionResource(cascadeN1, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-		cmptContext.TransitionResource(cascadeN, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-		cmptContext.FlushResourceBarriers();
+			cmptContext.TransitionResource(cascadeN1, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+			cmptContext.TransitionResource(cascadeN, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+			cmptContext.FlushResourceBarriers();
 
-		cmptContext.SetDynamicDescriptor(RootEntryRC3DMergeCascadeN1SRV, 0, cascadeN1.GetSRV());
-		cmptContext.SetDynamicDescriptor(RootEntryRC3DMergeCascadeNUAV, 0, cascadeN.GetUAV());
+			cmptContext.SetDynamicDescriptor(RootEntryRC3DMergeCascadeN1SRV, 0, cascadeN1.GetSRV());
+			cmptContext.SetDynamicDescriptor(RootEntryRC3DMergeCascadeNUAV, 0, cascadeN.GetUAV());
 
-		cmptContext.Dispatch2D(cascadeN.GetWidth(), cascadeN.GetHeight());
+			cmptContext.Dispatch2D(cascadeN.GetWidth(), cascadeN.GetHeight());
+		}
 	}
 
 	cmptContext.Finish(true);
@@ -960,53 +1023,59 @@ void RadianceCascades::BuildMinMaxDepthBuffer(DepthBuffer& sourceDepthBuffer)
 
 	ComputeContext& cmptContext = ComputeContext::Begin(L"Min Max Depth");
 
-	const ComputePSO& cmptPSO = RuntimeResourceManager::GetComputePSO(PSOIDComputeMinMaxDepthPSO);
-	cmptContext.SetPipelineState(cmptPSO);
-	cmptContext.SetRootSignature(cmptPSO.GetRootSignature());
-
-	// Copy the depth buffer to a color buffer that can be read from as a UAV.
 	{
-		cmptContext.TransitionResource(sourceDepthBuffer, D3D12_RESOURCE_STATE_COPY_SOURCE);
-		cmptContext.TransitionResource(minMaxDepthCopy, D3D12_RESOURCE_STATE_COPY_DEST);
-		cmptContext.CopySubresource(minMaxDepthCopy, 0, sourceDepthBuffer, 0);
+		GPU_PROFILE_BLOCK("Min Max Depth Pass", cmptContext);
+
+		const ComputePSO& cmptPSO = RuntimeResourceManager::GetComputePSO(PSOIDComputeMinMaxDepthPSO);
+		cmptContext.SetPipelineState(cmptPSO);
+		cmptContext.SetRootSignature(cmptPSO.GetRootSignature());
+
+		// Copy the depth buffer to a color buffer that can be read from as a UAV.
+		{
+			cmptContext.TransitionResource(sourceDepthBuffer, D3D12_RESOURCE_STATE_COPY_SOURCE);
+			cmptContext.TransitionResource(minMaxDepthCopy, D3D12_RESOURCE_STATE_COPY_DEST);
+			cmptContext.CopySubresource(minMaxDepthCopy, 0, sourceDepthBuffer, 0);
+		}
+
+		cmptContext.TransitionResource(minMaxMipMaps, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+		cmptContext.TransitionResource(minMaxDepthCopy, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+		cmptContext.TransitionResource(m_minMaxDepthMips, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
+
+		// The first pass of min max depth uses the full resolution copy and writes to the first mip. 
+		{
+			SourceInfo depthSourceInfo = {};
+			depthSourceInfo.isFirstDepth = true;
+			depthSourceInfo.sourceWidth = minMaxDepthCopy.GetWidth();
+			depthSourceInfo.sourceHeight = minMaxDepthCopy.GetHeight();
+
+			cmptContext.SetDynamicConstantBufferView(RootEntryMinMaxDepthSourceInfo, sizeof(depthSourceInfo), &depthSourceInfo);
+			cmptContext.SetDynamicDescriptors(RootEntryMinMaxDepthSourceDepthUAV, 0, 1, &minMaxDepthCopy.GetUAV());
+			cmptContext.SetDynamicDescriptors(RootEntryMinMaxDepthTargetDepthUAV, 0, 1, &m_minMaxDepthMips.GetUAV());
+
+			cmptContext.Dispatch2D(depthSourceInfo.sourceWidth >> 1, depthSourceInfo.sourceHeight >> 1);
+		}
+
+		const D3D12_CPU_DESCRIPTOR_HANDLE* startUAV = &m_minMaxDepthMips.GetUAV();
+		const uint32_t numMipMaps = minMaxMipMaps.GetNumMipMaps();
+		for (uint32_t i = 0; i < numMipMaps; i++)
+		{
+			SourceInfo depthSourceInfo = {};
+			depthSourceInfo.isFirstDepth = false;
+			depthSourceInfo.sourceWidth = minMaxMipMaps.GetWidth() >> i;
+			depthSourceInfo.sourceHeight = minMaxMipMaps.GetHeight() >> i;
+
+			cmptContext.SetDynamicConstantBufferView(RootEntryMinMaxDepthSourceInfo, sizeof(depthSourceInfo), &depthSourceInfo);
+			cmptContext.SetDynamicDescriptors(RootEntryMinMaxDepthSourceDepthUAV, 0, 1, startUAV + i);
+			cmptContext.SetDynamicDescriptors(RootEntryMinMaxDepthTargetDepthUAV, 0, 1, startUAV + i + 1);
+
+			// Must insert resource barrier between each dispatch as the output will otherwise be undefined.
+			// TODO: Find why this is necessary when the same resource is being used? Each dispatch needs to be executed before the next can start, no?
+			cmptContext.InsertUAVBarrier(m_minMaxDepthMips);
+			cmptContext.Dispatch2D(depthSourceInfo.sourceWidth >> 1, depthSourceInfo.sourceHeight >> 1);
+		}
 	}
-	
-	cmptContext.TransitionResource(minMaxMipMaps, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-	cmptContext.TransitionResource(minMaxDepthCopy, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-	cmptContext.TransitionResource(m_minMaxDepthMips, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
-	
-	// The first pass of min max depth uses the full resolution copy and writes to the first mip. 
-	{
-		SourceInfo depthSourceInfo = {};
-		depthSourceInfo.isFirstDepth = true;
-		depthSourceInfo.sourceWidth = minMaxDepthCopy.GetWidth();
-		depthSourceInfo.sourceHeight = minMaxDepthCopy.GetHeight();
 
-		cmptContext.SetDynamicConstantBufferView(RootEntryMinMaxDepthSourceInfo, sizeof(depthSourceInfo), &depthSourceInfo);
-		cmptContext.SetDynamicDescriptors(RootEntryMinMaxDepthSourceDepthUAV, 0, 1, &minMaxDepthCopy.GetUAV());
-		cmptContext.SetDynamicDescriptors(RootEntryMinMaxDepthTargetDepthUAV, 0, 1, &m_minMaxDepthMips.GetUAV());
 
-		cmptContext.Dispatch2D(depthSourceInfo.sourceWidth >> 1, depthSourceInfo.sourceHeight >> 1);
-	}
-
-	const D3D12_CPU_DESCRIPTOR_HANDLE* startUAV = &m_minMaxDepthMips.GetUAV();
-	const uint32_t numMipMaps = minMaxMipMaps.GetNumMipMaps();
-	for (uint32_t i = 0; i < numMipMaps; i++)
-	{
-		SourceInfo depthSourceInfo = {};
-		depthSourceInfo.isFirstDepth = false;
-		depthSourceInfo.sourceWidth = minMaxMipMaps.GetWidth() >> i;
-		depthSourceInfo.sourceHeight = minMaxMipMaps.GetHeight() >> i;
-
-		cmptContext.SetDynamicConstantBufferView(RootEntryMinMaxDepthSourceInfo, sizeof(depthSourceInfo), &depthSourceInfo);
-		cmptContext.SetDynamicDescriptors(RootEntryMinMaxDepthSourceDepthUAV, 0, 1, startUAV + i);
-		cmptContext.SetDynamicDescriptors(RootEntryMinMaxDepthTargetDepthUAV, 0, 1, startUAV + i + 1);
-
-		// Must insert resource barrier between each dispatch as the output will otherwise be undefined.
-		// TODO: Find why this is necessary when the same resource is being used? Each dispatch needs to be executed before the next can start, no?
-		cmptContext.InsertUAVBarrier(m_minMaxDepthMips);
-		cmptContext.Dispatch2D(depthSourceInfo.sourceWidth >> 1, depthSourceInfo.sourceHeight >> 1);
-	}
 
 	cmptContext.Finish(true);
 }
@@ -1105,20 +1174,26 @@ void RadianceCascades::RunRCCoalesce()
 
 	ComputeContext& cmptContext = ComputeContext::Begin(L"RC Coalesce Compute");
 
-	::SetComputePSOAndRootSig(cmptContext, PSOIDRC3DCoalescePSO);
+	{
+		GPU_PROFILE_BLOCK("RC Coalesce Pass", cmptContext);
 
-	cmptContext.SetDynamicConstantBufferView(RootEntryRC3DCoalesceRCGlobalsCB, sizeof(RCGlobals), &rcGlobals);
+		::SetComputePSOAndRootSig(cmptContext, PSOIDRC3DCoalescePSO);
 
-	ColorBuffer& cascade0Buffer = m_rcManager3D.GetCascadeIntervalBuffer(0);
-	ColorBuffer& coalesceBuffer = m_rcManager3D.GetCoalesceBuffer();
+		cmptContext.SetDynamicConstantBufferView(RootEntryRC3DCoalesceRCGlobalsCB, sizeof(RCGlobals), &rcGlobals);
 
-	cmptContext.TransitionResource(cascade0Buffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-	cmptContext.TransitionResource(coalesceBuffer, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+		ColorBuffer& cascade0Buffer = m_rcManager3D.GetCascadeIntervalBuffer(0);
+		ColorBuffer& coalesceBuffer = m_rcManager3D.GetCoalesceBuffer();
 
-	cmptContext.SetDynamicDescriptor(RootEntryRC3DCoalesceCascade0SRV, 0, cascade0Buffer.GetSRV());
-	cmptContext.SetDynamicDescriptor(RootEntryRC3DCoalesceOutputTexUAV, 0, coalesceBuffer.GetUAV());
+		cmptContext.TransitionResource(cascade0Buffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+		cmptContext.TransitionResource(coalesceBuffer, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
-	cmptContext.Dispatch2D(coalesceBuffer.GetWidth(), coalesceBuffer.GetHeight());
+		cmptContext.SetDynamicDescriptor(RootEntryRC3DCoalesceCascade0SRV, 0, cascade0Buffer.GetSRV());
+		cmptContext.SetDynamicDescriptor(RootEntryRC3DCoalesceOutputTexUAV, 0, coalesceBuffer.GetUAV());
+
+		cmptContext.Dispatch2D(coalesceBuffer.GetWidth(), coalesceBuffer.GetHeight());
+	}
+
+	
 
 	cmptContext.Finish(true);
 }
@@ -1167,33 +1242,37 @@ void RadianceCascades::RunDeferredLightingPass(ColorBuffer& albedoBuffer, ColorB
 
 	GraphicsContext& gfxContext = GraphicsContext::Begin(L"Diffuse Lighting Pass");
 
-	// Transition resources
-	gfxContext.TransitionResource(albedoBuffer, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-	gfxContext.TransitionResource(normalBuffer, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-	gfxContext.TransitionResource(diffuseRadianceBuffer, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-	gfxContext.TransitionResource(depthBuffer, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-	gfxContext.TransitionResource(minMaxDepthBuffer, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-	gfxContext.TransitionResource(outputBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET);
+	{
+		GPU_PROFILE_BLOCK("Diffuse Lighting", gfxContext);
 
-	// Set up the pipeline state and root signature
-	::SetGraphicsPSOAndRootSig(gfxContext, PSOIDDeferredLightingPSO);
-	
-	// Set the render target and viewport
-	gfxContext.SetRenderTarget(outputBuffer.GetRTV());
-	gfxContext.SetViewportAndScissor(m_mainViewport, m_mainScissor);
-	gfxContext.SetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
-	
-	// Set descriptors
-	gfxContext.SetDynamicDescriptor(RootEntryDeferredLightingAlbedoSRV, 0, albedoBuffer.GetSRV());
-	gfxContext.SetDynamicDescriptor(RootEntryDeferredLightingNormalSRV, 0, normalBuffer.GetSRV());
-	gfxContext.SetDynamicDescriptor(RootEntryDeferredLightingDiffuseRadianceSRV, 0, diffuseRadianceBuffer.GetSRV());
-	gfxContext.SetDynamicDescriptor(RootEntryDeferredLightingCascade0MinMaxDepthSRV, 0, minMaxDepthBuffer.GetSRV());
-	gfxContext.SetDynamicDescriptor(RootEntryDeferredLightingDepthBufferSRV, 0, depthBuffer.GetSRV());
-	gfxContext.SetDynamicConstantBufferView(RootEntryDeferredLightingGlobalInfoCB, sizeof(GlobalInfo), &globalInfo);
+		// Transition resources
+		gfxContext.TransitionResource(albedoBuffer, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+		gfxContext.TransitionResource(normalBuffer, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+		gfxContext.TransitionResource(diffuseRadianceBuffer, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+		gfxContext.TransitionResource(depthBuffer, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+		gfxContext.TransitionResource(minMaxDepthBuffer, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+		gfxContext.TransitionResource(outputBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
-	// Draw a full-screen quad
-	gfxContext.Draw(4, 0);
-	
+		// Set up the pipeline state and root signature
+		::SetGraphicsPSOAndRootSig(gfxContext, PSOIDDeferredLightingPSO);
+
+		// Set the render target and viewport
+		gfxContext.SetRenderTarget(outputBuffer.GetRTV());
+		gfxContext.SetViewportAndScissor(m_mainViewport, m_mainScissor);
+		gfxContext.SetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+
+		// Set descriptors
+		gfxContext.SetDynamicDescriptor(RootEntryDeferredLightingAlbedoSRV, 0, albedoBuffer.GetSRV());
+		gfxContext.SetDynamicDescriptor(RootEntryDeferredLightingNormalSRV, 0, normalBuffer.GetSRV());
+		gfxContext.SetDynamicDescriptor(RootEntryDeferredLightingDiffuseRadianceSRV, 0, diffuseRadianceBuffer.GetSRV());
+		gfxContext.SetDynamicDescriptor(RootEntryDeferredLightingCascade0MinMaxDepthSRV, 0, minMaxDepthBuffer.GetSRV());
+		gfxContext.SetDynamicDescriptor(RootEntryDeferredLightingDepthBufferSRV, 0, depthBuffer.GetSRV());
+		gfxContext.SetDynamicConstantBufferView(RootEntryDeferredLightingGlobalInfoCB, sizeof(GlobalInfo), &globalInfo);
+
+		// Draw a full-screen quad
+		gfxContext.Draw(4, 0);
+	}
+
 	gfxContext.Finish(true);
 }
 
