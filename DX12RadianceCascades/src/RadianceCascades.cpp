@@ -101,16 +101,15 @@ namespace
 		gfxContext.SetRootSignature(pso.GetRootSignature());
 	}
 
-	void PosRotation(ModelInstance* modelInstance, float deltaTime, float time)
+	void PosOscillation(ModelInstance* modelInstance, float deltaTime, float time)
 	{
 		UniformTransform& transform = modelInstance->GetTransform();
-		Vector3 position = transform.GetTranslation();
-		Vector3 rotationPoint = Vector3(0.0f, 0.0f, 0.0f);
-		Vector3 angularVelocity = Vector3(1.0f, 0.0f, 0.0f);
+		Vector3 centerPoint = Vector3(0.0f, 0.0f, 0.0f);
+		float amplitude = 1000.0f;      
+		float frequency = 1.0f;
 
-		Vector3 cartesianVelocity = Math::Cross(angularVelocity, position - rotationPoint);
-		
-		position += cartesianVelocity * deltaTime;
+		Vector3 position = centerPoint;
+		position += Vector3(amplitude * sin(frequency * time), 0.0f, 0.0f);
 
 		transform.SetTranslation(position);
 	}
@@ -200,15 +199,21 @@ void RadianceCascades::Update(float deltaT)
 
 	GraphicsContext& gfxContext = GraphicsContext::Begin(L"Scene Update");
 
-	{	
+	{
+		GPU_PROFILE_BLOCK("Scene Update", gfxContext);
+
 		for (InternalModelInstance& modelInstance : m_sceneModels)
 		{
 			modelInstance.UpdateInstance(gfxContext, deltaT, time);
 		}
-	}
-	
-	gfxContext.Finish();
 
+		std::vector<TLASInstanceGroup> tlasInstances = GetTLASInstanceGroups();
+		m_sceneTLAS.UpdateTLASInstances(gfxContext, tlasInstances);
+	}
+
+
+	gfxContext.Finish();
+	
 	UpdateViewportAndScissor();
 }
 
@@ -334,8 +339,9 @@ void RadianceCascades::InitializeScene()
 	{
 		Math::Vector3 modelCenter = GetMainSceneModelCenter();
 
-		AddSceneModel(ModelIDSphereTest, { 100.0f, Vector3(0.0f, -300.0f, 0.0f) + modelCenter, ::PosRotation});
+		AddSceneModel(ModelIDSphereTest, { 100.0f, Vector3(0.0f, -200.0f, 0.0f) + modelCenter, ::PosOscillation});
 		AddSceneModel(ModelIDSphereTest, { 50.0f, Vector3(200.0f, -300.0f, 500.0f) + modelCenter });
+		AddSceneModel(ModelIDSphereTest, { 30.0f, Vector3(200.0f, -300.0f, -500.0f) + modelCenter });
 	}
 
 	// Setup camera
@@ -737,7 +743,7 @@ void RadianceCascades::InitializeRT()
 
 	{
 		std::vector<TLASInstanceGroup> tlasInstances = GetTLASInstanceGroups();
-		m_sceneTLAS.Init(tlasInstances);
+		m_sceneTLAS.Init();
 	}
 }
 
@@ -836,8 +842,6 @@ void RadianceCascades::RenderRaytracing(ColorBuffer& targetColor, Camera& camera
 
 		::DispatchRays(RayDispatchIDTest, targetColor.GetWidth(), targetColor.GetHeight(), rtCommandList);
 	}
-
-	
 
 	rtContext.Finish(true);
 }

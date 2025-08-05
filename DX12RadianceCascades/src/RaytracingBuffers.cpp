@@ -1,9 +1,16 @@
 #include "rcpch.h"
 #include "Model\Model.h"
 #include "Core\GpuBuffer.h"
+#include "Core\UploadBuffer.h"
 #include "RaytracingBuffers.h"
 
 using namespace Microsoft::WRL;
+
+constexpr uint32_t MaxInstanceDescriptions = 512u;
+constexpr D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS DefaultTLASBuildFlags =
+	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE | 
+	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
+
 
 BLASBuffer::BLASBuffer(std::shared_ptr<Model> modelPtr)
 {
@@ -74,24 +81,42 @@ D3D12_GPU_VIRTUAL_ADDRESS BLASBuffer::GetBVH() const
 	return m_asData.bvhBuffer.GetGpuVirtualAddress();
 }
 
-TLASBuffers::TLASBuffers(const BLASBuffer& blas, const std::vector<TLASInstanceGroup>& instanceGroups)
+void TLASBuffers::Init()
 {
-	Init(instanceGroups);
+	m_instanceDataBuffer.Create(L"Instance Data Buffer", MaxInstanceDescriptions * sizeof(D3D12_RAYTRACING_INSTANCE_DESC));
+	
+	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC tlasDesc = BuildDesc(
+		DefaultTLASBuildFlags,
+		false
+	);
+
+	m_asData.CreateBuffers(tlasDesc);
+	tlasDesc.DestAccelerationStructureData = m_asData.bvhBuffer.GetGpuVirtualAddress();
+	tlasDesc.ScratchAccelerationStructureData = m_asData.scratchBuffer.GetGpuVirtualAddress();
+
+	GraphicsContext& gfxContext = GraphicsContext::Begin(L"TLAS Build");
+	ComPtr<ID3D12GraphicsCommandList4> rtCommandList;
+	ThrowIfFailed(gfxContext.GetCommandList()->QueryInterface(rtCommandList.GetAddressOf()));
+	rtCommandList->BuildRaytracingAccelerationStructure(&tlasDesc, 0, nullptr);
+
+	gfxContext.Finish(true);
 }
 
-void TLASBuffers::Init(const std::vector<TLASInstanceGroup>& instanceGroups)
+D3D12_GPU_VIRTUAL_ADDRESS TLASBuffers::GetBVH() const
 {
-	if (instanceGroups.empty())
-	{
-		LOG_ERROR(L"Cannot initialize TLAS buffer because instance group vector is empty.");
-		return;
-	}
+	return m_asData.bvhBuffer.GetGpuVirtualAddress();
+}
 
-	std::vector<D3D12_RAYTRACING_INSTANCE_DESC> instanceDescs = {};
+void TLASBuffers::UpdateTLASInstances(GraphicsContext& gfxContext, const std::vector<TLASInstanceGroup>& tlasInstanceGroups)
+{
+	auto instanceDescs = reinterpret_cast<D3D12_RAYTRACING_INSTANCE_DESC*>(m_instanceDataBuffer.Map());
+	ASSERT(instanceDescs != nullptr);
+
 	// Each instance of a BLAS is offset in the shader table the same amount, i.e, starting at the same index. 
 	// This is because it is assumed that there is a shader entry per geometry description.
-	uint32_t instanceContributionOffset = 0;
-	for (const TLASInstanceGroup& instanceGroup : instanceGroups)
+	uint32_t instanceContributionOffset = 0u;
+	uint32_t instanceCount = 0u;
+	for (const TLASInstanceGroup& instanceGroup : tlasInstanceGroups)
 	{
 		if (instanceGroup.blasBuffer == nullptr)
 		{
@@ -100,70 +125,60 @@ void TLASBuffers::Init(const std::vector<TLASInstanceGroup>& instanceGroups)
 		}
 
 		const D3D12_GPU_VIRTUAL_ADDRESS blasBVH = instanceGroup.blasBuffer->GetBVH();
-		for (auto& instanceTransform : instanceGroup.instanceTransforms)
+		for (const Utils::GPUMatrix& instanceMatrix : instanceGroup.instanceTransforms)
 		{
-			auto& desc = instanceDescs.emplace_back();
+			D3D12_RAYTRACING_INSTANCE_DESC& instanceDesc = instanceDescs[instanceCount++];
+			
+			instanceDesc.AccelerationStructure = blasBVH;
+			instanceDesc.Flags = D3D12_RAYTRACING_INSTANCE_FLAG_NONE;
+			instanceDesc.InstanceID = 0;
+			instanceDesc.InstanceMask = 1;
+			instanceDesc.InstanceContributionToHitGroupIndex = instanceContributionOffset;
 
-			desc.AccelerationStructure = blasBVH;
-			desc.Flags = 0;
-			desc.InstanceID = 0;
-			desc.InstanceMask = 1;
-			desc.InstanceContributionToHitGroupIndex = instanceContributionOffset;
-
-			const DirectX::XMFLOAT4X4& transformMat = instanceTransform.gpuMat;
+			const DirectX::XMFLOAT4X4& transformMat = instanceMatrix.gpuMat;
 
 			// Initialize data.
-			ZeroMemory(desc.Transform, sizeof(desc.Transform));
+			ZeroMemory(instanceDesc.Transform, sizeof(instanceDesc.Transform));
 
 			// Copy 3 first rows to desc.
-			memcpy(desc.Transform[0], transformMat.m[0], sizeof(float) * 4);
-			memcpy(desc.Transform[1], transformMat.m[1], sizeof(float) * 4);
-			memcpy(desc.Transform[2], transformMat.m[2], sizeof(float) * 4);
+			memcpy(instanceDesc.Transform[0], transformMat.m[0], sizeof(float) * 4);
+			memcpy(instanceDesc.Transform[1], transformMat.m[1], sizeof(float) * 4);
+			memcpy(instanceDesc.Transform[2], transformMat.m[2], sizeof(float) * 4);
 		}
 
 		instanceContributionOffset += instanceGroup.blasBuffer->GetNumGeometries();
 	}
 
-	const uint32_t numInstances = (uint32_t)instanceDescs.size();
+	m_instanceDataBuffer.Unmap();
+
+	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC tlasBuildDesc = BuildDesc(DefaultTLASBuildFlags, true);
+
+	ComPtr<ID3D12GraphicsCommandList4> rtCommandList;
+	ThrowIfFailed(gfxContext.GetCommandList()->QueryInterface(rtCommandList.GetAddressOf()));
+	rtCommandList->BuildRaytracingAccelerationStructure(&tlasBuildDesc, 0, nullptr);
+
+	gfxContext.InsertUAVBarrier(m_asData.bvhBuffer, true);
+}
+
+D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC TLASBuffers::BuildDesc(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS flags, bool update)
+{
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC tlasDesc = {};
 	{
 		D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS& tlasInputs = tlasDesc.Inputs;
 		tlasInputs.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
 		tlasInputs.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
-		tlasInputs.NumDescs = numInstances;
+		tlasInputs.NumDescs = MaxInstanceDescriptions;
 		tlasInputs.pGeometryDescs = nullptr;
-		tlasInputs.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
+		tlasInputs.Flags = flags;
+		tlasInputs.InstanceDescs = m_instanceDataBuffer.GetGpuVirtualAddress();
+		tlasInputs.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
 	}
 
-	m_asData.CreateBuffers(tlasDesc);
-	tlasDesc.DestAccelerationStructureData = m_asData.bvhBuffer.GetGpuVirtualAddress();
-	tlasDesc.ScratchAccelerationStructureData = m_asData.scratchBuffer.GetGpuVirtualAddress();
-
-	CreateInstanceDataBuffer(tlasDesc, numInstances, instanceDescs.data());
-
-	GraphicsContext& gfxContext = GraphicsContext::Begin(L"TLAS Build");
-	ComPtr<ID3D12GraphicsCommandList4> rtCommandList;
-	ThrowIfFailed(gfxContext.GetCommandList()->QueryInterface(rtCommandList.GetAddressOf()));
-
-	rtCommandList->BuildRaytracingAccelerationStructure(&tlasDesc, 0, nullptr);
-
-	gfxContext.Finish(true);
-}
-
-void TLASBuffers::CreateInstanceDataBuffer(D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC& structDesc, uint32_t numInstances, D3D12_RAYTRACING_INSTANCE_DESC* descs)
-{
-	if (descs == nullptr)
+	if (update)
 	{
-		LOG_ERROR(L"Pointer to RT instances is null.");
-		return;
+		tlasDesc.DestAccelerationStructureData = m_asData.bvhBuffer.GetGpuVirtualAddress();
+		tlasDesc.ScratchAccelerationStructureData = m_asData.scratchBuffer.GetGpuVirtualAddress();
 	}
 
-	m_instanceDataBuffer.Create(L"Instance Data Buffer", numInstances, sizeof(D3D12_RAYTRACING_INSTANCE_DESC), descs);
-	structDesc.Inputs.InstanceDescs = m_instanceDataBuffer.GetGpuVirtualAddress();
-	structDesc.Inputs.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
-}
-
-D3D12_GPU_VIRTUAL_ADDRESS TLASBuffers::GetBVH() const
-{
-	return m_asData.bvhBuffer.GetGpuVirtualAddress();
+	return tlasDesc;
 }

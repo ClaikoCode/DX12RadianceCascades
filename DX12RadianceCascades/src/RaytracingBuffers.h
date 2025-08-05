@@ -54,17 +54,18 @@ class TLASBuffers
 public:
 
 	TLASBuffers() = default;
-	TLASBuffers(const BLASBuffer& blas, const std::vector<TLASInstanceGroup>& instanceGroups);
 
-	void Init(const std::vector<TLASInstanceGroup>& instanceGroups);
+	void Init();
 
 	D3D12_GPU_VIRTUAL_ADDRESS GetBVH() const;
 
+	void UpdateTLASInstances(GraphicsContext& gfxContext, const std::vector<TLASInstanceGroup>& tlasInstanceGroups);
+
 private:
 
-	void CreateInstanceDataBuffer(D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC& structDesc, uint32_t numInstances, D3D12_RAYTRACING_INSTANCE_DESC* descs);
+	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC BuildDesc(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS flags, bool update);
 
 private:
 	AccelerationStructureData m_asData;
-	ByteAddressBuffer m_instanceDataBuffer;
+	UploadBuffer m_instanceDataBuffer;
 };
