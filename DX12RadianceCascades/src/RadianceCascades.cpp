@@ -77,7 +77,7 @@ namespace
 		rtCommandList->DispatchRays(&rayDispatchDesc);
 	}
 
-	void AddModels(std::vector<InternalModelInstance>& modelInstances, Renderer::MeshSorter& meshSorter)
+	void AddModelsForRender(std::vector<InternalModelInstance>& modelInstances, Renderer::MeshSorter& meshSorter)
 	{
 		for (auto& modelInstance : modelInstances)
 		{
@@ -99,6 +99,20 @@ namespace
 		GraphicsPSO& pso = RuntimeResourceManager::GetGraphicsPSO(psoID);
 		gfxContext.SetPipelineState(pso);
 		gfxContext.SetRootSignature(pso.GetRootSignature());
+	}
+
+	void PosRotation(ModelInstance* modelInstance, float deltaTime, float time)
+	{
+		UniformTransform& transform = modelInstance->GetTransform();
+		Vector3 position = transform.GetTranslation();
+		Vector3 rotationPoint = Vector3(0.0f, 0.0f, 0.0f);
+		Vector3 angularVelocity = Vector3(1.0f, 0.0f, 0.0f);
+
+		Vector3 cartesianVelocity = Math::Cross(angularVelocity, position - rotationPoint);
+		
+		position += cartesianVelocity * deltaTime;
+
+		transform.SetTranslation(position);
 	}
 }
 
@@ -183,17 +197,13 @@ void RadianceCascades::Update(float deltaT)
 		}
 	}
 
-	{
-		//Math::Vector3 position = GetMainSceneModelCenter() - Math::Vector3(0.0f, 550.0f, 0.0f) + Math::Vector3(200.0f * Math::Sin(time), 0.0f, 0.0f);
-		//m_sceneModels[1].GetTransform().SetTranslation(position);
-	}
 
 	GraphicsContext& gfxContext = GraphicsContext::Begin(L"Scene Update");
 
 	{	
-		for (ModelInstance& modelInstance : m_sceneModels)
+		for (InternalModelInstance& modelInstance : m_sceneModels)
 		{
-			modelInstance.Update(gfxContext, deltaT);
+			modelInstance.UpdateInstance(gfxContext, deltaT, time);
 		}
 	}
 	
@@ -318,29 +328,14 @@ void RadianceCascades::InitializeScene()
 
 	// Setup scene.
 	{
-		ModelInstance& modelInstance = AddModelInstance(ModelIDSponza);
-		modelInstance.Resize(100.0f * modelInstance.GetRadius());
+		AddSceneModel(ModelIDSponza, { 100.0f, Vector3(0.0f, 0.0f, 0.0f) });
 	}
 
 	{
-		//ModelInstance& modelInstance = AddModelInstance(ModelIDSponza);
-		//modelInstance.Resize(10.0f * modelInstance.GetRadius());
-		//
-		//Math::Vector3 instanceCenter = GetMainSceneModelCenter();
-		//instanceCenter.SetY(20.0f);
-		//modelInstance.GetTransform().SetTranslation(instanceCenter);
-	}
+		Math::Vector3 modelCenter = GetMainSceneModelCenter();
 
-	//{
-	//	ModelInstance& modelInstance = AddModelInstance(ModelIDPlane);
-	//	modelInstance.Resize(100.0f * modelInstance.GetRadius());		
-	//}
-
-	{
-		ModelInstance& modelInstance = AddModelInstance(ModelIDSphereTest);
-		modelInstance.Resize(100.0f * modelInstance.GetRadius());
-		modelInstance.GetTransform().SetTranslation(GetMainSceneModelCenter() - Math::Vector3(0.0f, 550.0f, 0.0f));
-		//modelInstance.GetTransform().SetTranslation(GetMainSceneModelCenter() + Math::Vector3(0.0f, modelInstance.GetRadius() * 1.1f , 0.0f));
+		AddSceneModel(ModelIDSphereTest, { 100.0f, Vector3(0.0f, -300.0f, 0.0f) + modelCenter, ::PosRotation});
+		AddSceneModel(ModelIDSphereTest, { 50.0f, Vector3(200.0f, -300.0f, 500.0f) + modelCenter });
 	}
 
 	// Setup camera
@@ -349,10 +344,9 @@ void RadianceCascades::InitializeScene()
 		m_camera.SetAspectRatio(heightOverWidth);
 		m_camera.SetFOV(Utils::HorizontalFovToVerticalFov(Math::XMConvertToRadians(CAM_FOV), 1.0f / heightOverWidth));
 
-		OrientedBox obb = GetMainSceneModelInstance().GetBoundingBox();
-		float modelRadius = Length(obb.GetDimensions()) * 0.5f;
-		const Vector3 eye = obb.GetCenter() + Vector3(modelRadius * 0.5f, 10.0f, 0.0f);
-		m_camera.SetEyeAtUp(eye, Vector3(kZero), Vector3(kYUnitVector));
+		
+		Vector3 modelCenter = GetMainSceneModelCenter();
+		m_camera.SetEyeAtUp(modelCenter + Vector3(300.0f, 0.0f, 0.0f), modelCenter, Vector3(kYUnitVector));
 		m_camera.SetZRange(0.5f, 5000.0f);
 		
 		m_cameraController.reset(new FlyingFPSCamera(m_camera, Vector3(kYUnitVector)));
@@ -727,7 +721,7 @@ void RadianceCascades::InitializeRT()
 	GPU_MEMORY_BLOCK("RT Resources");
 
 	// Initialize TLASes.
-	std::unordered_map<ModelID, std::vector<Utils::GPUMatrix>> blasInstances = GetBLASInstances();
+	std::unordered_map<ModelID, std::vector<Utils::GPUMatrix>> blasInstances = GetGroupedModelInstances();
 
 	// Initialize RT dispatch inputs.
 	{
@@ -772,7 +766,7 @@ void RadianceCascades::RenderRaster(ColorBuffer& targetColor, DepthBuffer& targe
 	meshSorter.SetDepthStencilTarget(targetDepth);
 	meshSorter.AddRenderTarget(targetColor);
 
-	::AddModels(m_sceneModels, meshSorter);
+	::AddModelsForRender(m_sceneModels, meshSorter);
 
 	GraphicsContext& gfxContext = GraphicsContext::Begin(L"Scene Render");
 
@@ -1000,7 +994,7 @@ void RadianceCascades::RenderDepthOnly(Camera& camera, DepthBuffer& targetDepth,
 	meshSorter.SetScissor(scissor);
 	meshSorter.SetDepthStencilTarget(targetDepth);
 
-	::AddModels(m_sceneModels, meshSorter);
+	::AddModelsForRender(m_sceneModels, meshSorter);
 
 	GraphicsContext& gfxContext = GraphicsContext::Begin(L"Scene Render");
 
@@ -1503,7 +1497,7 @@ void RadianceCascades::FullScreenCopyCompute(ColorBuffer& source, ColorBuffer& d
 	FullScreenCopyCompute(source, source.GetSRV(), dest);
 }
 
-InternalModelInstance& RadianceCascades::AddModelInstance(ModelID modelID)
+InternalModelInstance* RadianceCascades::AddModelInstance(ModelID modelID)
 {
 	ASSERT(m_sceneModels.size() < MAX_INSTANCES);
 	std::shared_ptr<Model> modelPtr = RuntimeResourceManager::GetModelPtr(modelID);
@@ -1514,33 +1508,42 @@ InternalModelInstance& RadianceCascades::AddModelInstance(ModelID modelID)
 		LOG_ERROR(L"Model was invalid. Using backup model instead. If Sponza model is missing, download a Sponza PBR gltf model online.");
 	}
 
-	return m_sceneModels.emplace_back(modelPtr, modelID);
+	return &m_sceneModels.emplace_back(modelPtr, modelID);
 }
 
-std::unordered_map<ModelID, std::vector<Utils::GPUMatrix>> RadianceCascades::GetBLASInstances()
+void RadianceCascades::AddSceneModel(ModelID modelID, const ModelInstanceDesc& modelInstanceDesc)
 {
-	std::unordered_map<ModelID, std::vector<Utils::GPUMatrix>> blasInstances = {};
+	InternalModelInstance* modelInstance = AddModelInstance(modelID);
+	
+	modelInstance->Resize(modelInstanceDesc.scale * modelInstance->GetRadius());
+	modelInstance->GetTransform().SetTranslation(modelInstanceDesc.position - modelInstance->GetBoundingBox().GetCenter());
+	modelInstance->updateScript = modelInstanceDesc.updateScript;
+}
+
+std::unordered_map<ModelID, std::vector<Utils::GPUMatrix>> RadianceCascades::GetGroupedModelInstances()
+{
+	std::unordered_map<ModelID, std::vector<Utils::GPUMatrix>> groupedModelInsances = {};
 
 	for (InternalModelInstance& modelInstance : m_sceneModels)
 	{
 		ModelID modelID = modelInstance.underlyingModelID;
 		Math::Matrix4 mat = Math::Matrix4(modelInstance.GetTransform());
-		blasInstances[modelID].push_back(mat);
+		groupedModelInsances[modelID].push_back(mat);
 	}
 
-	return blasInstances;
+	return groupedModelInsances;
 }
 
 std::vector<TLASInstanceGroup> RadianceCascades::GetTLASInstanceGroups()
 {
-	std::unordered_map<ModelID, std::vector<Utils::GPUMatrix>> blasInstances = GetBLASInstances();
+	std::unordered_map<ModelID, std::vector<Utils::GPUMatrix>> groupedModelInstances = GetGroupedModelInstances();
 
 	std::vector<TLASInstanceGroup> instanceGroups = {};
-	for (auto& [key, value] : blasInstances)
+	for (auto& [modelID, transforms] : groupedModelInstances)
 	{
 		TLASInstanceGroup instanceGroup = {};
-		instanceGroup.blasBuffer = &RuntimeResourceManager::GetModelBLAS(key);
-		instanceGroup.instanceTransforms = value;
+		instanceGroup.blasBuffer = &RuntimeResourceManager::GetModelBLAS(modelID);
+		instanceGroup.instanceTransforms = transforms;
 
 		instanceGroups.push_back(instanceGroup);
 	}
