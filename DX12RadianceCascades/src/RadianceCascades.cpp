@@ -116,7 +116,13 @@ namespace
 }
 
 RadianceCascades::RadianceCascades()
-	: m_mainViewport({}), m_mainScissor({})
+	: m_mainViewport({}), 
+	m_mainScissor({}), 
+	m_rcManager3D(
+		m_settings.rcSettings.rayLength0, 
+		true, 
+		m_settings.rcSettings.useDepthAwareMerging
+	)
 {
 	m_sceneModels.reserve(MAX_INSTANCES);
 }
@@ -710,6 +716,8 @@ void RadianceCascades::InitializeRCResources()
 		m_minMaxDepthCopy.Create(L"Min Max Depth Copy", sceneDepthBuff.GetWidth(), sceneDepthBuff.GetHeight(), 1, DXGI_FORMAT_R32_FLOAT);
 		m_minMaxDepthMips.Create(L"Min Max Depth Mips", sceneDepthBuff.GetWidth() / 2, sceneDepthBuff.GetHeight() / 2, 0, DXGI_FORMAT_R32G32_FLOAT);
 
+		m_rcManager3D.Generate(4, 2, ::GetSceneColorWidth(), ::GetSceneColorHeight());
+
 		m_rcManager3D.Init(
 			m_settings.rcSettings.rayLength0,
 			m_settings.rcSettings.raysPerProbe0,
@@ -895,7 +903,7 @@ void RadianceCascades::RunRCGather(Camera& camera)
 		// Each texel in the depth needs to correspond to a probe.
 		uint32_t depthIndexOffset = 0;
 		{
-			const uint32_t probePerDim0 = (uint32_t)Math::Sqrt((float)m_rcManager3D.GetProbeCount(0));
+			const uint32_t probePerDim0 = (uint32_t)Math::Sqrt((float)m_rcManager3D.GetProbeCountOld(0));
 			const uint32_t probeScalingFactor = m_rcManager3D.GetProbeScalingFactor();
 
 			uint32_t depthTopWidth = m_minMaxDepthMips.GetWidth();

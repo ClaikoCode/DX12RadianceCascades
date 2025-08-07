@@ -16,6 +16,9 @@ struct RCGlobals
     uint cascadeCount;
     bool usePreAveraging;
     bool depthAwareMerging;
+    uint probeCount0X;
+    uint probeCount0Y;
+    uint probeSpacing0; // Spacing between probes in pixels.
 };
 
 struct CascadeInfo

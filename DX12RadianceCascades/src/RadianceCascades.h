@@ -75,7 +75,7 @@ struct RadianceCascadesSettings
 	bool useDepthAwareMerging = true;
 	uint32_t raysPerProbe0 = 16u;
 	uint32_t probesPerDim0 = 1024u;
-	uint32_t cascadeLevels = 7u;
+	uint32_t cascadeLevels = 6u;
 };
 
 #define ENABLE_RT (false)
