@@ -58,6 +58,12 @@ float4 GetBilinearSampleWeights(float2 ratios)
 // Depth val should be between 0 and 1 (NO LINEARIZATION REQUIRED)
 float3 WorldPosFromDepth(float depthVal, float2 uv, matrix invProjMatrix, matrix invViewMatrix)
 {
+    if (IsZero(depthVal))
+    {
+        // Infinitely far away if furthest away.
+        return float3(FLT_MAX, FLT_MAX, FLT_MAX);
+    }
+    
 	// Convert the uv to clip space
     float4 clipSpacePos = float4(uv * 2.0f - 1.0f, depthVal, 1.0f);
     clipSpacePos.y = -clipSpacePos.y;

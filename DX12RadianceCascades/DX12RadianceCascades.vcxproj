@@ -261,7 +261,9 @@ if %errorlevel% leq 3 exit 0</Command>
     <None Include="Assets\shaders\RCCommon.hlsli">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
     </None>
-    <None Include="Assets\shaders\RCCommon3D.hlsli" />
+    <None Include="Assets\shaders\RCCommon3D.hlsli">
+      <FileType>Document</FileType>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Assets\shaders\DebugDrawPS.hlsl">

@@ -30,11 +30,11 @@ struct GeometryOffsets
 
 ByteAddressBuffer geometryData : register(t0, space1);
 
-Texture2D<float4> albedoTex     : register(t1, space1);
+Texture2D<float4> albedoTex : register(t1, space1);
 Texture2D<float4> metalRoughTex : register(t2, space1);
-Texture2D<float4> occlusionTex  : register(t3, space1);
-Texture2D<float4> emissiveTex   : register(t4, space1);
-Texture2D<float4> normalTex     : register(t5, space1);
+Texture2D<float4> occlusionTex : register(t3, space1);
+Texture2D<float4> emissiveTex : register(t4, space1);
+Texture2D<float4> normalTex : register(t5, space1);
 
 ConstantBuffer<GeometryOffsets> geomOffsets : register(b0, space1);
 
@@ -43,7 +43,7 @@ ConstantBuffer<GeometryOffsets> geomOffsets : register(b0, space1);
 ConstantBuffer<RCGlobals> rcGlobals : register(b1);
 ConstantBuffer<CascadeInfo> cascadeInfo : register(b2);
 
-RWTexture2D<float4> depthTex : register(u1);
+RWTexture2D<float> depthTex : register(u1);
 
 float3 GetBarycentrics(float2 inputBarycentrics)
 {
@@ -100,34 +100,7 @@ inline RayDesc GenerateProbeRay(ProbeInfo3D probeInfo3D)
 {
     RayDesc ray;
 
-    float3 rayOrigin;
-    {
-        uint cascadeIndex = cascadeInfo.cascadeIndex;
-        int2 pixelPos = probeInfo3D.probeIndex;
-        
-        // TODO: Check if loading depth with discrete pixel positions is faulty.
-        // The world pos from depth is based on middle of pixel whilst this is not. This is a discrepency in the math.
-        // This may be faulty. Bind depth tex as a SRV instead and then use SampleLevel with 0.5 pixel offset
-        // using the cascade interval offset (same number as in C++). 
-        // Thinking about it further I think this is actually correct. The single value for a texel represents the depth of the probe and it is placed in the middle of the texel.
-        // It should not be interpolated. You should still try.
-        
-        // NOTE: For this application, depth is reversed for the camera. This means that Z=1 is the near plane and Z=0 is the far plane.
-        float depthVal = depthTex[pixelPos].g; // R is min, G is max.
-        
-        // Add small distance towards the camera to avoid wall clipping.
-        // This is incase probes spawn inside a wall and its rays will clip through the wall.
-        depthVal += 0.000001f;
-        
-        uint width;
-        uint height;
-        depthTex.GetDimensions(width, height);
-        
-        float2 texelSize = 1.0f / float2(width, height);
-        float3 worldPos = WorldPosFromDepth(depthVal, (float2(pixelPos) + 0.5f) * texelSize,  globalInfo.invProjMatrix, globalInfo.invViewMatrix);
-        
-        rayOrigin = worldPos;
-    }
+    float3 rayOrigin = GetProbeWorldPosRWTex(probeInfo3D, depthTex, globalInfo.invProjMatrix, globalInfo.invViewMatrix);
    
     ray.Origin = rayOrigin;
     ray.TMax = probeInfo3D.startDistance + probeInfo3D.range;
@@ -139,7 +112,8 @@ inline RayDesc GenerateProbeRay(ProbeInfo3D probeInfo3D)
 [shader("raygeneration")]
 void RayGenerationShader()
 {
-    ProbeInfo3D probeInfo3D = BuildProbeInfo3DDirFirst(DispatchRaysIndex().xy, cascadeInfo.cascadeIndex, rcGlobals);
+    uint2 pixelPos = DispatchRaysIndex().xy;
+    ProbeInfo3D probeInfo3D = BuildProbeInfo3DDirFirst(pixelPos, cascadeInfo.cascadeIndex, rcGlobals);
     RayDesc ray = GenerateProbeRay(probeInfo3D);
     
     RayPayload payload = { probeInfo3D.probeIndex, float4(0.0f, 0.0f, 0.0f, 0.0f) };
@@ -150,7 +124,7 @@ void RayGenerationShader()
     
     int sqrtRayCount = sqrt(probeInfo3D.rayCount);
     float4 radianceOutput = float4(0.0f, 0.0f, 0.0f, 0.0f);
-    if(rcGlobals.usePreAveraging)
+    if (rcGlobals.usePreAveraging)
     {
         int2 translationDims = sqrt(rcGlobals.rayScalingFactor);
         int2 baseRayIndex = probeInfo3D.rayIndex * translationDims;
@@ -182,13 +156,7 @@ void RayGenerationShader()
 [shader("anyhit")]
 void AnyHitShader(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr)
 {
-    //float3 barycentrics = float3(attr.barycentrics.xy, 1 - attr.barycentrics.x - attr.barycentrics.y);
-    //float3 triangleCentre = 1.0f / 3.0f;
-    //
-    //float distanceToCentre = length(triangleCentre - barycentrics);
-    //
-    //if (distanceToCentre < holeSize)
-    //    IgnoreHit();
+    // Empty
 }
 
 [shader("closesthit")]
@@ -214,7 +182,7 @@ void ClosestHitShader(inout RayPayload payload, in BuiltInTriangleIntersectionAt
     const float2 uv2 = LoadUVFromVertex(vertexByteOffsets.z, uvOffset);
     const float2 uv = BARYCENTRIC_NORMALIZATION(barycentrics, uv0, uv1, uv2);
     
-    float3 hitColor = emissiveTex.SampleLevel(sourceSampler, uv, 0).rgb * 10.0f;
+    float3 hitColor = emissiveTex.SampleLevel(sourceSampler, uv, 0).rgb * 4.0f;
     payload.result += float4(hitColor, 0.0f);
 }
 
@@ -226,7 +194,7 @@ void MissShader(inout RayPayload payload)
     float3 missColor;
     if (cascadeInfo.cascadeIndex == (rcGlobals.cascadeCount - 1))
     {
-        float3 sunDir = normalize(float3(1.0, 1.0, 1.0));
+        float3 sunDir = normalize(float3(1.0, 1.0, 0.0));
         missColor = SimpleSunsetSky(WorldRayDirection(), sunDir);
     }
     else

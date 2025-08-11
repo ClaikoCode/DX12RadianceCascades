@@ -35,7 +35,6 @@ __declspec(align(16)) struct RCGlobals
 {
 	uint32_t probeScalingFactor; // Per dim.
 	uint32_t rayScalingFactor;
-	uint32_t probeDim0;
 	uint32_t rayCount0;
 	float rayLength0;
 	uint32_t cascadeCount;

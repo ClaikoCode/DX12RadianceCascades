@@ -16,17 +16,14 @@ public:
 
 	void Generate(uint32_t raysPerProbe0, uint32_t probeSpacing0, uint32_t swapchainWidth, uint32_t swapchainHeight);
 
-	// Rays per probe needs to be power of 2 and larger than 8.
-	void Init(float rayLength0, uint32_t raysPerProbe0, uint32_t probesPerDim0, uint32_t cascadeIntervalCount, bool usePreAverage, bool useDepthAwareMerging);
-
 	void FillRCGlobalInfo(RCGlobals& rcGlobalInfo);
 
 	void ClearBuffers(GraphicsContext& gfxContext);
 	uint32_t GetRaysPerProbe(uint32_t cascadeIndex);
-	uint32_t GetProbeCountPerDim(uint32_t cascadeIndex);
-	uint32_t GetProbeCountOld(uint32_t cascadeIndex);
 	uint32_t GetProbeCount(uint32_t cascadeIndex);
 	ProbeDims GetProbeDims(uint32_t cascadeIndex);
+	uint32_t GetProbeSpacing() { return m_probeSpacing0; }
+	void SetProbeSpacing(uint32_t probeSpacing) { m_probeSpacing0 = probeSpacing; }
 
 	float GetStartT(uint32_t cascadeIndex);
 	float GetRayLength(uint32_t cascadeIndex);
@@ -40,7 +37,11 @@ public:
 	bool UsesPreAveragedIntervals() const { return m_preAveragedIntervals; }
 
 	ColorBuffer& GetCoalesceBuffer() { return m_coalescedResult; }
-	ColorBuffer& GetDepthMips() { return m_depthMips; }
+
+private:
+
+	// Will update resource managers descriptors of RC resources.
+	void UpdateResourceDescriptors();
 
 private:
 	struct ScalingFactor
@@ -51,11 +52,10 @@ private:
 
 	std::vector<ColorBuffer> m_cascadeIntervals;
 	ColorBuffer m_coalescedResult;
-	ColorBuffer m_depthMips;
 
 	float m_rayLength0;
 	uint32_t m_raysPerProbe0;
-	uint32_t m_probesPerDim0;
+	//uint32_t m_probesPerDim0;
 
 	// Signifies that the cascade textures will be 1 / rayscalingfactor of the original size.
 	bool m_preAveragedIntervals;

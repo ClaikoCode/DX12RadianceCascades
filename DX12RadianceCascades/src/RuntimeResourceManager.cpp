@@ -396,14 +396,35 @@ RaytracingDispatchRayInputs& RuntimeResourceManager::GetRaytracingDispatchImpl(R
 	return m_rayDispatchInputs[rayDispatchID];
 }
 
+void RuntimeResourceManager::AllocDescriptorImpl(const D3D12_CPU_DESCRIPTOR_HANDLE& handle)
+{
+	ASSERT(handle.ptr != D3D12_GPU_VIRTUAL_ADDRESS_NULL);
+	DescriptorHandle& destDescHandle = m_descriptorCopiedCBVSRVUAV[handle.ptr];
+	ASSERT(destDescHandle.IsNull());
+	destDescHandle = m_descHeap.Alloc(1);
+}
+
 void RuntimeResourceManager::CopyDescriptorImpl(const D3D12_CPU_DESCRIPTOR_HANDLE& handle)
 {
 	ASSERT(handle.ptr != D3D12_GPU_VIRTUAL_ADDRESS_NULL);
-
 	DescriptorHandle& destDescHandle = m_descriptorCopiedCBVSRVUAV[handle.ptr];
-	destDescHandle = m_descHeap.Alloc(1);
-
+	ASSERT(!destDescHandle.IsNull());
 	Graphics::g_Device->CopyDescriptorsSimple(1, destDescHandle, handle, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+}
+
+void RuntimeResourceManager::UpdateDescriptorImpl(const D3D12_CPU_DESCRIPTOR_HANDLE& handle)
+{
+	ASSERT(handle.ptr != D3D12_GPU_VIRTUAL_ADDRESS_NULL);
+
+	if (m_descriptorCopiedCBVSRVUAV.find(handle.ptr) == m_descriptorCopiedCBVSRVUAV.end())
+	{
+		AllocDescriptorImpl(handle);
+		CopyDescriptorImpl(handle);
+	}
+	else
+	{
+		CopyDescriptorImpl(handle);
+	}
 }
 
 const DescriptorHandle& RuntimeResourceManager::GetDescCopyImpl(const D3D12_CPU_DESCRIPTOR_HANDLE& handle)
@@ -411,6 +432,7 @@ const DescriptorHandle& RuntimeResourceManager::GetDescCopyImpl(const D3D12_CPU_
 	auto it = m_descriptorCopiedCBVSRVUAV.find(handle.ptr);
 	if (it == m_descriptorCopiedCBVSRVUAV.end())
 	{
+		AllocDescriptorImpl(handle);
 		CopyDescriptorImpl(handle);
 	}
 
