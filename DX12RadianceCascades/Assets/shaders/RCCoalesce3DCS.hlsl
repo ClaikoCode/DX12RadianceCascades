@@ -34,7 +34,7 @@ void main( uint3 DTid : SV_DispatchThreadID )
         {
             for (int k = 0; k < rayCount0Sqrt; k++)
             {
-                int2 rayOffset = rcGlobals.probeDim0 * int2(i, k);
+                int2 rayOffset = int2(rcGlobals.probeCount0X, rcGlobals.probeCount0Y) * int2(i, k);
                 int2 samplePoint = probePos + rayOffset;
                 
                 summedRadiance += cascade0Tex[samplePoint];
