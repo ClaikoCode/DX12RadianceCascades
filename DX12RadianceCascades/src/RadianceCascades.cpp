@@ -351,7 +351,7 @@ void RadianceCascades::InitializeScene()
 		{
 			Math::Vector3 modelCenter = GetMainSceneModelCenter();
 
-			AddSceneModel(ModelIDSphereTest, { 100.0f, Vector3(0.0f, -200.0f, 0.0f) + modelCenter });
+			AddSceneModel(ModelIDSphereTest, { 100.0f, Vector3(0.0f, -200.0f, 0.0f) + modelCenter, {}, ::PosOscillationScript });
 			AddSceneModel(ModelIDSphereTest, { 50.0f, Vector3(200.0f, -300.0f, 500.0f) + modelCenter });
 			AddSceneModel(ModelIDSphereTest, { 30.0f, Vector3(200.0f, -300.0f, -500.0f) + modelCenter });
 
