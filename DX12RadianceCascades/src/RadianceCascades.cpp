@@ -327,7 +327,7 @@ void RadianceCascades::RenderUI(GraphicsContext& uiContext)
 	{
 		DrawSettingsUI();
 
-#if defined(_DEBUG)
+#if defined(PROFILE_GPU)
 		GPUProfiler::Get().DrawProfilerUI();
 #endif
 	}
