@@ -56,6 +56,7 @@ struct ModelInstanceDesc
 {
 	float scale = 1.0f;
 	Math::Vector3 position = { 0.0f, 0.0f, 0.0f };
+	Math::Quaternion rotation = Math::Quaternion::Quaternion(Math::EIdentityTag::kIdentity);
 	UpdateScript updateScript = {};
 };
 

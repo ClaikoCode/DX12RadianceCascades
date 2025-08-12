@@ -179,8 +179,11 @@ void ClosestHitShader(inout RayPayload payload, in BuiltInTriangleIntersectionAt
     }
     
     
+    float3 emissiveColor = emissiveTex.SampleLevel(sourceSampler, uv, 0).rgb;
+    float4 albedoColor = albedoTex.SampleLevel(sourceSampler, uv, 0);
     
-    renderOutput[pixelIndex] = float4(emissiveTex.SampleLevel(sourceSampler, uv, 0).rgb, 1);
+    renderOutput[pixelIndex] = albedoColor + float4(emissiveColor, 0.0f);
+    //renderOutput[pixelIndex] = float4(emissiveTex.SampleLevel(sourceSampler, uv, 0).rgb, 1);
     //renderOutput[pixelIndex] = float4(intersectionPoint, 1);
 }
 

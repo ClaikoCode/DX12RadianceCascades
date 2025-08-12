@@ -182,7 +182,7 @@ void ClosestHitShader(inout RayPayload payload, in BuiltInTriangleIntersectionAt
     const float2 uv2 = LoadUVFromVertex(vertexByteOffsets.z, uvOffset);
     const float2 uv = BARYCENTRIC_NORMALIZATION(barycentrics, uv0, uv1, uv2);
     
-    float3 hitColor = emissiveTex.SampleLevel(sourceSampler, uv, 0).rgb * 4.0f;
+    float3 hitColor = emissiveTex.SampleLevel(sourceSampler, uv, 0).rgb * 10.0f;
     payload.result += float4(hitColor, 0.0f);
 }
 
