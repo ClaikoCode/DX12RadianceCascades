@@ -1,5 +1,7 @@
 #include "rcpch.h"
 
+#include "Core\Display.h"
+
 #include "Model\ModelLoader.h"
 #include "Model\Renderer.h"
 
@@ -29,6 +31,94 @@ static const std::wstring s_BackupModelPath = L"models\\Testing\\SphereTest.gltf
 #define SAMPLE_LEN_0 20.0f
 #define RAYS_PER_PROBE_0 4.0f
 #define CAM_FOV 90.0f
+
+enum TestSuite
+{
+	// Test suite indices.
+	TestSuiteRaysPerProbe0 = 0,
+	TestSuiteProbeSpacing0,
+	TestSuiteMaxAllowedCascadeLevels,
+
+	// Total number of test suites.
+	TestSuiteCount
+};
+
+struct TestSuiteData
+{
+	std::array<uint32_t, TestSuiteCount> testIndices;
+
+	std::vector<std::pair<const char*, float>> averageFrametimes; // Pair of profile name and average time in ms.
+};
+
+struct TestSetup
+{
+	uint32_t framesBetweenTests;
+
+	std::vector<uint32_t> raysPerProbe0Vals;
+	std::vector<uint32_t> probeSpacing0Vals;
+	std::vector<uint32_t> maxAllowedCascadeLevelsVals;
+
+	std::vector<TestSuiteData> testSuites;
+
+	// Updates every frame and resets when frames between tests is reached.
+	uint32_t currentFrameCount = 0;
+
+	// Increments every frame and resets when frames between tests is reached.
+	uint32_t currentTestSuiteIndex = 0;
+
+	void WriteTestSuiteToCSVFile()
+	{
+		std::wstring fileName = std::format(L"RadianceCascadesTestResult_{}x{}", Graphics::g_DisplayWidth, Graphics::g_DisplayHeight);
+		std::wofstream fileStream(fileName);
+		if (!fileStream.is_open())
+		{
+			throw std::runtime_error("Failed to open file for writing test suite data.");
+		}
+
+		LOG_INFO(L"Writing test suite data to file: {}", fileName);
+
+		// Add names for each column in the CSV file.
+		fileStream << L"RaysPerProbe,ProbeSpacing,MaxCascadeLevels";
+
+		// Also add names of each average frame time as headers.
+		for(const auto& averageFrameTime : testSuites[0].averageFrametimes)
+		{
+			fileStream << L"," << averageFrameTime.first;
+		}
+		fileStream << L"\n";
+
+		// Add each test suite's data to the CSV file.
+		for(size_t i = 0; i < testSuites.size(); i++)
+		{
+			uint32_t raysPerProbeValueIndex = testSuites[i].testIndices[TestSuiteRaysPerProbe0];
+			uint32_t probeSpacingValueIndex = testSuites[i].testIndices[TestSuiteProbeSpacing0];
+			uint32_t cascadeLevelValueIndex = testSuites[i].testIndices[TestSuiteMaxAllowedCascadeLevels];
+
+			fileStream
+				<< raysPerProbe0Vals[raysPerProbeValueIndex] << L","
+				<< probeSpacing0Vals[probeSpacingValueIndex] << L","
+				<< maxAllowedCascadeLevelsVals[cascadeLevelValueIndex] << L",";
+
+			for (const auto& averageFrameTime : testSuites[i].averageFrametimes)
+			{
+				fileStream << averageFrameTime.second << L",";
+			}
+
+			// Remove the last comma
+			if (fileStream.tellp() > 0)
+			{
+				fileStream.seekp(-1, std::ios_base::end);
+			}
+
+			fileStream << L"\n";
+		}
+
+		fileStream.close();
+	}
+};
+
+static TestSetup sTestSetup;
+
 
 typedef ComputeContext RaytracingContext;
 
@@ -113,6 +203,37 @@ namespace
 
 		transform.SetTranslation(position);
 	}
+
+	void InitTestSetup()
+	{
+		sTestSetup.framesBetweenTests = 64u;
+
+		// Simple test setup
+		//sTestSetup.maxAllowedCascadeLevelsVals = { 5 };
+		//sTestSetup.probeSpacing0Vals = { 2 };
+		//sTestSetup.raysPerProbe0Vals = { 16 };
+
+		// Full test setup
+		sTestSetup.maxAllowedCascadeLevelsVals = { 5, 6, 7, 8 };
+		sTestSetup.probeSpacing0Vals = { 1, 2, 3, 4 };
+		sTestSetup.raysPerProbe0Vals = { 16, 64 };
+
+		for (size_t clI = 0; clI < sTestSetup.maxAllowedCascadeLevelsVals.size(); clI++)
+		{
+			for(size_t psI = 0; psI < sTestSetup.probeSpacing0Vals.size(); psI++)
+			{
+				for (size_t rppI = 0; rppI < sTestSetup.raysPerProbe0Vals.size(); rppI++)
+				{
+					TestSuiteData testSuite;
+					testSuite.testIndices[TestSuiteRaysPerProbe0] = uint32_t(rppI);
+					testSuite.testIndices[TestSuiteProbeSpacing0] = uint32_t(psI);
+					testSuite.testIndices[TestSuiteMaxAllowedCascadeLevels] = uint32_t(clI);
+
+					sTestSetup.testSuites.push_back(testSuite);
+				}
+			}
+		}
+	}
 }
 
 RadianceCascades::RadianceCascades()
@@ -125,6 +246,10 @@ RadianceCascades::RadianceCascades()
 	)
 {
 	m_sceneModels.reserve(MAX_INSTANCES);
+
+#if defined(RUN_TESTS)
+	::InitTestSetup();
+#endif
 }
 
 RadianceCascades::~RadianceCascades()
@@ -201,6 +326,80 @@ void RadianceCascades::Update(float deltaT)
 			m_cameraController->Update(deltaT);
 		}
 	}
+
+#if defined(RUN_TESTS)
+	if(sTestSetup.currentFrameCount >= sTestSetup.framesBetweenTests || sTestSetup.currentTestSuiteIndex == 0)
+	{
+		sTestSetup.currentFrameCount = 0;
+
+		if (sTestSetup.currentTestSuiteIndex > 0)
+		{
+			TestSuiteData& previousTestSuite = sTestSetup.testSuites[sTestSetup.currentTestSuiteIndex - 1];
+			// Calculate and write frametime info for the previous test suite.
+			auto& profiles = GPUProfiler::Get().GetProfiles();
+			for (const auto& profile : profiles)
+			{
+				if (profile.name == nullptr)
+				{
+					continue; // Skip null profiles.
+				}
+
+				float frametimeSum = 0.0f;
+				for (float frameTime : profile.timeSamples)
+				{
+					frametimeSum += frameTime;
+				}
+
+				previousTestSuite.averageFrametimes.push_back({ profile.name, frametimeSum / profile.timeSamples.size() });
+			}
+		}
+
+		if (sTestSetup.currentTestSuiteIndex < sTestSetup.testSuites.size())
+		{
+			TestSuiteData& currentTestSuite = sTestSetup.testSuites[sTestSetup.currentTestSuiteIndex];
+			const auto& testIndices = currentTestSuite.testIndices;
+			
+			uint32_t raysPerProbe0 = sTestSetup.raysPerProbe0Vals[testIndices[TestSuiteRaysPerProbe0]];
+			uint32_t probeSpacing0 = sTestSetup.probeSpacing0Vals[testIndices[TestSuiteProbeSpacing0]];
+			uint32_t maxAllowedCascadeLevels = sTestSetup.maxAllowedCascadeLevelsVals[testIndices[TestSuiteMaxAllowedCascadeLevels]];
+
+			m_rcManager3D.Generate(
+				raysPerProbe0,
+				probeSpacing0,
+				::GetSceneColorWidth(),
+				::GetSceneColorHeight(),
+				maxAllowedCascadeLevels
+			);
+
+			// Update settings
+			m_settings.rcSettings.raysPerProbe0 = raysPerProbe0;
+			m_settings.rcSettings.probeSpacing0 = probeSpacing0;
+
+			LOG_INFO(
+				L"Running test suite {}/{} ({}%): RaysPerProbe0 = {}, ProbeSpacing0 = {}, MaxAllowedCascadeLevels = {}",
+				sTestSetup.currentTestSuiteIndex + 1,
+				sTestSetup.testSuites.size(),
+				(sTestSetup.currentTestSuiteIndex + 1) * 100 / sTestSetup.testSuites.size(),
+				raysPerProbe0,
+				probeSpacing0,
+				maxAllowedCascadeLevels
+			);
+
+			sTestSetup.currentTestSuiteIndex++;
+		}
+		else
+		{
+			sTestSetup.WriteTestSuiteToCSVFile();
+
+			// All tests are done, quit the application.
+			m_shouldQuit = true;
+		}
+	}
+	else
+	{
+		sTestSetup.currentFrameCount++;
+	}
+#endif
 
 
 	GraphicsContext& gfxContext = GraphicsContext::Begin(L"Scene Update");
@@ -297,8 +496,6 @@ void RadianceCascades::RenderScene()
 		RenderRaytracing(Graphics::g_SceneColorBuffer, renderCamera);
 	}
 
-	
-
 	// Keep render debug last in pipeline.
 	if (m_settings.globalSettings.renderDebugLines)
 	{
@@ -313,14 +510,22 @@ void RadianceCascades::RenderScene()
 			m_settings.globalSettings.useDepthCheckForDebugLines
 		);
 	}
+
+	// Update timing info
+	{
+		uint64_t timestampFrequency;
+		ThrowIfFailed(Graphics::g_CommandManager.GetCommandQueue()->GetTimestampFrequency(&timestampFrequency));
+
+		GPUProfiler::Get().UpdateData(timestampFrequency);
+	}
 }
 
 void RadianceCascades::RenderUI(GraphicsContext& uiContext)
 {
-	uint64_t timestampFrequency;
-	ThrowIfFailed(Graphics::g_CommandManager.GetCommandQueue()->GetTimestampFrequency(&timestampFrequency));
 
-	GPUProfiler::Get().UpdateData(timestampFrequency);
+#if defined(RUN_TESTS)
+	return; // Skip UI rendering when test running is enabled.
+#endif
 
 	AppGUI::NewFrame();
 
@@ -334,6 +539,19 @@ void RadianceCascades::RenderUI(GraphicsContext& uiContext)
 
 	// Render UI
 	AppGUI::Render(uiContext);
+
+}
+
+bool RadianceCascades::IsDone()
+{
+	bool isDone = m_shouldQuit || GameInput::IsFirstPressed(GameInput::kKey_escape);
+
+	if( isDone )
+	{
+		LOG_INFO(L"RadianceCascades application is done and will quit.");
+	}
+
+	return isDone;
 }
 
 void RadianceCascades::InitializeScene()

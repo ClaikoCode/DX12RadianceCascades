@@ -14,7 +14,7 @@ public:
 	RadianceCascadeManager3D() = default;
 	RadianceCascadeManager3D(float rayLength0, bool usePreAverage, bool useDepthAwareMerging);
 
-	void Generate(uint32_t raysPerProbe0, uint32_t probeSpacing0, uint32_t swapchainWidth, uint32_t swapchainHeight);
+	void Generate(uint32_t raysPerProbe0, uint32_t probeSpacing0, uint32_t swapchainWidth, uint32_t swapchainHeight, uint32_t maxAllowedCascadeLevels = 8u);
 
 	void FillRCGlobalInfo(RCGlobals& rcGlobalInfo);
 
