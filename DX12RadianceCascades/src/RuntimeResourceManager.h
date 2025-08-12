@@ -14,7 +14,7 @@ enum ModelID : UUID64
 {
 	ModelIDSponza = 0,
 	ModelIDSphereTest,
-	ModelIDPlane,
+	ModelIDLantern,
 };
 
 enum RayDispatchID : uint32_t
@@ -117,8 +117,9 @@ public:
 	static GraphicsPSO& GetGraphicsPSO(PSOID gfxPSOID) { return Get().GetGraphicsPSOImpl(gfxPSOID); }
 	static ComputePSO& GetComputePSO(PSOID cmptPSOID) { return Get().GetComputePSOImpl(cmptPSOID); }
 
-	static void CopyDescriptor(const D3D12_CPU_DESCRIPTOR_HANDLE& handle) { return Get().CopyDescriptorImpl(handle); }
-	// Will copy the descriptor if it doesnt exist already.
+	static void UpdateDescriptor(const D3D12_CPU_DESCRIPTOR_HANDLE& handle) { Get().UpdateDescriptorImpl(handle); }
+	static void CopyDescriptor(const D3D12_CPU_DESCRIPTOR_HANDLE& handle) { Get().CopyDescriptorImpl(handle); }
+	// Will allocate and copy the descriptor if it doesnt exist already.
 	// This is only for UAV, SRV, and CBV
 	static const DescriptorHandle& GetDescCopy(const D3D12_CPU_DESCRIPTOR_HANDLE& handle) { return Get().GetDescCopyImpl(handle); }
 
@@ -159,10 +160,14 @@ private:
 	void BuildRaytracingDispatchInputsImpl(PSOID psoID, std::set<ModelID>& models, RayDispatchID rayDispatchID);
 	RaytracingDispatchRayInputs& GetRaytracingDispatchImpl(RayDispatchID rayDispatchID);
 
+	void AllocDescriptorImpl(const D3D12_CPU_DESCRIPTOR_HANDLE& handle);
 	void CopyDescriptorImpl(const D3D12_CPU_DESCRIPTOR_HANDLE& handle);
+	void UpdateDescriptorImpl(const D3D12_CPU_DESCRIPTOR_HANDLE& handle);
 	const DescriptorHandle& GetDescCopyImpl(const D3D12_CPU_DESCRIPTOR_HANDLE& handle);
 
 	void DestroyImpl();
+
+
 
 private:
 	DescriptorHeap m_descHeap;
