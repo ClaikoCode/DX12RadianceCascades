@@ -243,59 +243,61 @@ void RadianceCascades::RenderScene()
 	if (m_settings.globalSettings.renderMode == GlobalSettings::RenderModeRaster)
 	{
 		RenderRaster(Graphics::g_SceneColorBuffer, Graphics::g_SceneDepthBuffer, renderCamera, m_mainViewport, m_mainScissor);
+
+		if (m_settings.rcSettings.renderRC3D)
+		{
+			//if (m_settings.globalSettings.useDebugCam)
+			//{
+			//	BuildMinMaxDepthBuffer(m_debugCamDepthBuffer);
+			//}
+			//else
+			//{
+			//	BuildMinMaxDepthBuffer(Graphics::g_SceneDepthBuffer);
+			//}
+
+			RunRCGather(renderCamera, Graphics::g_SceneDepthBuffer);
+
+			if (m_settings.rcSettings.visualizeRC3DGatherCascades)
+			{
+				FullScreenCopyCompute(m_rcManager3D.GetCascadeIntervalBuffer(m_settings.rcSettings.cascadeVisIndex), Graphics::g_SceneColorBuffer);
+			}
+			else
+			{
+				RunRCMerge(renderCamera, m_minMaxDepthMips);
+
+				if (m_settings.rcSettings.visualizeRC3DMergeCascades)
+				{
+					FullScreenCopyCompute(m_rcManager3D.GetCascadeIntervalBuffer(m_settings.rcSettings.cascadeVisIndex), Graphics::g_SceneColorBuffer);
+				}
+				else
+				{
+					RunRCCoalesce();
+
+					if (m_settings.rcSettings.seeCoalesceResult)
+					{
+						FullScreenCopyCompute(m_rcManager3D.GetCoalesceBuffer(), Graphics::g_SceneColorBuffer);
+					}
+					else
+					{
+						// Copy scene color to albedo buffer.
+						FullScreenCopyCompute(Graphics::g_SceneColorBuffer, m_albedoBuffer);
+						RunDeferredLightingPass(
+							m_albedoBuffer,
+							Graphics::g_SceneNormalBuffer,
+							m_rcManager3D.GetCoalesceBuffer(),
+							Graphics::g_SceneColorBuffer
+						);
+					}
+				}
+			}
+		}
 	}
 	else if (m_settings.globalSettings.renderMode == GlobalSettings::RenderModeRT)
 	{
 		RenderRaytracing(Graphics::g_SceneColorBuffer, renderCamera);
 	}
 
-	if (m_settings.rcSettings.renderRC3D)
-	{
-		//if (m_settings.globalSettings.useDebugCam)
-		//{
-		//	BuildMinMaxDepthBuffer(m_debugCamDepthBuffer);
-		//}
-		//else
-		//{
-		//	BuildMinMaxDepthBuffer(Graphics::g_SceneDepthBuffer);
-		//}
-
-		RunRCGather(renderCamera, Graphics::g_SceneDepthBuffer);
-		
-		if (m_settings.rcSettings.visualizeRC3DGatherCascades)
-		{
-			FullScreenCopyCompute(m_rcManager3D.GetCascadeIntervalBuffer(m_settings.rcSettings.cascadeVisIndex), Graphics::g_SceneColorBuffer);
-		}
-		else
-		{
-			RunRCMerge(renderCamera, m_minMaxDepthMips);
-
-			if (m_settings.rcSettings.visualizeRC3DMergeCascades)
-			{
-				FullScreenCopyCompute(m_rcManager3D.GetCascadeIntervalBuffer(m_settings.rcSettings.cascadeVisIndex), Graphics::g_SceneColorBuffer);
-			}
-			else
-			{
-				RunRCCoalesce();
-
-				if (m_settings.rcSettings.seeCoalesceResult)
-				{
-					FullScreenCopyCompute(m_rcManager3D.GetCoalesceBuffer(), Graphics::g_SceneColorBuffer);
-				}
-				else
-				{
-					// Copy scene color to albedo buffer.
-					FullScreenCopyCompute(Graphics::g_SceneColorBuffer, m_albedoBuffer);
-					RunDeferredLightingPass(
-						m_albedoBuffer,
-						Graphics::g_SceneNormalBuffer,
-						m_rcManager3D.GetCoalesceBuffer(),
-						Graphics::g_SceneColorBuffer
-					);
-				}
-			}
-		}
-	}
+	
 
 	// Keep render debug last in pipeline.
 	if (m_settings.globalSettings.renderDebugLines)
@@ -349,14 +351,22 @@ void RadianceCascades::InitializeScene()
 		{
 			Math::Vector3 modelCenter = GetMainSceneModelCenter();
 
-			AddSceneModel(ModelIDSphereTest, { 100.0f, Vector3(0.0f, -200.0f, 0.0f) + modelCenter, ::PosOscillationScript});
+			AddSceneModel(ModelIDSphereTest, { 100.0f, Vector3(0.0f, -200.0f, 0.0f) + modelCenter });
 			AddSceneModel(ModelIDSphereTest, { 50.0f, Vector3(200.0f, -300.0f, 500.0f) + modelCenter });
 			AddSceneModel(ModelIDSphereTest, { 30.0f, Vector3(200.0f, -300.0f, -500.0f) + modelCenter });
+
+			AddSceneModel(ModelIDLantern, { 25.0f, Vector3(1100.0f, -500.0f, 0.0f) + modelCenter, Math::Quaternion(0.0f, Math::XM_PI, 0.0f)});
 		}
+
+
 	}
 	else if (sceneIndex == 1)
 	{
 		AddSceneModel(ModelIDSphereTest, { 100.0f, Vector3(0.0f, 0.0f, 0.0f) });
+	}
+	else if (sceneIndex == 2)
+	{
+		AddSceneModel(ModelIDLantern, { 100.0f });
 	}
 
 	// Setup camera
@@ -1554,8 +1564,11 @@ void RadianceCascades::AddSceneModel(ModelID modelID, const ModelInstanceDesc& m
 {
 	InternalModelInstance* modelInstance = AddModelInstance(modelID);
 	
-	modelInstance->Resize(modelInstanceDesc.scale * modelInstance->GetRadius());
-	modelInstance->GetTransform().SetTranslation(modelInstanceDesc.position - modelInstance->GetBoundingBox().GetCenter());
+	Math::UniformTransform& instanceTransform = modelInstance->GetTransform();
+	instanceTransform.SetScale(modelInstanceDesc.scale);
+	instanceTransform.SetRotation(modelInstanceDesc.rotation);
+	instanceTransform.SetTranslation(modelInstanceDesc.position - modelInstance->GetBoundingBox().GetCenter());
+
 	modelInstance->updateScript = modelInstanceDesc.updateScript;
 }
 
