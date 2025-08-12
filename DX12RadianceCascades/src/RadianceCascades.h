@@ -25,6 +25,11 @@
 #define ENABLE_DEBUG_DRAW 0
 #endif
 
+#if defined(PROFILE_GPU)
+// Uncomment to run tests.
+//#define RUN_TESTS
+#endif
+
 typedef std::function<void(ModelInstance*, float, float)> UpdateScript;
 
 class InternalModelInstance : public ModelInstance
@@ -210,6 +215,8 @@ public:
 
 	virtual bool RequiresRaytracingSupport() const override { return true; }
 
+	virtual bool IsDone() override;
+
 private:
 	void InitializeScene();
 	void InitializePSOs();
@@ -259,6 +266,7 @@ private:
 	std::vector<TLASInstanceGroup> GetTLASInstanceGroups();
 
 private:
+	bool m_shouldQuit = false;
 
 	AppSettings m_settings = {};
 

@@ -9,7 +9,7 @@
 #include "RuntimeResourceManager.h"
 
 constexpr DXGI_FORMAT DefaultFormat = DXGI_FORMAT_R16G16B16A16_FLOAT;
-constexpr uint32_t MaximumAllowedCascadeLevels = 8u;
+
 
 RadianceCascadeManager3D::RadianceCascadeManager3D(float rayLength0, bool usePreAverage, bool useDepthAwareMerging)
 	: m_rayLength0(rayLength0), 
@@ -23,7 +23,7 @@ RadianceCascadeManager3D::RadianceCascadeManager3D(float rayLength0, bool usePre
 	// Empty
 }
 
-void RadianceCascadeManager3D::Generate(uint32_t raysPerProbe0, uint32_t probeSpacing0, uint32_t swapchainWidth, uint32_t swapchainHeight)
+void RadianceCascadeManager3D::Generate(uint32_t raysPerProbe0, uint32_t probeSpacing0, uint32_t swapchainWidth, uint32_t swapchainHeight, uint32_t maxAllowedCascadeLevels /*= 8*/)
 {
 	// Make sure no work is on the GPU before generating.
 	Graphics::g_CommandManager.IdleGPU();
@@ -36,17 +36,17 @@ void RadianceCascadeManager3D::Generate(uint32_t raysPerProbe0, uint32_t probeSp
 	const uint32_t probeCount0Y = uint32_t(Math::Floor(swapchainHeight / (float)probeSpacing0));
 
 	const uint32_t minCount = probeCount0Y < probeCount0X ? probeCount0Y : probeCount0X;
-	uint32_t maxCascadeLevels = uint32_t(Math::Floor(Math::LogAB((float)m_scalingFactor.probeScalingFactor, (float)minCount)));
-	if (maxCascadeLevels > MaximumAllowedCascadeLevels)
+	uint32_t maxCalculatedCascadeLevels = uint32_t(Math::Floor(Math::LogAB((float)m_scalingFactor.probeScalingFactor, (float)minCount)));
+	if (maxCalculatedCascadeLevels > maxAllowedCascadeLevels)
 	{
-		maxCascadeLevels = MaximumAllowedCascadeLevels;
+		maxCalculatedCascadeLevels = maxAllowedCascadeLevels;
 	}
 
-	m_cascadeIntervals.resize(maxCascadeLevels);
+	m_cascadeIntervals.resize(maxCalculatedCascadeLevels);
 
 	uint32_t raysPerProbe = raysPerProbe0;
 	ProbeDims probeDims = { probeCount0X, probeCount0Y };
-	for (uint32_t i = 0; i < maxCascadeLevels; i++)
+	for (uint32_t i = 0; i < maxCalculatedCascadeLevels; i++)
 	{
 		std::wstring cascadeName = std::wstring(L"Cascade Interval ") + std::to_wstring(i);
 

@@ -9,7 +9,7 @@
 constexpr uint32_t MaxProfiles = 16u;
 constexpr uint32_t MaxQueries = MaxProfiles * 2; // Two queries per profile.
 
-constexpr uint32_t MaxSampleCount = 256u;
+constexpr uint32_t MaxSampleCount = 64u;
 
 #if defined(PROFILE_GPU)
 	#define GPU_PROFILE_BLOCK(name, context) PerfProfileBlock CONCAT(profileBlock, __LINE__)(context, name)
@@ -74,6 +74,7 @@ public:
 	// Will return a profile index.
 	uint32_t StartPerformanceProfile(ID3D12GraphicsCommandList* commandList, const char* name);
 	void EndPerformanceProfile(ID3D12GraphicsCommandList* commandList, uint32_t profileIndex);
+	const std::array<PerfProfile, MaxProfiles>& GetProfiles() const { return m_profiles; }
 
 	// Returns just created profile.
 	std::shared_ptr<MemoryProfileNode> PushMemoryProfile(const char* name);
