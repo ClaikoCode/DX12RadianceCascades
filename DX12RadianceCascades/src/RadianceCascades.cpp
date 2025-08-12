@@ -101,7 +101,7 @@ namespace
 		gfxContext.SetRootSignature(pso.GetRootSignature());
 	}
 
-	void PosOscillation(ModelInstance* modelInstance, float deltaTime, float time)
+	void PosOscillationScript(ModelInstance* modelInstance, float deltaTime, float time)
 	{
 		UniformTransform& transform = modelInstance->GetTransform();
 		Vector3 centerPoint = Vector3(0.0f, 0.0f, 0.0f);
@@ -116,7 +116,13 @@ namespace
 }
 
 RadianceCascades::RadianceCascades()
-	: m_mainViewport({}), m_mainScissor({})
+	: m_mainViewport({}), 
+	m_mainScissor({}), 
+	m_rcManager3D(
+		m_settings.rcSettings.rayLength0, 
+		true, 
+		m_settings.rcSettings.useDepthAwareMerging
+	)
 {
 	m_sceneModels.reserve(MAX_INSTANCES);
 }
@@ -237,59 +243,61 @@ void RadianceCascades::RenderScene()
 	if (m_settings.globalSettings.renderMode == GlobalSettings::RenderModeRaster)
 	{
 		RenderRaster(Graphics::g_SceneColorBuffer, Graphics::g_SceneDepthBuffer, renderCamera, m_mainViewport, m_mainScissor);
+
+		if (m_settings.rcSettings.renderRC3D)
+		{
+			//if (m_settings.globalSettings.useDebugCam)
+			//{
+			//	BuildMinMaxDepthBuffer(m_debugCamDepthBuffer);
+			//}
+			//else
+			//{
+			//	BuildMinMaxDepthBuffer(Graphics::g_SceneDepthBuffer);
+			//}
+
+			RunRCGather(renderCamera, Graphics::g_SceneDepthBuffer);
+
+			if (m_settings.rcSettings.visualizeRC3DGatherCascades)
+			{
+				FullScreenCopyCompute(m_rcManager3D.GetCascadeIntervalBuffer(m_settings.rcSettings.cascadeVisIndex), Graphics::g_SceneColorBuffer);
+			}
+			else
+			{
+				RunRCMerge(renderCamera, m_minMaxDepthMips);
+
+				if (m_settings.rcSettings.visualizeRC3DMergeCascades)
+				{
+					FullScreenCopyCompute(m_rcManager3D.GetCascadeIntervalBuffer(m_settings.rcSettings.cascadeVisIndex), Graphics::g_SceneColorBuffer);
+				}
+				else
+				{
+					RunRCCoalesce();
+
+					if (m_settings.rcSettings.seeCoalesceResult)
+					{
+						FullScreenCopyCompute(m_rcManager3D.GetCoalesceBuffer(), Graphics::g_SceneColorBuffer);
+					}
+					else
+					{
+						// Copy scene color to albedo buffer.
+						FullScreenCopyCompute(Graphics::g_SceneColorBuffer, m_albedoBuffer);
+						RunDeferredLightingPass(
+							m_albedoBuffer,
+							Graphics::g_SceneNormalBuffer,
+							m_rcManager3D.GetCoalesceBuffer(),
+							Graphics::g_SceneColorBuffer
+						);
+					}
+				}
+			}
+		}
 	}
 	else if (m_settings.globalSettings.renderMode == GlobalSettings::RenderModeRT)
 	{
 		RenderRaytracing(Graphics::g_SceneColorBuffer, renderCamera);
 	}
 
-	if (m_settings.rcSettings.renderRC3D)
-	{
-		if (m_settings.globalSettings.useDebugCam)
-		{
-			BuildMinMaxDepthBuffer(m_debugCamDepthBuffer);
-		}
-		else
-		{
-			BuildMinMaxDepthBuffer(Graphics::g_SceneDepthBuffer);
-		}
-
-		RunRCGather(renderCamera);
-		
-		if (m_settings.rcSettings.visualizeRC3DGatherCascades)
-		{
-			FullScreenCopyCompute(m_rcManager3D.GetCascadeIntervalBuffer(m_settings.rcSettings.cascadeVisIndex), Graphics::g_SceneColorBuffer);
-		}
-		else
-		{
-			RunRCMerge(renderCamera, m_minMaxDepthMips);
-
-			if (m_settings.rcSettings.visualizeRC3DMergeCascades)
-			{
-				FullScreenCopyCompute(m_rcManager3D.GetCascadeIntervalBuffer(m_settings.rcSettings.cascadeVisIndex), Graphics::g_SceneColorBuffer);
-			}
-			else
-			{
-				RunRCCoalesce();
-
-				if (m_settings.rcSettings.seeCoalesceResult)
-				{
-					FullScreenCopyCompute(m_rcManager3D.GetCoalesceBuffer(), Graphics::g_SceneColorBuffer);
-				}
-				else
-				{
-					// Copy scene color to albedo buffer.
-					FullScreenCopyCompute(Graphics::g_SceneColorBuffer, m_albedoBuffer);
-					RunDeferredLightingPass(
-						m_albedoBuffer,
-						Graphics::g_SceneNormalBuffer,
-						m_rcManager3D.GetCoalesceBuffer(),
-						Graphics::g_SceneColorBuffer
-					);
-				}
-			}
-		}
-	}
+	
 
 	// Keep render debug last in pipeline.
 	if (m_settings.globalSettings.renderDebugLines)
@@ -316,12 +324,13 @@ void RadianceCascades::RenderUI(GraphicsContext& uiContext)
 
 	AppGUI::NewFrame();
 
-	// Run UI code.
-	BuildUISettings();
+	{
+		DrawSettingsUI();
 
 #if defined(_DEBUG)
-	GPUProfiler::Get().DrawProfilerUI();
+		GPUProfiler::Get().DrawProfilerUI();
 #endif
+	}
 
 	// Render UI
 	AppGUI::Render(uiContext);
@@ -331,17 +340,33 @@ void RadianceCascades::InitializeScene()
 {
 	GPU_MEMORY_BLOCK("Scene");
 
-	// Setup scene.
+	int sceneIndex = 0;
+
+	if (sceneIndex == 0) // Default scene
 	{
-		AddSceneModel(ModelIDSponza, { 100.0f, Vector3(0.0f, 0.0f, 0.0f) });
+		{
+			AddSceneModel(ModelIDSponza, { 100.0f, Vector3(0.0f, 0.0f, 0.0f) });
+		}
+
+		{
+			Math::Vector3 modelCenter = GetMainSceneModelCenter();
+
+			AddSceneModel(ModelIDSphereTest, { 100.0f, Vector3(0.0f, -200.0f, 0.0f) + modelCenter, {}, ::PosOscillationScript });
+			AddSceneModel(ModelIDSphereTest, { 50.0f, Vector3(200.0f, -300.0f, 500.0f) + modelCenter });
+			AddSceneModel(ModelIDSphereTest, { 30.0f, Vector3(200.0f, -300.0f, -500.0f) + modelCenter });
+
+			AddSceneModel(ModelIDLantern, { 25.0f, Vector3(1100.0f, -500.0f, 0.0f) + modelCenter, Math::Quaternion(0.0f, Math::XM_PI, 0.0f)});
+		}
+
+
 	}
-
+	else if (sceneIndex == 1)
 	{
-		Math::Vector3 modelCenter = GetMainSceneModelCenter();
-
-		AddSceneModel(ModelIDSphereTest, { 100.0f, Vector3(0.0f, -200.0f, 0.0f) + modelCenter, ::PosOscillation});
-		AddSceneModel(ModelIDSphereTest, { 50.0f, Vector3(200.0f, -300.0f, 500.0f) + modelCenter });
-		AddSceneModel(ModelIDSphereTest, { 30.0f, Vector3(200.0f, -300.0f, -500.0f) + modelCenter });
+		AddSceneModel(ModelIDSphereTest, { 100.0f, Vector3(0.0f, 0.0f, 0.0f) });
+	}
+	else if (sceneIndex == 2)
+	{
+		AddSceneModel(ModelIDLantern, { 100.0f });
 	}
 
 	// Setup camera
@@ -407,8 +432,9 @@ void RadianceCascades::InitializePSOs()
 		rootSig[RootEntryDeferredLightingCascade0MinMaxDepthSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 3, 1);
 		rootSig[RootEntryDeferredLightingDepthBufferSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 4, 1);
 		rootSig[RootEntryDeferredLightingGlobalInfoCB].InitAsConstantBuffer(0);
+		rootSig[RootEntryDeferredLightingRCGlobalsCB].InitAsConstantBuffer(1);
 		{
-			SamplerDesc samplerState = Graphics::SamplerLinearBorderDesc;
+			SamplerDesc samplerState = Graphics::SamplerLinearClampDesc;
 			rootSig.InitStaticSampler(0, samplerState);
 		}
 		rootSig.Finalize(L"Deferred Lighting");
@@ -613,7 +639,7 @@ void RadianceCascades::InitializePSOs()
 			globalRootSig.InitStaticSampler(0, sampler);
 		}
 
-		globalRootSig.Finalize(L"Global Root Signature");
+		globalRootSig.Finalize(L"Regular RT Global Root Signature");
 		pso.SetGlobalRootSignature(&globalRootSig);
 
 		RootSignature1& localRootSig = m_rtTestLocalRootSig;
@@ -661,7 +687,7 @@ void RadianceCascades::InitializePSOs()
 			globalRootSig.InitStaticSampler(0, sampler);
 		}
 
-		globalRootSig.Finalize(L"Global Root Signature");
+		globalRootSig.Finalize(L"RC RT Global Root Signature");
 		pso.SetGlobalRootSignature(&globalRootSig);
 
 		RootSignature1& localRootSig = m_rcRaytraceLocalRootSig;
@@ -707,16 +733,14 @@ void RadianceCascades::InitializeRCResources()
 		GPU_MEMORY_BLOCK("RC 3D");
 
 		DepthBuffer& sceneDepthBuff = Graphics::g_SceneDepthBuffer;
-		m_minMaxDepthCopy.Create(L"Min Max Depth Copy", sceneDepthBuff.GetWidth(), sceneDepthBuff.GetHeight(), 1, DXGI_FORMAT_R32_FLOAT);
+		m_depthBufferCopy.Create(L"Depth Copy", sceneDepthBuff.GetWidth(), sceneDepthBuff.GetHeight(), 1, DXGI_FORMAT_R32_FLOAT);
 		m_minMaxDepthMips.Create(L"Min Max Depth Mips", sceneDepthBuff.GetWidth() / 2, sceneDepthBuff.GetHeight() / 2, 0, DXGI_FORMAT_R32G32_FLOAT);
 
-		m_rcManager3D.Init(
-			m_settings.rcSettings.rayLength0,
-			m_settings.rcSettings.raysPerProbe0,
-			m_settings.rcSettings.probesPerDim0,
-			m_settings.rcSettings.cascadeLevels,
-			true,
-			m_settings.rcSettings.useDepthAwareMerging
+		m_rcManager3D.Generate(
+			m_settings.rcSettings.raysPerProbe0, 
+			m_settings.rcSettings.probeSpacing0, 
+			::GetSceneColorWidth(), 
+			::GetSceneColorHeight()
 		);
 	}
 	
@@ -846,8 +870,10 @@ void RadianceCascades::RenderRaytracing(ColorBuffer& targetColor, Camera& camera
 	rtContext.Finish(true);
 }
 
-void RadianceCascades::RunRCGather(Camera& camera)
+void RadianceCascades::RunRCGather(Camera& camera, DepthBuffer& sourceDepthBuffer)
 {
+	ColorBuffer& destDepthBuffer = m_depthBufferCopy;
+
 	GlobalInfo globalInfo = {};
 	::FillGlobalInfo(globalInfo, camera);
 
@@ -855,10 +881,17 @@ void RadianceCascades::RunRCGather(Camera& camera)
 	m_rcManager3D.FillRCGlobalInfo(rcGlobalInfo);
 
 	ComPtr<ID3D12GraphicsCommandList4> rtCommandList = nullptr;
-	RaytracingContext& rtContext = ::BeginRaytracingContext(L"Render RC Raytracing", rtCommandList);
+	RaytracingContext& rtContext = ::BeginRaytracingContext(L"RC Gather Pass", rtCommandList);
 
 	{
 		GPU_PROFILE_BLOCK("RC Gather", rtContext);
+
+		// Copy depth buffer to UAV bindable buffer.
+		{
+			rtContext.TransitionResource(sourceDepthBuffer, D3D12_RESOURCE_STATE_COPY_SOURCE);
+			rtContext.TransitionResource(destDepthBuffer, D3D12_RESOURCE_STATE_COPY_DEST);
+			rtContext.CopySubresource(destDepthBuffer, 0, sourceDepthBuffer, 0);
+		}
 
 		ID3D12DescriptorHeap* pDescriptorHeaps[] = { RuntimeResourceManager::GetDescriptorHeapPtr() };
 		rtCommandList->SetDescriptorHeaps(1, pDescriptorHeaps);
@@ -886,30 +919,13 @@ void RadianceCascades::RunRCGather(Camera& camera)
 #endif
 		}
 
-		// Transition resources
+		// Bind depth buffer as UAV.
 		{
-			rtContext.TransitionResource(m_minMaxDepthMips, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
+			rtContext.TransitionResource(destDepthBuffer, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
+			const DescriptorHandle& depthUAV = RuntimeResourceManager::GetDescCopy(destDepthBuffer.GetUAV());
+			rtCommandList->SetComputeRootDescriptorTable(RootEntryRCRaytracingRTGDepthTextureUAV, depthUAV);
 		}
 
-		// Will offset the target UAV to start at the minmax depth resolution that is correct.
-		// Each texel in the depth needs to correspond to a probe.
-		uint32_t depthIndexOffset = 0;
-		{
-			const uint32_t probePerDim0 = (uint32_t)Math::Sqrt((float)m_rcManager3D.GetProbeCount(0));
-			const uint32_t probeScalingFactor = m_rcManager3D.GetProbeScalingFactor();
-
-			uint32_t depthTopWidth = m_minMaxDepthMips.GetWidth();
-			while (depthTopWidth != probePerDim0)
-			{
-				depthTopWidth /= probeScalingFactor;
-				depthIndexOffset++;
-
-				// If this occurs, some dimension is wrong. Either adjust depth min max dimensions or probe scaling.
-				ASSERT(depthTopWidth != 1);
-			}
-		}
-
-		const D3D12_CPU_DESCRIPTOR_HANDLE* depthUAVStart = &m_minMaxDepthMips.GetUAV();
 		for (uint32_t cascadeIndex = 0; cascadeIndex < m_rcManager3D.GetCascadeIntervalCount(); cascadeIndex++)
 		{
 			CascadeInfo cascadeInfo = {};
@@ -923,19 +939,15 @@ void RadianceCascades::RunRCGather(Camera& camera)
 			const DescriptorHandle& rcBufferUAV = RuntimeResourceManager::GetDescCopy(cascadeBuffer.GetUAV());
 			rtCommandList->SetComputeRootDescriptorTable(RootEntryRCRaytracingRTGOutputUAV, rcBufferUAV);
 
-			const DescriptorHandle& depthCascadeUAV = RuntimeResourceManager::GetDescCopy(*(depthUAVStart + cascadeIndex + depthIndexOffset));
-			rtCommandList->SetComputeRootDescriptorTable(RootEntryRCRaytracingRTGDepthTextureUAV, depthCascadeUAV);
-
-			uint32_t dispatchDims = cascadeBuffer.GetWidth();
 			::DispatchRays(
 				RayDispatchIDRCRaytracing,
-				dispatchDims,
-				dispatchDims,
+				cascadeBuffer.GetWidth(),
+				cascadeBuffer.GetHeight(),
 				rtCommandList
 			);
 		}
 	}
-	
+
 	rtContext.Finish(true);
 }
 
@@ -959,8 +971,8 @@ void RadianceCascades::RunRCMerge(Math::Camera& cam, ColorBuffer& minMaxDepthBuf
 		cmptContext.SetDynamicConstantBufferView(RootEntryRC3DMergeRCGlobalsCB, sizeof(RCGlobals), &rcGlobals);
 		cmptContext.SetDynamicConstantBufferView(RootEntryRC3DMergeGlobalInfoCB, sizeof(GlobalInfo), &globalInfo);
 
-		cmptContext.TransitionResource(minMaxDepthBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-		cmptContext.SetDynamicDescriptor(RootEntryRC3DMergeMinMaxDepthSRV, 0, minMaxDepthBuffer.GetSRV());
+		cmptContext.TransitionResource(m_depthBufferCopy, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+		cmptContext.SetDynamicDescriptor(RootEntryRC3DMergeMinMaxDepthSRV, 0, m_depthBufferCopy.GetSRV());
 
 #if defined(_DEBUGDRAWING)
 		DebugDrawer::BindDebugBuffers(cmptContext, RootEntryRC3DMergeCount);
@@ -1016,7 +1028,7 @@ void RadianceCascades::RenderDepthOnly(Camera& camera, DepthBuffer& targetDepth,
 
 void RadianceCascades::BuildMinMaxDepthBuffer(DepthBuffer& sourceDepthBuffer)
 {
-	ColorBuffer& minMaxDepthCopy = m_minMaxDepthCopy;
+	ColorBuffer& minMaxDepthCopy = m_depthBufferCopy;
 	ColorBuffer& minMaxMipMaps = m_minMaxDepthMips;
 
 	ComputeContext& cmptContext = ComputeContext::Begin(L"Min Max Depth");
@@ -1072,8 +1084,6 @@ void RadianceCascades::BuildMinMaxDepthBuffer(DepthBuffer& sourceDepthBuffer)
 			cmptContext.Dispatch2D(depthSourceInfo.sourceWidth >> 1, depthSourceInfo.sourceHeight >> 1);
 		}
 	}
-
-
 
 	cmptContext.Finish(true);
 }
@@ -1232,11 +1242,14 @@ void RadianceCascades::RunComputeRCRadianceField(ColorBuffer& outputBuffer)
 void RadianceCascades::RunDeferredLightingPass(ColorBuffer& albedoBuffer, ColorBuffer& normalBuffer, ColorBuffer& diffuseRadianceBuffer, ColorBuffer& outputBuffer)
 {
 	// TODO: Have these as input parameters. Better yet, create an input struct because its getting very long.
-	ColorBuffer& depthBuffer = m_minMaxDepthCopy;
+	ColorBuffer& depthBuffer = m_depthBufferCopy;
 	ColorBuffer& minMaxDepthBuffer = m_minMaxDepthMips;
 
 	GlobalInfo globalInfo = {};
 	::FillGlobalInfo(globalInfo, m_camera); // TODO: Make camera as input.
+
+	RCGlobals rcGlobalInfo = {};
+	m_rcManager3D.FillRCGlobalInfo(rcGlobalInfo);
 
 	GraphicsContext& gfxContext = GraphicsContext::Begin(L"Diffuse Lighting Pass");
 
@@ -1266,6 +1279,7 @@ void RadianceCascades::RunDeferredLightingPass(ColorBuffer& albedoBuffer, ColorB
 		gfxContext.SetDynamicDescriptor(RootEntryDeferredLightingCascade0MinMaxDepthSRV, 0, minMaxDepthBuffer.GetSRV());
 		gfxContext.SetDynamicDescriptor(RootEntryDeferredLightingDepthBufferSRV, 0, depthBuffer.GetSRV());
 		gfxContext.SetDynamicConstantBufferView(RootEntryDeferredLightingGlobalInfoCB, sizeof(GlobalInfo), &globalInfo);
+		gfxContext.SetDynamicConstantBufferView(RootEntryDeferredLightingRCGlobalsCB, sizeof(RCGlobals), &rcGlobalInfo);
 
 		// Draw a full-screen quad
 		gfxContext.Draw(4, 0);
@@ -1292,9 +1306,38 @@ void RadianceCascades::UpdateViewportAndScissor()
 	m_mainScissor.bottom = (LONG)height;
 }
 
-void RadianceCascades::BuildUISettings()
+void RadianceCascades::DrawSettingsUI()
 {
 	ImGui::Begin("Settings");
+
+#pragma region Info
+	if (ImGui::CollapsingHeader("App Info", ImGuiTreeNodeFlags_DefaultOpen))
+	{
+		ImGui::Text("Swapchain Resolution: %u x %u", ::GetSceneColorWidth(), ::GetSceneColorHeight());
+	}
+
+
+#pragma endregion
+
+
+#pragma region StandaloneSettings
+
+	if (ImGui::CollapsingHeader("Standalone Settings", ImGuiTreeNodeFlags_DefaultOpen))
+	{
+		// Camera FOV.
+		{
+			static float cameraFov = 0.0f;
+			float widthOverHeight = 1.0f / m_camera.GetAspectRatio();
+			cameraFov = Math::XMConvertToDegrees(Utils::VerticalFovToHorizontalFov(m_camera.GetFOV(), widthOverHeight));
+			if (ImGui::SliderFloat("Camera FOV", &cameraFov, 0.0f, 180.0f))
+			{
+				m_camera.SetFOV(Utils::HorizontalFovToVerticalFov(Math::XMConvertToRadians(cameraFov), widthOverHeight));
+				m_camera.Update();
+			}
+		}
+	}
+
+#pragma endregion
 
 #pragma region GlobalSettings
 	if (ImGui::CollapsingHeader("Global Settings", ImGuiTreeNodeFlags_DefaultOpen))
@@ -1342,16 +1385,29 @@ void RadianceCascades::BuildUISettings()
 				m_rcManager3D.SetRayLength(rcs.rayLength0);
 			}
 
-			uint32_t cascadeResolution = m_rcManager3D.GetCascadeIntervalBuffer(0).GetWidth();
+			if (ImGui::InputInt("Probe Spacing", &rcs.probeSpacing0, 1, 0))
+			{
+				rcs.probeSpacing0 = int(Math::Clamp(float(rcs.probeSpacing0), 1.0f, 16.0f));
+
+				if (m_rcManager3D.GetProbeSpacing() != rcs.probeSpacing0)
+				{
+					m_rcManager3D.SetProbeSpacing(rcs.probeSpacing0);
+					m_rcManager3D.Generate(rcs.raysPerProbe0, rcs.probeSpacing0, ::GetSceneColorWidth(), ::GetSceneColorHeight());
+				}
+			}
+
+			const ColorBuffer& cascade0Buffer = m_rcManager3D.GetCascadeIntervalBuffer(0);
+			const uint32_t cascadeResolutionWidth = cascade0Buffer.GetWidth();
+			const uint32_t cascadeResolutionHeight = cascade0Buffer.GetHeight();
 
 			ImGui::Text("Cascade Count: %u", m_rcManager3D.GetCascadeIntervalCount());
-			ImGui::Text("Cascade Resolution: %u x %u", cascadeResolution, cascadeResolution);
 			ImGui::Text("Using pre-averaging: %s", m_rcManager3D.UsesPreAveragedIntervals() ? "Yes" : "No");
 
 			// Create a table with 5 columns: Cascade, Probe Count, Ray Count, Start Dist, Length
-			if (ImGui::BeginTable("CascadeTable", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_NoHostExtendX))
+			if (ImGui::BeginTable("CascadeTable", 6, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_NoHostExtendX))
 			{
 				ImGui::TableSetupColumn("Cascade", ImGuiTableColumnFlags_WidthFixed);
+				ImGui::TableSetupColumn("Buffer Resolution", ImGuiTableColumnFlags_WidthFixed);
 				ImGui::TableSetupColumn("Probe Count", ImGuiTableColumnFlags_WidthFixed);
 				ImGui::TableSetupColumn("Rays Per Probe", ImGuiTableColumnFlags_WidthFixed);
 				ImGui::TableSetupColumn("Ray Start Distance", ImGuiTableColumnFlags_WidthFixed);
@@ -1366,21 +1422,27 @@ void RadianceCascades::BuildUISettings()
 					ImGui::TableSetColumnIndex(0);
 					ImGui::Text("%u", i);
 
-					// Probe Count column
-					uint32_t cascadeCountPerDim = m_rcManager3D.GetProbeCountPerDim(i);
+					// Cascade Resolution column
+					const ColorBuffer& cascadeBuffer = m_rcManager3D.GetCascadeIntervalBuffer(i);
 					ImGui::TableSetColumnIndex(1);
-					ImGui::Text("%u x %u", cascadeCountPerDim, cascadeCountPerDim);
+					ImGui::Text("%u x %u", cascadeBuffer.GetWidth(), cascadeBuffer.GetHeight());
+
+					// Probe Count column
+					//uint32_t cascadeCountPerDim = m_rcManager3D.GetProbeCountPerDim(i);
+					ProbeDims cascadeCountPerDim = m_rcManager3D.GetProbeDims(i);
+					ImGui::TableSetColumnIndex(2);
+					ImGui::Text("%u x %u", cascadeCountPerDim.probesX, cascadeCountPerDim.probesY);
 
 					// Rays Per Probe column
-					ImGui::TableSetColumnIndex(2);
+					ImGui::TableSetColumnIndex(3);
 					ImGui::Text("%u", m_rcManager3D.GetRaysPerProbe(i));
 
 					// Ray Start Distance column
-					ImGui::TableSetColumnIndex(3);
+					ImGui::TableSetColumnIndex(4);
 					ImGui::Text("%.1f", m_rcManager3D.GetStartT(i));
 
 					// Ray Length column
-					ImGui::TableSetColumnIndex(4);
+					ImGui::TableSetColumnIndex(5);
 					ImGui::Text("%.1f", m_rcManager3D.GetRayLength(i));
 				}
 
@@ -1406,24 +1468,7 @@ void RadianceCascades::BuildUISettings()
 	}
 #pragma endregion
 
-#pragma region StandaloneSettings
 
-	if (ImGui::CollapsingHeader("Standalone Settings", ImGuiTreeNodeFlags_DefaultOpen))
-	{
-		// Camera FOV.
-		{
-			static float cameraFov = 0.0f;
-			float widthOverHeight = 1.0f / m_camera.GetAspectRatio();
-			cameraFov = Math::XMConvertToDegrees(Utils::VerticalFovToHorizontalFov(m_camera.GetFOV(), widthOverHeight));
-			if (ImGui::SliderFloat("Camera FOV", &cameraFov, 0.0f, 180.0f))
-			{
-				m_camera.SetFOV(Utils::HorizontalFovToVerticalFov(Math::XMConvertToRadians(cameraFov), widthOverHeight));
-				m_camera.Update();
-			}
-		}
-	}
-
-#pragma endregion
 	
 	ImGui::End();
 }
@@ -1519,8 +1564,11 @@ void RadianceCascades::AddSceneModel(ModelID modelID, const ModelInstanceDesc& m
 {
 	InternalModelInstance* modelInstance = AddModelInstance(modelID);
 	
-	modelInstance->Resize(modelInstanceDesc.scale * modelInstance->GetRadius());
-	modelInstance->GetTransform().SetTranslation(modelInstanceDesc.position - modelInstance->GetBoundingBox().GetCenter());
+	Math::UniformTransform& instanceTransform = modelInstance->GetTransform();
+	instanceTransform.SetScale(modelInstanceDesc.scale);
+	instanceTransform.SetRotation(modelInstanceDesc.rotation);
+	instanceTransform.SetTranslation(modelInstanceDesc.position - modelInstance->GetBoundingBox().GetCenter());
+
 	modelInstance->updateScript = modelInstanceDesc.updateScript;
 }
 

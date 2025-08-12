@@ -56,6 +56,7 @@ struct ModelInstanceDesc
 {
 	float scale = 1.0f;
 	Math::Vector3 position = { 0.0f, 0.0f, 0.0f };
+	Math::Quaternion rotation = Math::Quaternion::Quaternion(Math::EIdentityTag::kIdentity);
 	UpdateScript updateScript = {};
 };
 
@@ -72,10 +73,9 @@ struct RadianceCascadesSettings
 	int cascadeVisProbeSubset = 256;
 
 	float rayLength0 = 4.0f;
-	bool useDepthAwareMerging = true;
+	bool useDepthAwareMerging = false;
+	int probeSpacing0 = 2;
 	uint32_t raysPerProbe0 = 16u;
-	uint32_t probesPerDim0 = 1024u;
-	uint32_t cascadeLevels = 7u;
 };
 
 #define ENABLE_RT (false)
@@ -192,6 +192,7 @@ private:
 		RootEntryDeferredLightingCascade0MinMaxDepthSRV,
 		RootEntryDeferredLightingDepthBufferSRV,
 		RootEntryDeferredLightingGlobalInfoCB,
+		RootEntryDeferredLightingRCGlobalsCB,
 		RootEntryDeferredLightingCount,
 	};
 
@@ -217,7 +218,7 @@ private:
 	
 	void RenderRaster(ColorBuffer& targetColor, DepthBuffer& targetDepth, Camera& camera, D3D12_VIEWPORT viewPort, D3D12_RECT scissor);
 	void RenderRaytracing(ColorBuffer& targetColor, Camera& camera);
-	void RunRCGather(Camera& camera);
+	void RunRCGather(Camera& camera, DepthBuffer& sourceDepthBuffer);
 	void RunRCMerge(Math::Camera& cam, ColorBuffer& minMaxDepthBuffer);
 	void RenderDepthOnly(Camera& camera, DepthBuffer& targetDepth, D3D12_VIEWPORT viewPort, D3D12_RECT scissor, bool clearDepth = false);
 	void BuildMinMaxDepthBuffer(DepthBuffer& sourceDepthBuffer);
@@ -229,7 +230,7 @@ private:
 	void RunDeferredLightingPass(ColorBuffer& albedoBuffer, ColorBuffer& normalBuffer, ColorBuffer& diffuseRadianceBuffer, ColorBuffer& outputBuffer);
 	void UpdateViewportAndScissor();
 
-	void BuildUISettings();
+	void DrawSettingsUI();
 
 	void ClearPixelBuffers();
 
@@ -312,7 +313,7 @@ private:
 
 	ColorBuffer m_albedoBuffer;
 
-	ColorBuffer m_minMaxDepthCopy;
+	ColorBuffer m_depthBufferCopy;
 	ColorBuffer m_minMaxDepthMips;
 
 	DepthBuffer m_debugCamDepthBuffer;

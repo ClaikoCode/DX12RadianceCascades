@@ -9,14 +9,14 @@ RWTexture2D<float4> cascadeN : register(u0);
 ConstantBuffer<RCGlobals> rcGlobals : register(b0);
 ConstantBuffer<CascadeInfo> cascadeInfo : register(b1);
 
-Texture2D<float2> minMaxDepthBuffer : register(t1);
+Texture2D<float> depthBuffer : register(t1);
 
 ConstantBuffer<GlobalInfo> globalInfo : register(b2);
 
-float4 ReadRadianceN1(float2 probeIndex, float2 rayIndex, float probeCountPerDimN1, float texWidthN1)
+float4 ReadRadianceN1(float2 probeIndex, float2 rayIndex, float2 probeCountPerDimN1, float2 texDims)
 {
-    float2 sampleTexel = rayIndex * probeCountPerDimN1 + probeIndex;
-    float2 sampleUV = sampleTexel / texWidthN1;
+    float2 sampleTexel = rayIndex * probeCountPerDimN1 + probeIndex + 1.0f;
+    float2 sampleUV = sampleTexel / texDims;
 
     return cascadeN1.SampleLevel(linearSampler, sampleUV, 0);
 }
@@ -35,59 +35,55 @@ void main( uint3 DTid : SV_DispatchThreadID )
     if (!OUT_OF_BOUNDS(pixelPos, targetDims))
     {
         ProbeInfo3D probeInfoN = BuildProbeInfo3DDirFirst(pixelPos, cascadeInfo.cascadeIndex, rcGlobals);
-    
-        float4 nearRadiance = cascadeN[pixelPos];
-        float4 normalizedFarRadiance = float4(0.0f, 0.0f, 0.0f, 0.0f);
-
-        float probeCountPerDimN1 = floor(probeInfoN.sideLength / rcGlobals.probeScalingFactor);
+        ProbeInfo3D probeInfoN1 = BuildProbeInfo3DDirFirst(pixelPos, cascadeInfo.cascadeIndex + 1, rcGlobals);
         
+        float4 nearRadiance = cascadeN[pixelPos];
+        
+        // If this ray is obscured (a == 0), the higher cascades should not carry over any information.
+        if(IsZero(nearRadiance.a))
+        {
+            cascadeN[pixelPos] = nearRadiance;
+            return;
+        }
+        
+        float4 normalizedFarRadiance = float4(0.0f, 0.0f, 0.0f, 0.0f);
+        
+        float2 probeN1Index = probeInfoN.probeIndex * 0.5f;
+        // Clamp so sampling doesnt happen between probe groups.
+        float2 clampedProbeN1Index = clamp(probeN1Index, 1.0f, probeInfoN1.probesPerDim - 1);
+        float2 ratios = frac(clampedProbeN1Index);
+
         if (rcGlobals.depthAwareMerging)
         {
-            float2 cascadeN1BaseProbeIndex = float2(probeInfoN.probeIndex) / rcGlobals.probeScalingFactor;
+            int2 depthResolution;
+            GetDims(depthBuffer, depthResolution);
+            float2 depthTexelSize = 1.0f / depthResolution;
+           
+            float3 cascadeNWorldPos = GetProbeWorldPos(probeInfoN, depthBuffer, globalInfo.invProjMatrix, globalInfo.invViewMatrix);
             
-            int mipLevel = 0;
-            int2 depthTopMipResolution;
-            GetMipDims(minMaxDepthBuffer, mipLevel, depthTopMipResolution);
-        
-            // Find the mip where dimensions match with 
-            while (depthTopMipResolution.x != probeInfoN.sideLength && depthTopMipResolution.x != 1)
-            {
-                depthTopMipResolution /= 2;
-                mipLevel++;
-            }
-        
-            // This will happen if dimensions never match, which is an error.
-            if (depthTopMipResolution.x == 1)
-            {
-                // Writes dummy value to signify something went wrong.
-                cascadeN[pixelPos] = float4(1.0f, 0.0f, 0.0f, 1.0f);
-                return;
-            }
-            
-            float cascadeNDepth = minMaxDepthBuffer.Load(int3(probeInfoN.probeIndex, mipLevel)).g;
-            float2 cascadeNUV = probeInfoN.probeIndex / probeInfoN.sideLength;
-            float3 cascadeNWorldPos = WorldPosFromDepth(cascadeNDepth, cascadeNUV, globalInfo.invProjMatrix, globalInfo.invViewMatrix);
+            DepthTile depthTileN1 = GetDepthTile(probeInfoN1.probeSpacing);
+            uint2 cascadeN1SamplePosOrigin = GetDepthSamplePos(depthTileN1, clampedProbeN1Index, depthResolution);
             
             float3 sourcePoints[4];
-            float sourceDepths[4];
-            for(int i = 0; i < 4; i++)
+            float sourceDepths[4]; // Only for debugging.
+            for (int i = 0; i < 4; i++)
             {
                 int2 offset = TranslateCoord4x1To2x2(i);
-                float2 cascadeN1PixelPos = ClampPixelPos(cascadeN1BaseProbeIndex + offset - 0.5f, probeCountPerDimN1);
+                uint2 depthSamplePosN1 = ClampPixelPos(cascadeN1SamplePosOrigin + offset, depthResolution);
                 
-                float cascadeN1Depth = minMaxDepthBuffer.Load(int3(cascadeN1PixelPos, mipLevel + 1)).g;
-                float2 cascadeN1UV = cascadeN1PixelPos / probeCountPerDimN1;
+                float cascadeN1Depth = depthBuffer.Load(int3(depthSamplePosN1, 0));
 
-                sourcePoints[i] = WorldPosFromDepth(cascadeN1Depth, cascadeN1UV, globalInfo.invProjMatrix, globalInfo.invViewMatrix);
+                sourcePoints[i] = WorldPosFromDepth(cascadeN1Depth, (float2(depthSamplePosN1)) * depthTexelSize, globalInfo.invProjMatrix, globalInfo.invViewMatrix);
+                
+                // Only for debugging.
                 sourceDepths[i] = length(sourcePoints[i] - globalInfo.cameraPos) / 5000.0f;
             }
             
-            float2 ratios = GetBilinearSampleInfo(probeInfoN.probeIndex - 0.5f).ratios;
             float4 weights3D = GetBilinearSampleWeights(GetBilinear3dRatioIter(sourcePoints, cascadeNWorldPos, ratios, 2));
             
             //weights3D = 0.25f;
             
-            if(false)
+            if (false)
             {
                 float finalDepth = 0.0f;
                 finalDepth += sourceDepths[0] * weights3D[0];
@@ -101,41 +97,46 @@ void main( uint3 DTid : SV_DispatchThreadID )
             }
             
             int raysToMerge = rcGlobals.rayScalingFactor;
-            for(int i = 0; i < 4; i++)
+            for (int i = 0; i < 4; i++)
             {
                 int2 probeOffset = TranslateCoord4x1To2x2(i);
-                float2 cascadeN1ProbeIndex = cascadeN1BaseProbeIndex + probeOffset - 0.5f;
+                float2 cascadeN1ProbeIndex = probeN1Index + probeOffset;
+                cascadeN1ProbeIndex = clamp(cascadeN1ProbeIndex, 1.0f, probeInfoN1.probesPerDim - 1);
                 
                 float4 farRadianceSum = 0.0f;
-                for(int k = 0; k < raysToMerge; k++)
+                for (int k = 0; k < raysToMerge; k++)
                 {
                     int2 rayOffset = TranslateCoord4x1To2x2(k);
-                    float2 cascadeN1RayIndex = float2(probeInfoN.rayIndex * 2.0f) + rayOffset;
+                    float2 cascadeN1RayIndex = probeInfoN.rayIndex * 2.0f + rayOffset;
 
-                    float2 cascadeN1PixelPos = cascadeN1RayIndex * probeCountPerDimN1 + cascadeN1ProbeIndex;
+                    float2 cascadeN1PixelPos = cascadeN1RayIndex * probeInfoN1.probesPerDim + cascadeN1ProbeIndex;
                     cascadeN1PixelPos = ClampPixelPos(cascadeN1PixelPos, sourceDims);
-                    float4 farRadiance = cascadeN1.Load(int3(cascadeN1PixelPos, 0));
-                    
+                    float4 farRadiance = cascadeN1.Load(int3(cascadeN1PixelPos - 0.5, 0));
+                
                     float3 radiance = nearRadiance.a * farRadiance.rgb; // Radiance is only carried if near field is visible.
                     float visibility = nearRadiance.a * farRadiance.a; // Make sure visibility is updated if near field is not visible.
             
                     farRadianceSum += float4(radiance, visibility);
                 }
                 
-                normalizedFarRadiance += farRadianceSum * weights3D[i] * (1.0f / raysToMerge);
+                normalizedFarRadiance += farRadianceSum * weights3D[i] / raysToMerge;
             }
         }
         else
         {
-            float2 cascadeN1BaseProbeIndex = float2(probeInfoN.probeIndex + 0.5f) / rcGlobals.probeScalingFactor;
             float4 farRadianceSum = 0.0f;
         
             int raysToMerge = rcGlobals.rayScalingFactor;
             for (int i = 0; i < raysToMerge; i++)
             {
                 int2 offset = TranslateCoord4x1To2x2(i);
-                float4 farRadiance = ReadRadianceN1(cascadeN1BaseProbeIndex, float2(probeInfoN.rayIndex * 2) + offset, probeCountPerDimN1, sourceDims.x);
-            
+                
+                // This is the texel position of the 0th probe of our base probe group.
+                uint2 cascadeN1BaseProbeIndex = (probeInfoN.rayIndex * 2 + offset) * probeInfoN1.probesPerDim;
+                float2 sampleTexelPos = cascadeN1BaseProbeIndex + clampedProbeN1Index + 0.25f;
+                float2 sampleUV = sampleTexelPos / sourceDims;
+                float4 farRadiance = cascadeN1.SampleLevel(linearSampler, sampleUV, 0.0f);
+                
                 float3 radiance = nearRadiance.a * farRadiance.rgb; // Radiance is only carried if near field is visible.
                 float visibility = nearRadiance.a * farRadiance.a; // Make sure visibility is updated if near field is not visible.
             
@@ -144,10 +145,11 @@ void main( uint3 DTid : SV_DispatchThreadID )
         
             normalizedFarRadiance = farRadianceSum / raysToMerge;
         }
-        
+
         float4 radianceSum = nearRadiance + normalizedFarRadiance;
 
         // Write radiance.
         cascadeN[pixelPos] = radianceSum;
     }
+    
 }

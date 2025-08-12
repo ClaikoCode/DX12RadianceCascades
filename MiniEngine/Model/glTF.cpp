@@ -414,7 +414,28 @@ void glTF::Asset::ProcessMaterials( json& materials )
             material.normalTextureScale = thisMaterial.at("normalTextureScale");
 
         if (thisMaterial.find("emissiveFactor") != thisMaterial.end())
+        {
             ReadFloats(thisMaterial.at("emissiveFactor"), material.emissiveFactor);
+
+            // Added by JD
+            // Adds support for emissive strength in materials by the gltf 2.0 standard.
+            if (thisMaterial.find("extensions") != thisMaterial.end())
+            {
+                auto& extensionObject = thisMaterial.at("extensions");
+
+                if (extensionObject.find("KHR_materials_emissive_strength") != extensionObject.end())
+                {
+                    float emissiveStrength = extensionObject.at("KHR_materials_emissive_strength").at("emissiveStrength");
+
+                    for (int i = 0; i < 3; i++)
+                    {
+                        material.emissiveFactor[i] *= emissiveStrength;
+                    }
+                   
+                }
+            }
+        }
+
 
         if (thisMaterial.find("occlusionTexture") != thisMaterial.end())
             material.occlusionUV = ReadTextureInfo(thisMaterial.at("occlusionTexture"),

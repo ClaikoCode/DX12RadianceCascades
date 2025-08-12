@@ -35,12 +35,14 @@ __declspec(align(16)) struct RCGlobals
 {
 	uint32_t probeScalingFactor; // Per dim.
 	uint32_t rayScalingFactor;
-	uint32_t probeDim0;
 	uint32_t rayCount0;
 	float rayLength0;
 	uint32_t cascadeCount;
 	BOOL usePreAveraging;
 	BOOL depthAwareMerging;
+	uint32_t probeCount0X; 
+	uint32_t probeCount0Y;
+	uint32_t probeSpacing0; // Spacing between probes in pixels.
 };
 
 __declspec(align(16)) struct CascadeVisInfo
