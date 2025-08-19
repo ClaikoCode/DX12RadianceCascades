@@ -6,10 +6,12 @@
 #include "Core\ReadbackBuffer.h"
 #include "Core\CommandContext.h"
 
+//TODO: These variables should be under a namespace probably.
+
 constexpr uint32_t MaxProfiles = 16u;
 constexpr uint32_t MaxQueries = MaxProfiles * 2; // Two queries per profile.
 
-constexpr uint32_t MaxSampleCount = 64u;
+constexpr uint32_t MaxFrametimeSampleCount = 128u;
 
 #if defined(PROFILE_GPU)
 	#define GPU_PROFILE_BLOCK(name, context) PerfProfileBlock CONCAT(profileBlock, __LINE__)(context, name)
@@ -43,7 +45,7 @@ struct PerfProfile
 	bool isQuerying = false;
 
 	// Circular buffer.
-	std::array<float, MaxSampleCount> timeSamples = {};
+	std::array<float, MaxFrametimeSampleCount> timeSamples = {};
 	uint32_t currentSampleCount = 0u;
 };
 

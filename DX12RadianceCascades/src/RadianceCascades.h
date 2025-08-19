@@ -26,11 +26,11 @@
 #endif
 
 #if defined(PROFILE_GPU)
-// Uncomment to run tests.
-//#define RUN_TESTS
+	// Uncomment to run tests.
+	//#define RUN_TESTS
 #endif
 
-typedef std::function<void(ModelInstance*, float, float)> UpdateScript;
+typedef std::function<void(ModelInstance*, float, double)> UpdateScript;
 
 class InternalModelInstance : public ModelInstance
 {
@@ -43,7 +43,7 @@ public:
 		underlyingModelID = modelID;
 	}
 
-	void UpdateInstance(GraphicsContext& gfxContext, float deltaTime, float time)
+	void UpdateInstance(GraphicsContext& gfxContext, float deltaTime, double time)
 	{ 
 		if (updateScript) 
 		{ 

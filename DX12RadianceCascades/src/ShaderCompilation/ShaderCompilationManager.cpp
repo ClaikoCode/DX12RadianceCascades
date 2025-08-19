@@ -289,7 +289,7 @@ ComDxcBuffer BlobEncodingToBuffer(ComPtr<IDxcBlobEncoding> source)
 		dxcBuffer.Ptr = source->GetBufferPointer();
 		BOOL known;
 		UINT32 encoding;
-		ThrowIfFailed(source->GetEncoding(&known, &encoding), L"Could not get encoding.");
+		ThrowIfFailedHR(source->GetEncoding(&known, &encoding), L"Could not get encoding.");
 		dxcBuffer.Encoding = encoding;
 		dxcBuffer.Size = source->GetBufferSize();
 	}
@@ -304,9 +304,9 @@ ShaderCompilationManager::ShaderCompilationManager() :
 		[this](const std::string& fileName) { CompileDependencies(fileName); }
 	)
 {
-	ThrowIfFailed(DxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(m_library.GetAddressOf())), L"Could not create library instance");
-	ThrowIfFailed(DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(m_compiler.GetAddressOf())), L"Could not create compiler instance");
-	ThrowIfFailed(DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(m_utils.GetAddressOf())), L"Could not create utils instance");
+	ThrowIfFailedHR(DxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(m_library.GetAddressOf())), L"Could not create library instance");
+	ThrowIfFailedHR(DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(m_compiler.GetAddressOf())), L"Could not create compiler instance");
+	ThrowIfFailedHR(DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(m_utils.GetAddressOf())), L"Could not create utils instance");
 
 	m_shaderDirWatcher.AddExtensionFilter(".hlsl");
 	m_shaderDirWatcher.AddExtensionFilter(".hlsli");
@@ -417,7 +417,7 @@ bool ShaderCompilationManager::CompileShaderPackageToBlob(ShaderCompilationPacka
 	{
 		ComPtr<IDxcBlobEncoding> source = nullptr;
 		const std::wstring shaderPath = ::BuildShaderPath(shaderCompPackage.shaderFilename);
-		ThrowIfFailed(m_library->CreateBlobFromFile(shaderPath.c_str(), nullptr, source.GetAddressOf()), L"Failed creating blob from file.");
+		ThrowIfFailedHR(m_library->CreateBlobFromFile(shaderPath.c_str(), nullptr, source.GetAddressOf()), L"Failed creating blob from file.");
 		comDxcBuffer = BlobEncodingToBuffer(source);
 	}
 
@@ -426,7 +426,7 @@ bool ShaderCompilationManager::CompileShaderPackageToBlob(ShaderCompilationPacka
 	ComPtr<IDxcOperationResult> compResult = nullptr;
 	{
 		std::vector<WCHAR*> argPtrs = ConvertArgsToInputArgs(args);
-		ThrowIfFailed(m_compiler->Compile(
+		ThrowIfFailedHR(m_compiler->Compile(
 			&comDxcBuffer.dxcBuffer,
 			(LPCWSTR*)argPtrs.data(),
 			(UINT32)argPtrs.size(),

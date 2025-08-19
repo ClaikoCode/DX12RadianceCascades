@@ -48,6 +48,7 @@ struct TestSuiteData
 	std::array<uint32_t, TestSuiteCount> testIndices;
 
 	std::vector<std::pair<const char*, float>> averageFrametimes; // Pair of profile name and average time in ms.
+	uint64_t totalVRAMSize = 0; // Total VRAM size of resources relevant to the test suite.
 };
 
 struct TestSetup
@@ -66,6 +67,8 @@ struct TestSetup
 	// Increments every frame and resets when frames between tests is reached.
 	uint32_t currentTestSuiteIndex = 0;
 
+	bool needMoreFrames = true;
+
 	void WriteTestSuiteToCSVFile()
 	{
 		std::wstring fileName = std::format(L"RadianceCascadesTestResult_{}x{}", Graphics::g_DisplayWidth, Graphics::g_DisplayHeight);
@@ -77,38 +80,43 @@ struct TestSetup
 
 		LOG_INFO(L"Writing test suite data to file: {}", fileName);
 
-		// Add names for each column in the CSV file.
-		fileStream << L"RaysPerProbe,ProbeSpacing,MaxCascadeLevels";
-
-		// Also add names of each average frame time as headers.
-		for(const auto& averageFrameTime : testSuites[0].averageFrametimes)
+		// Headers
 		{
-			fileStream << L"," << averageFrameTime.first;
-		}
-		fileStream << L"\n";
+			// Add names for each column in the CSV file.
+			fileStream << L"RaysPerProbe,ProbeSpacing,MaxCascadeLevels";
 
-		// Add each test suite's data to the CSV file.
+			// Add names of each average frame time as headers.
+			for (const auto& averageFrameTime : testSuites[0].averageFrametimes)
+			{
+				fileStream << L"," << averageFrameTime.first;
+			}
+
+			// Add VRAM size column header.
+			fileStream << L",VRAM";
+
+			fileStream << L"\n";
+		}
+
+		// Data
 		for(size_t i = 0; i < testSuites.size(); i++)
 		{
-			uint32_t raysPerProbeValueIndex = testSuites[i].testIndices[TestSuiteRaysPerProbe0];
-			uint32_t probeSpacingValueIndex = testSuites[i].testIndices[TestSuiteProbeSpacing0];
-			uint32_t cascadeLevelValueIndex = testSuites[i].testIndices[TestSuiteMaxAllowedCascadeLevels];
+			TestSuiteData& testSuite = testSuites[i];
+
+			uint32_t raysPerProbeValueIndex = testSuite.testIndices[TestSuiteRaysPerProbe0];
+			uint32_t probeSpacingValueIndex = testSuite.testIndices[TestSuiteProbeSpacing0];
+			uint32_t cascadeLevelValueIndex = testSuite.testIndices[TestSuiteMaxAllowedCascadeLevels];
 
 			fileStream
 				<< raysPerProbe0Vals[raysPerProbeValueIndex] << L","
 				<< probeSpacing0Vals[probeSpacingValueIndex] << L","
 				<< maxAllowedCascadeLevelsVals[cascadeLevelValueIndex] << L",";
 
-			for (const auto& averageFrameTime : testSuites[i].averageFrametimes)
+			for (const auto& averageFrameTime : testSuite.averageFrametimes)
 			{
 				fileStream << averageFrameTime.second << L",";
 			}
 
-			// Remove the last comma
-			if (fileStream.tellp() > 0)
-			{
-				fileStream.seekp(-1, std::ios_base::end);
-			}
+			fileStream << testSuite.totalVRAMSize;
 
 			fileStream << L"\n";
 		}
@@ -154,7 +162,7 @@ namespace
 	{
 		ComputeContext& cmptContext = ComputeContext::Begin(name);
 
-		ThrowIfFailed(cmptContext.GetCommandList()->QueryInterface(rtCommandList.GetAddressOf()));
+		ThrowIfFailedHR(cmptContext.GetCommandList()->QueryInterface(rtCommandList.GetAddressOf()));
 
 		return cmptContext;
 	}
@@ -191,7 +199,7 @@ namespace
 		gfxContext.SetRootSignature(pso.GetRootSignature());
 	}
 
-	void PosOscillationScript(ModelInstance* modelInstance, float deltaTime, float time)
+	void PosOscillationScript(ModelInstance* modelInstance, float deltaTime, double time)
 	{
 		UniformTransform& transform = modelInstance->GetTransform();
 		Vector3 centerPoint = Vector3(0.0f, 0.0f, 0.0f);
@@ -206,7 +214,9 @@ namespace
 
 	void InitTestSetup()
 	{
-		sTestSetup.framesBetweenTests = 64u;
+		// Make sure that the frames between tests is greater than the maximum number of frames that can be sampled.
+		// This is to ensure that every test suite has enough frames to collect the average frame time data.
+		sTestSetup.framesBetweenTests = MaxFrametimeSampleCount + 10;
 
 		// Simple test setup
 		//sTestSetup.maxAllowedCascadeLevelsVals = { 5 };
@@ -233,6 +243,50 @@ namespace
 				}
 			}
 		}
+	}
+
+	void EnableDriverBackgroundOptimizations()
+	{
+		ComPtr<ID3D12Device6> device6;
+		ThrowIfFailedHR(Graphics::g_Device->QueryInterface(IID_PPV_ARGS(&device6)));
+
+		// This will force the GPU driver to collect measurements in any way it wants to collect the data necessary for dynamic compilations.
+		// This will be queried each frame until it says it has had enough frames and will stop collecting measurements.
+		// Then these optimizations will be applied and disabled for the rest of the testing session.
+		ThrowIfFailedHR(device6->SetBackgroundProcessingMode(
+			D3D12_BACKGROUND_PROCESSING_MODE_ALLOW_INTRUSIVE_MEASUREMENTS,
+			D3D12_MEASUREMENTS_ACTION_KEEP_ALL,
+			nullptr,
+			nullptr
+		));
+
+		LOG_INFO(L"Driver background optimizations enabled.");
+	}
+
+	void EnableStablePowerState()
+	{
+		ComPtr<ID3D12Device5> device5;
+		ThrowIfFailedHR(Graphics::g_Device->QueryInterface(IID_PPV_ARGS(&device5)));
+		ThrowIfFailedHR(device5->SetStablePowerState(TRUE));
+
+		LOG_INFO(L"Stable Power State enabled.");
+	}
+
+	// This function will return true if the device needs more frames to collect measurements for optimizations.
+	bool NeedsMoreFramesForOptimization()
+	{
+		ComPtr<ID3D12Device6> device6;
+		ThrowIfFailedHR(Graphics::g_Device->QueryInterface(IID_PPV_ARGS(&device6)));
+
+		BOOL needsMoreFrames = TRUE;
+		ThrowIfFailedHR(device6->SetBackgroundProcessingMode(
+			D3D12_BACKGROUND_PROCESSING_MODE_ALLOW_INTRUSIVE_MEASUREMENTS,
+			D3D12_MEASUREMENTS_ACTION_KEEP_ALL,
+			nullptr, 
+			&needsMoreFrames
+		));
+
+		return needsMoreFrames;
 	}
 }
 
@@ -291,6 +345,11 @@ void RadianceCascades::Startup()
 	}
 	
 	UpdateViewportAndScissor();
+
+#if defined(RUN_TESTS)
+	::EnableStablePowerState();
+	::EnableDriverBackgroundOptimizations();
+#endif
 }
 
 void RadianceCascades::Cleanup()
@@ -309,8 +368,9 @@ void RadianceCascades::Cleanup()
 void RadianceCascades::Update(float deltaT)
 {
 	RuntimeResourceManager::CheckAndUpdatePSOs();
-	static float time = 0.0f;
-	time += deltaT;
+	static double sTime = 0.0;
+	sTime += deltaT;
+
 
 	// Mouse update
 	{
@@ -330,8 +390,6 @@ void RadianceCascades::Update(float deltaT)
 #if defined(RUN_TESTS)
 	if(sTestSetup.currentFrameCount >= sTestSetup.framesBetweenTests || sTestSetup.currentTestSuiteIndex == 0)
 	{
-		sTestSetup.currentFrameCount = 0;
-
 		if (sTestSetup.currentTestSuiteIndex > 0)
 		{
 			TestSuiteData& previousTestSuite = sTestSetup.testSuites[sTestSetup.currentTestSuiteIndex - 1];
@@ -350,8 +408,12 @@ void RadianceCascades::Update(float deltaT)
 					frametimeSum += frameTime;
 				}
 
-				previousTestSuite.averageFrametimes.push_back({ profile.name, frametimeSum / profile.timeSamples.size() });
+				const float frametimeAverage = frametimeSum / profile.timeSamples.size();
+				previousTestSuite.averageFrametimes.push_back({ profile.name, frametimeAverage });
 			}
+
+			// Save VRAM usage before generating new RC resources.
+			previousTestSuite.totalVRAMSize = m_rcManager3D.GetTotalVRAMUsage();
 		}
 
 		if (sTestSetup.currentTestSuiteIndex < sTestSetup.testSuites.size())
@@ -386,6 +448,11 @@ void RadianceCascades::Update(float deltaT)
 			);
 
 			sTestSetup.currentTestSuiteIndex++;
+			sTestSetup.currentFrameCount = 0;
+
+			// Assume that change of settings requires more frames to be rendered for the optimizations to take effect.
+			sTestSetup.needMoreFrames = TRUE;
+			::EnableDriverBackgroundOptimizations();
 		}
 		else
 		{
@@ -397,7 +464,16 @@ void RadianceCascades::Update(float deltaT)
 	}
 	else
 	{
-		sTestSetup.currentFrameCount++;
+		// If the test setup is not waiting for further driver optimizations then the frame counting can begin.
+		if (!sTestSetup.needMoreFrames)
+		{
+			sTestSetup.currentFrameCount++;
+			LOG_DEBUG(L"Current frame count: {}", sTestSetup.currentFrameCount);
+		}
+		else
+		{
+			LOG_DEBUG(L"Waiting for GPU driver optimizations to finish before continuing with the tests.");
+		}
 	}
 #endif
 
@@ -409,7 +485,7 @@ void RadianceCascades::Update(float deltaT)
 
 		for (InternalModelInstance& modelInstance : m_sceneModels)
 		{
-			modelInstance.UpdateInstance(gfxContext, deltaT, time);
+			modelInstance.UpdateInstance(gfxContext, deltaT, sTime);
 		}
 
 		std::vector<TLASInstanceGroup> tlasInstances = GetTLASInstanceGroups();
@@ -514,10 +590,37 @@ void RadianceCascades::RenderScene()
 	// Update timing info
 	{
 		uint64_t timestampFrequency;
-		ThrowIfFailed(Graphics::g_CommandManager.GetCommandQueue()->GetTimestampFrequency(&timestampFrequency));
+		ThrowIfFailedHR(Graphics::g_CommandManager.GetCommandQueue()->GetTimestampFrequency(&timestampFrequency));
 
 		GPUProfiler::Get().UpdateData(timestampFrequency);
 	}
+
+#if defined(RUN_TESTS)
+	
+	if (sTestSetup.needMoreFrames)
+	{
+		sTestSetup.needMoreFrames = NeedsMoreFramesForOptimization();
+
+		if (sTestSetup.needMoreFrames == false)
+		{
+			ComPtr<ID3D12Device6> device6;
+			ThrowIfFailedHR(Graphics::g_Device->QueryInterface(IID_PPV_ARGS(&device6)));
+
+			// Disable all dynamic optimizations when optimizations have fully finished.
+			// When disabling background processing is combined with commiting results at high priority,
+			// the GPU driver will apply all optimizations that it has collected so far and will stop when it returns from the function.
+			// For the D3D12_MEASUREMENTS_ACTION_COMMIT_RESULTS_HIGH_PRIORITY to work the system needs to have developer mode enabled.
+			ThrowIfFailedHR(device6->SetBackgroundProcessingMode(
+				D3D12_BACKGROUND_PROCESSING_MODE_DISABLE_PROFILING_BY_SYSTEM,
+				D3D12_MEASUREMENTS_ACTION_COMMIT_RESULTS_HIGH_PRIORITY,
+				nullptr,
+				nullptr
+			));
+
+			LOG_INFO(L"GPU driver optimizations have been applied and disabled for the rest of the testing suite.");
+		}
+	}
+#endif
 }
 
 void RadianceCascades::RenderUI(GraphicsContext& uiContext)

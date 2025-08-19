@@ -64,7 +64,7 @@ constexpr UUID64 NULL_ID = UINT64_MAX;
 #include "Utils.h"
 
 // Ineficient but has to do for now.
-static inline void ThrowIfFailed(HRESULT hr, std::wstring message = L"")
+static inline void ThrowIfFailedHR(HRESULT hr, std::wstring message = L"")
 {
     if (FAILED(hr))
     {

@@ -69,7 +69,7 @@ void BLASBuffer::Init(std::shared_ptr<Model> modelPtr)
 
 	GraphicsContext& gfxContext = GraphicsContext::Begin(L"BLAS Build");
 	ComPtr<ID3D12GraphicsCommandList4> rtCommandList;
-	ThrowIfFailed(gfxContext.GetCommandList()->QueryInterface(rtCommandList.GetAddressOf()));
+	ThrowIfFailedHR(gfxContext.GetCommandList()->QueryInterface(rtCommandList.GetAddressOf()));
 
 	rtCommandList->BuildRaytracingAccelerationStructure(&blasDesc, 0, nullptr);
 
@@ -96,7 +96,7 @@ void TLASBuffers::Init()
 
 	GraphicsContext& gfxContext = GraphicsContext::Begin(L"TLAS Build");
 	ComPtr<ID3D12GraphicsCommandList4> rtCommandList;
-	ThrowIfFailed(gfxContext.GetCommandList()->QueryInterface(rtCommandList.GetAddressOf()));
+	ThrowIfFailedHR(gfxContext.GetCommandList()->QueryInterface(rtCommandList.GetAddressOf()));
 	rtCommandList->BuildRaytracingAccelerationStructure(&tlasDesc, 0, nullptr);
 
 	gfxContext.Finish(true);
@@ -154,7 +154,7 @@ void TLASBuffers::UpdateTLASInstances(GraphicsContext& gfxContext, const std::ve
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC tlasBuildDesc = BuildDesc(DefaultTLASBuildFlags, true);
 
 	ComPtr<ID3D12GraphicsCommandList4> rtCommandList;
-	ThrowIfFailed(gfxContext.GetCommandList()->QueryInterface(rtCommandList.GetAddressOf()));
+	ThrowIfFailedHR(gfxContext.GetCommandList()->QueryInterface(rtCommandList.GetAddressOf()));
 	rtCommandList->BuildRaytracingAccelerationStructure(&tlasBuildDesc, 0, nullptr);
 
 	gfxContext.InsertUAVBarrier(m_asData.bvhBuffer, true);

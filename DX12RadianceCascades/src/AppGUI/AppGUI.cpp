@@ -42,7 +42,7 @@ namespace AppGUI
 		ImGui_ImplWin32_Init(hwnd);
 
 		DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {};
-		ThrowIfFailed(Graphics::s_SwapChain1->GetDesc1(&swapChainDesc));
+		ThrowIfFailedHR(Graphics::s_SwapChain1->GetDesc1(&swapChainDesc));
 
 		ImGui_ImplDX12_Init(
 			Graphics::g_Device,

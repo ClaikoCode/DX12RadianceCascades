@@ -16,15 +16,15 @@ static std::unordered_map<MemoryUnit, const char*> sMemoryUnitNames = {
 GPUProfiler::GPUProfiler()
 {
 	ComPtr<IDXGIFactory4> dxgiFactory = nullptr;
-	ThrowIfFailed(CreateDXGIFactory1(IID_PPV_ARGS(dxgiFactory.GetAddressOf())));
-	ThrowIfFailed(dxgiFactory->EnumAdapters(0, reinterpret_cast<IDXGIAdapter**>(m_vramAdapter.GetAddressOf())));
+	ThrowIfFailedHR(CreateDXGIFactory1(IID_PPV_ARGS(dxgiFactory.GetAddressOf())));
+	ThrowIfFailedHR(dxgiFactory->EnumAdapters(0, reinterpret_cast<IDXGIAdapter**>(m_vramAdapter.GetAddressOf())));
 
 	D3D12_QUERY_HEAP_DESC queryDesc;
 	queryDesc.Type = D3D12_QUERY_HEAP_TYPE_TIMESTAMP;
 	queryDesc.Count = MaxQueries;
 	queryDesc.NodeMask = 0;
 
-	ThrowIfFailed(Graphics::g_Device->CreateQueryHeap(
+	ThrowIfFailedHR(Graphics::g_Device->CreateQueryHeap(
 		&queryDesc,
 		IID_PPV_ARGS(m_queryHeap.GetAddressOf())
 	));
@@ -50,7 +50,7 @@ void GPUProfiler::DestroyImpl()
 uint64_t GPUProfiler::GetCurrentVRAMUsageBytes()
 {
 	DXGI_QUERY_VIDEO_MEMORY_INFO videoMemoryInfo = {};
-	ThrowIfFailed(m_vramAdapter->QueryVideoMemoryInfo(
+	ThrowIfFailedHR(m_vramAdapter->QueryVideoMemoryInfo(
 		0,
 		DXGI_MEMORY_SEGMENT_GROUP_LOCAL,
 		&videoMemoryInfo
@@ -207,7 +207,7 @@ void GPUProfiler::UpdatePerformanceProfiles(uint64_t timestampFrequency)
 		perfProfile.timeSamples[perfProfile.currentSampleCount++] = (float)frameTimeMS;
 
 		// Circlular buffer adjustment.
-		perfProfile.currentSampleCount = perfProfile.currentSampleCount % MaxSampleCount;
+		perfProfile.currentSampleCount = perfProfile.currentSampleCount % MaxFrametimeSampleCount;
 	}
 }
 
@@ -246,7 +246,7 @@ void GPUProfiler::DrawProfilerUI()
 			}
 
 			// Moved by MaxSampleCount to avoid underflow if current sample count is 0.
-			const uint32_t lastSampleIndex = (perfProfile.currentSampleCount + MaxSampleCount - 1) % MaxSampleCount;
+			const uint32_t lastSampleIndex = (perfProfile.currentSampleCount + MaxFrametimeSampleCount - 1) % MaxFrametimeSampleCount;
 			float lastSampleTime = perfProfile.timeSamples[lastSampleIndex];
 
 			float timeSum = 0.0f;
