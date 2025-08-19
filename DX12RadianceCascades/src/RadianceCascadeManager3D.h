@@ -38,6 +38,8 @@ public:
 
 	ColorBuffer& GetCoalesceBuffer() { return m_coalescedResult; }
 
+	uint64_t GetTotalVRAMUsage();
+
 private:
 
 	// Will update resource managers descriptors of RC resources.

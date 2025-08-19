@@ -10,6 +10,26 @@
 
 constexpr DXGI_FORMAT DefaultFormat = DXGI_FORMAT_R16G16B16A16_FLOAT;
 
+namespace
+{
+	uint64_t GetResourceVRAMSize(GpuResource& resource, ID3D12Device* device)
+	{
+		ASSERT(device != nullptr);
+
+		D3D12_RESOURCE_DESC desc = resource.GetResource()->GetDesc();
+
+		D3D12_RESOURCE_ALLOCATION_INFO allocInfo = device->GetResourceAllocationInfo(0, 1, &desc);
+		
+		if (allocInfo.SizeInBytes == UINT64_MAX)
+		{
+			// If the size is not available, return 0.
+			LOG_WARNING(L"Cannot determine VRAM size for resource, returning 0. Check that resource is valid.");
+			return 0;
+		}
+
+		return allocInfo.SizeInBytes;
+	}
+}
 
 RadianceCascadeManager3D::RadianceCascadeManager3D(float rayLength0, bool usePreAverage, bool useDepthAwareMerging)
 	: m_rayLength0(rayLength0), 
@@ -70,7 +90,7 @@ void RadianceCascadeManager3D::Generate(uint32_t raysPerProbe0, uint32_t probeSp
 		probeCount0X,
 		probeCount0Y,
 		1,
-		DXGI_FORMAT_R16G16B16A16_FLOAT
+		DefaultFormat
 	);
 
 	UpdateResourceDescriptors();
@@ -142,6 +162,20 @@ float RadianceCascadeManager3D::GetStartT(uint32_t cascadeIndex)
 float RadianceCascadeManager3D::GetRayLength(uint32_t cascadeIndex)
 {
 	return m_rayLength0 * Math::Pow((float)m_scalingFactor.rayScalingFactor, (float)cascadeIndex);
+}
+
+uint64_t RadianceCascadeManager3D::GetTotalVRAMUsage()
+{
+	uint64_t totalSize = 0;
+
+	for (ColorBuffer& cascadeInterval : m_cascadeIntervals)
+	{
+		totalSize += GetResourceVRAMSize(cascadeInterval, Graphics::g_Device);
+	}
+
+	totalSize += GetResourceVRAMSize(m_coalescedResult, Graphics::g_Device);
+
+	return totalSize;
 }
 
 void RadianceCascadeManager3D::UpdateResourceDescriptors()

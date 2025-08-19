@@ -26,7 +26,7 @@ void RaytracingPSO::Finalize()
 	if (FAILED(hr))
 	{
 		LOG_ERROR(L"Could not create state object '{}'.", m_name);
-		ThrowIfFailed(hr, L"Failed to create state object.");
+		ThrowIfFailedHR(hr, L"Failed to create state object.");
 	}
 
 	m_stateObject.Get()->SetName(m_name.c_str());
@@ -41,7 +41,7 @@ void* RaytracingPSO::GetShaderIdentifier(const std::wstring& exportName)
 	}
 
 	ComPtr<ID3D12StateObjectProperties> stateObjectProperties = nullptr;
-	ThrowIfFailed(m_stateObject->QueryInterface(IID_PPV_ARGS(stateObjectProperties.GetAddressOf())), L"Failed to get state object properties.");
+	ThrowIfFailedHR(m_stateObject->QueryInterface(IID_PPV_ARGS(stateObjectProperties.GetAddressOf())), L"Failed to get state object properties.");
 
 	void* shaderIdentifier = stateObjectProperties->GetShaderIdentifier(exportName.c_str());
 
@@ -88,10 +88,10 @@ void RootSignature1::Finalize(const std::wstring& name, D3D12_ROOT_SIGNATURE_FLA
 			LOG_ERROR(L"Failed to serialize root signature (no error blob).");
 		}
 
-		ThrowIfFailed(hr, errorMsgW);
+		ThrowIfFailedHR(hr, errorMsgW);
 	}
 
-	ThrowIfFailed(
+	ThrowIfFailedHR(
 		Graphics::g_Device5->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(m_signature.GetAddressOf())), 
 		L"Failed to create root signature."
 	);
