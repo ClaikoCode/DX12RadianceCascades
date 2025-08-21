@@ -28,7 +28,11 @@
 #if defined(PROFILE_GPU)
 	// Uncomment to run tests.
 	//#define RUN_TESTS
-#endif
+	#if defined(RUN_TESTS)
+		// 0: Full test, 1: Half test, 2: Simple test
+		#define TEST_TO_RUN 0
+	#endif // RUN_TESTS
+#endif // PROFILE_GPU
 
 typedef std::function<void(ModelInstance*, float, double)> UpdateScript;
 

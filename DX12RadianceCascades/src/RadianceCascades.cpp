@@ -199,15 +199,17 @@ namespace
 		gfxContext.SetRootSignature(pso.GetRootSignature());
 	}
 
-	void PosOscillationScript(ModelInstance* modelInstance, float deltaTime, double time)
+	// Behaviour Script -> BScript
+	void BScriptPosOscillation(ModelInstance* modelInstance, float deltaTime, double time)
 	{
 		UniformTransform& transform = modelInstance->GetTransform();
-		Vector3 centerPoint = Vector3(0.0f, 0.0f, 0.0f);
+		float yPos = transform.GetTranslation().GetY();
+		Vector3 centerPoint = Vector3(0.0f, yPos, 0.0f);
 		float amplitude = 1000.0f;      
 		float frequency = 1.0f;
 
 		Vector3 position = centerPoint;
-		position += Vector3(amplitude * sin(frequency * time), 0.0f, 0.0f);
+		position += Vector3(amplitude * sin(frequency * time + yPos), 0.0f, 0.0f);
 
 		transform.SetTranslation(position);
 	}
@@ -218,15 +220,24 @@ namespace
 		// This is to ensure that every test suite has enough frames to collect the average frame time data.
 		sTestSetup.framesBetweenTests = MaxFrametimeSampleCount + 10;
 
-		// Simple test setup
-		//sTestSetup.maxAllowedCascadeLevelsVals = { 5 };
-		//sTestSetup.probeSpacing0Vals = { 2 };
-		//sTestSetup.raysPerProbe0Vals = { 16 };
-
+#if (TEST_TO_RUN == 0)
 		// Full test setup
 		sTestSetup.maxAllowedCascadeLevelsVals = { 5, 6, 7, 8 };
 		sTestSetup.probeSpacing0Vals = { 1, 2, 3, 4 };
 		sTestSetup.raysPerProbe0Vals = { 16, 64 };
+#elif (TEST_TO_RUN == 1)
+		// Half test setup
+		sTestSetup.maxAllowedCascadeLevelsVals = { 5, 6, 7 };
+		sTestSetup.probeSpacing0Vals = { 1, 2, 3 };
+		sTestSetup.raysPerProbe0Vals = { 16 };
+#elif (TEST_TO_RUN == 2)
+		// Simple test setup
+		sTestSetup.maxAllowedCascadeLevelsVals = { 5 };
+		sTestSetup.probeSpacing0Vals = { 2 };
+		sTestSetup.raysPerProbe0Vals = { 16 };
+#endif 
+
+		
 
 		for (size_t clI = 0; clI < sTestSetup.maxAllowedCascadeLevelsVals.size(); clI++)
 		{
@@ -468,7 +479,7 @@ void RadianceCascades::Update(float deltaT)
 		if (!sTestSetup.needMoreFrames)
 		{
 			sTestSetup.currentFrameCount++;
-			LOG_DEBUG(L"Current frame count: {}", sTestSetup.currentFrameCount);
+			LOG_DEBUG(L"Current frame count: {} ({}%)", sTestSetup.currentFrameCount, 100 * sTestSetup.currentFrameCount / sTestSetup.framesBetweenTests);
 		}
 		else
 		{
@@ -661,7 +672,7 @@ void RadianceCascades::InitializeScene()
 {
 	GPU_MEMORY_BLOCK("Scene");
 
-	int sceneIndex = 0;
+	int sceneIndex = 3;
 
 	if (sceneIndex == 0) // Default scene
 	{
@@ -671,12 +682,17 @@ void RadianceCascades::InitializeScene()
 
 		{
 			Math::Vector3 modelCenter = GetMainSceneModelCenter();
-
-			AddSceneModel(ModelIDSphereTest, { 100.0f, Vector3(0.0f, -200.0f, 0.0f) + modelCenter, {}, ::PosOscillationScript });
-			AddSceneModel(ModelIDSphereTest, { 50.0f, Vector3(200.0f, -300.0f, 500.0f) + modelCenter });
-			AddSceneModel(ModelIDSphereTest, { 30.0f, Vector3(200.0f, -300.0f, -500.0f) + modelCenter });
-
-			AddSceneModel(ModelIDLantern, { 25.0f, Vector3(1100.0f, -500.0f, 0.0f) + modelCenter, Math::Quaternion(0.0f, Math::XM_PI, 0.0f)});
+			
+			for (int i = 0; i < 5; i++)
+			{
+				float yPos = (100.0f * i) - 500.0f;
+				AddSceneModel(ModelIDSphereTest, { 130.0f, Vector3(0.0f, yPos, 0.0f) + modelCenter, {}, ::BScriptPosOscillation });
+			}
+			
+			//AddSceneModel(ModelIDSphereTest, { 50.0f, Vector3(200.0f, -300.0f, 500.0f) + modelCenter });
+			//AddSceneModel(ModelIDSphereTest, { 30.0f, Vector3(200.0f, -300.0f, -500.0f) + modelCenter });
+			//
+			//AddSceneModel(ModelIDLantern, { 25.0f, Vector3(1100.0f, -500.0f, 0.0f) + modelCenter, Math::Quaternion(0.0f, Math::XM_PI, 0.0f)});
 		}
 
 
@@ -689,6 +705,14 @@ void RadianceCascades::InitializeScene()
 	{
 		AddSceneModel(ModelIDLantern, { 100.0f });
 	}
+	else if (sceneIndex == 3)
+	{
+		AddSceneModel(ModelIDSponza, { 100.0f, Vector3(0.0f, 0.0f, 0.0f) });
+
+		Math::Vector3 modelCenter = GetMainSceneModelCenter();
+		float yPos = -100.0f;
+		AddSceneModel(ModelIDSphereTest, { 130.0f, Vector3(0.0f, yPos, 0.0f) + modelCenter, {}, ::BScriptPosOscillation });
+	}
 
 	// Setup camera
 	{
@@ -698,7 +722,7 @@ void RadianceCascades::InitializeScene()
 
 		
 		Vector3 modelCenter = GetMainSceneModelCenter();
-		m_camera.SetEyeAtUp(modelCenter + Vector3(300.0f, 0.0f, 0.0f), modelCenter, Vector3(kYUnitVector));
+		m_camera.SetEyeAtUp(modelCenter + Vector3(500.0f, -80.0f, -150.0f), modelCenter, Vector3(kYUnitVector));
 		m_camera.SetZRange(0.5f, 5000.0f);
 		
 		m_cameraController.reset(new FlyingFPSCamera(m_camera, Vector3(kYUnitVector)));
