@@ -23,7 +23,6 @@ public:
 	uint32_t GetProbeCount(uint32_t cascadeIndex);
 	ProbeDims GetProbeDims(uint32_t cascadeIndex);
 	uint32_t GetProbeSpacing() { return m_probeSpacing0; }
-	void SetProbeSpacing(uint32_t probeSpacing) { m_probeSpacing0 = probeSpacing; }
 
 	float GetStartT(uint32_t cascadeIndex);
 	float GetRayLength(uint32_t cascadeIndex);
@@ -57,7 +56,6 @@ private:
 
 	float m_rayLength0;
 	uint32_t m_raysPerProbe0;
-	//uint32_t m_probesPerDim0;
 
 	// Signifies that the cascade textures will be 1 / rayscalingfactor of the original size.
 	bool m_preAveragedIntervals;

@@ -24,6 +24,13 @@ using namespace Microsoft::WRL;
 // Mimicing how Microsoft exposes their global variables (example in Display.cpp)
 namespace GameCore { extern HWND g_hWnd; }
 
+#if defined(PROFILE_GPU)
+	#if defined(RUN_TESTS)
+		// 0: Full test, 1: Half test, 2: Simple test
+		#define TEST_TO_RUN 0
+	#endif // RUN_TESTS
+#endif // PROFILE_GPU
+
 constexpr size_t MAX_INSTANCES = 256;
 static const DXGI_FORMAT s_FlatlandSceneFormat = DXGI_FORMAT_R16G16B16A16_FLOAT;
 static const std::wstring s_BackupModelPath = L"models\\Testing\\SphereTest.gltf";
@@ -306,7 +313,7 @@ RadianceCascades::RadianceCascades()
 	m_mainScissor({}), 
 	m_rcManager3D(
 		m_settings.rcSettings.rayLength0, 
-		true, 
+		m_settings.rcSettings.usePreAveragedGather, 
 		m_settings.rcSettings.useDepthAwareMerging
 	)
 {
@@ -1725,6 +1732,8 @@ void RadianceCascades::DrawSettingsUI()
 
 		if (rcs.renderRC3D)
 		{
+			bool shouldGenerateRCResources = false;
+
 			ImGui::Separator();
 
 			if (ImGui::Checkbox("Use Depth Aware Merging", &rcs.useDepthAwareMerging))
@@ -1737,15 +1746,61 @@ void RadianceCascades::DrawSettingsUI()
 				m_rcManager3D.SetRayLength(rcs.rayLength0);
 			}
 
-			if (ImGui::InputInt("Probe Spacing", &rcs.probeSpacing0, 1, 0))
+			// Rays per probe settings
 			{
-				rcs.probeSpacing0 = int(Math::Clamp(float(rcs.probeSpacing0), 1.0f, 16.0f));
+				ImGui::AlignTextToFramePadding();
+				ImGui::Text("Rays per probe 0:");
+				ImGui::SameLine();
 
-				if (m_rcManager3D.GetProbeSpacing() != rcs.probeSpacing0)
+				ImGui::RadioButton("16", &rcs.raysPerProbe0, 16); ImGui::SameLine();
+				ImGui::RadioButton("36", &rcs.raysPerProbe0, 36); ImGui::SameLine();
+				ImGui::RadioButton("64", &rcs.raysPerProbe0, 64);
+
+				if (m_rcManager3D.GetRaysPerProbe(0) != rcs.raysPerProbe0)
 				{
-					m_rcManager3D.SetProbeSpacing(rcs.probeSpacing0);
-					m_rcManager3D.Generate(rcs.raysPerProbe0, rcs.probeSpacing0, ::GetSceneColorWidth(), ::GetSceneColorHeight());
+					shouldGenerateRCResources = true;
 				}
+			}
+
+			// Probe spacing settings
+			{
+				ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x * 0.2f);
+				if (ImGui::InputInt("Probe Spacing [1 - 16]", &rcs.probeSpacing0, 1, 0))
+				{
+					rcs.probeSpacing0 = int(Math::Clamp(float(rcs.probeSpacing0), 1.0f, 16.0f));
+
+					if (m_rcManager3D.GetProbeSpacing() != rcs.probeSpacing0)
+					{
+						shouldGenerateRCResources = true;
+					}
+				}
+			}
+			
+			// Max cascade count settings
+			{
+				ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x * 0.2f);
+				int prevMaxCascadeCount = rcs.maxCascadeCount;
+				if (ImGui::InputInt("Max Cascade Count [1 - 10]", &rcs.maxCascadeCount, 1, 0))
+				{
+					rcs.maxCascadeCount = int(Math::Clamp(float(rcs.maxCascadeCount), 1.0f, 10.0f));
+
+					if (prevMaxCascadeCount != rcs.maxCascadeCount)
+					{
+						shouldGenerateRCResources = true;
+					}
+				}
+			}
+			
+
+			if (shouldGenerateRCResources)
+			{
+				m_rcManager3D.Generate(
+					rcs.raysPerProbe0, 
+					rcs.probeSpacing0, 
+					::GetSceneColorWidth(), 
+					::GetSceneColorHeight(),
+					rcs.maxCascadeCount
+				);
 			}
 
 			const ColorBuffer& cascade0Buffer = m_rcManager3D.GetCascadeIntervalBuffer(0);
@@ -1754,6 +1809,8 @@ void RadianceCascades::DrawSettingsUI()
 
 			ImGui::Text("Cascade Count: %u", m_rcManager3D.GetCascadeIntervalCount());
 			ImGui::Text("Using pre-averaging: %s", m_rcManager3D.UsesPreAveragedIntervals() ? "Yes" : "No");
+			uint64_t rcVRAMUsage = m_rcManager3D.GetTotalVRAMUsage();
+			ImGui::Text("Vram usage: %.1f MB", rcVRAMUsage / (float)MemoryUnit::MegaByte);
 
 			// Create a table with 5 columns: Cascade, Probe Count, Ray Count, Start Dist, Length
 			if (ImGui::BeginTable("CascadeTable", 6, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_NoHostExtendX))
