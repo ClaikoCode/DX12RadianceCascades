@@ -71,7 +71,7 @@ struct TestSetup
 
 	void WriteTestSuiteToCSVFile()
 	{
-		std::wstring fileName = std::format(L"RadianceCascadesTestResult_{}x{}", Graphics::g_DisplayWidth, Graphics::g_DisplayHeight);
+		std::wstring fileName = std::format(L"RadianceCascadesTestResult_{}x{}.csv", Graphics::g_DisplayWidth, Graphics::g_DisplayHeight);
 		std::wofstream fileStream(fileName);
 		if (!fileStream.is_open())
 		{
@@ -224,7 +224,7 @@ namespace
 		// Full test setup
 		sTestSetup.maxAllowedCascadeLevelsVals = { 5, 6, 7, 8 };
 		sTestSetup.probeSpacing0Vals = { 1, 2, 3, 4 };
-		sTestSetup.raysPerProbe0Vals = { 16, 64 };
+		sTestSetup.raysPerProbe0Vals = { 16, 36, 64 };
 #elif (TEST_TO_RUN == 1)
 		// Half test setup
 		sTestSetup.maxAllowedCascadeLevelsVals = { 5, 6, 7 };
@@ -396,6 +396,13 @@ void RadianceCascades::Update(float deltaT)
 		{
 			m_cameraController->Update(deltaT);
 		}
+	}
+
+	if (GameInput::IsFirstPressed(GameInput::kKey_p))
+	{
+		// Print the position of the camera:
+		const Math::Vector3& cameraPos = m_camera.GetPosition();
+		LOG_INFO(L"Camera position: ({}, {}, {})", (float)cameraPos.GetX(), (float)cameraPos.GetY(), (float)cameraPos.GetZ());
 	}
 
 #if defined(RUN_TESTS)
@@ -722,7 +729,7 @@ void RadianceCascades::InitializeScene()
 
 		
 		Vector3 modelCenter = GetMainSceneModelCenter();
-		m_camera.SetEyeAtUp(modelCenter + Vector3(500.0f, -80.0f, -150.0f), modelCenter, Vector3(kYUnitVector));
+		m_camera.SetEyeAtUp(Vector3(0.0f, -560.0f, -200.0f), modelCenter - Vector3(0.0f, 300.0f, 0.0f), Vector3(kYUnitVector));
 		m_camera.SetZRange(0.5f, 5000.0f);
 		
 		m_cameraController.reset(new FlyingFPSCamera(m_camera, Vector3(kYUnitVector)));

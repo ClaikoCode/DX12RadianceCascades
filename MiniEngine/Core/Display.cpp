@@ -80,12 +80,29 @@ namespace Graphics
 
     const uint32_t kNumPredefinedResolutions = 7;
 
+    // Added by JD.
+#define RES_1080P
+#if defined(RES_1080P)
+	const eResolution kNativeResolution = k1080p;
+	const uint32_t baseDisplayWidth = 1920;
+	const uint32_t baseDisplayHeight = 1080;
+#elif defined(RES_1440P)
+	const eResolution kNativeResolution = k1440p;
+	const uint32_t baseDisplayWidth = 2560;
+	const uint32_t baseDisplayHeight = 1440;
+#else
+	const eResolution kNativeResolution = k720p;
+	const uint32_t baseDisplayWidth = 1280;
+	const uint32_t baseDisplayHeight = 720;
+#endif
+
+
     const char* ResolutionLabels[] = { "1280x720", "1600x900", "1920x1080", "2560x1440", "3200x1800", "3840x2160", "1024x1024"};
-    EnumVar NativeResolution("Graphics/Display/Native Resolution", k1080p, kNumPredefinedResolutions, ResolutionLabels);
+    EnumVar NativeResolution("Graphics/Display/Native Resolution", kNativeResolution, kNumPredefinedResolutions, ResolutionLabels);
 #ifdef _GAMING_DESKTOP
     // This can set the window size to common dimensions.  It's also possible for the window to take on other dimensions
     // through resizing or going full-screen.
-    EnumVar DisplayResolution("Graphics/Display/Display Resolution", k1080p, kNumPredefinedResolutions, ResolutionLabels);
+    EnumVar DisplayResolution("Graphics/Display/Display Resolution", kNativeResolution, kNumPredefinedResolutions, ResolutionLabels);
 #endif
 
     bool g_bEnableHDROutput = false;
@@ -96,8 +113,8 @@ namespace Graphics
 
     uint32_t g_NativeWidth = 0;
     uint32_t g_NativeHeight = 0;
-    uint32_t g_DisplayWidth = 1920;
-    uint32_t g_DisplayHeight = 1080;
+    uint32_t g_DisplayWidth = baseDisplayWidth;
+    uint32_t g_DisplayHeight = baseDisplayHeight;
     ColorBuffer g_PreDisplayBuffer;
 
     void ResolutionToUINT(eResolution res, uint32_t& width, uint32_t& height)
@@ -200,6 +217,7 @@ namespace Graphics
 void Display::Resize(uint32_t width, uint32_t height)
 {
     g_CommandManager.IdleGPU();
+   
 
     g_DisplayWidth = width;
     g_DisplayHeight = height;

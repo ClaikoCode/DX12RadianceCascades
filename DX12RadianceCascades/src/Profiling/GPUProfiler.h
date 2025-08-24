@@ -11,7 +11,7 @@
 constexpr uint32_t MaxProfiles = 16u;
 constexpr uint32_t MaxQueries = MaxProfiles * 2; // Two queries per profile.
 
-constexpr uint32_t MaxFrametimeSampleCount = 128u;
+constexpr uint32_t MaxFrametimeSampleCount = 64u;
 
 #if defined(PROFILE_GPU)
 	#define GPU_PROFILE_BLOCK(name, context) PerfProfileBlock CONCAT(profileBlock, __LINE__)(context, name)
