@@ -20,19 +20,10 @@
 #include "RadianceCascadeManager3D.h"
 
 #if defined(_DEBUGDRAWING)
-#define ENABLE_DEBUG_DRAW 1
+	#define ENABLE_DEBUG_DRAW 1
 #else
-#define ENABLE_DEBUG_DRAW 0
+	#define ENABLE_DEBUG_DRAW 0
 #endif
-
-#if defined(PROFILE_GPU)
-	// Uncomment to run tests.
-	//#define RUN_TESTS
-	#if defined(RUN_TESTS)
-		// 0: Full test, 1: Half test, 2: Simple test
-		#define TEST_TO_RUN 0
-	#endif // RUN_TESTS
-#endif // PROFILE_GPU
 
 typedef std::function<void(ModelInstance*, float, double)> UpdateScript;
 
@@ -81,10 +72,13 @@ struct RadianceCascadesSettings
 	int cascadeVisProbeIntervalIndex = 0;
 	int cascadeVisProbeSubset = 256;
 
-	float rayLength0 = 4.0f;
 	bool useDepthAwareMerging = false;
+	bool usePreAveragedGather = true;
+
+	float rayLength0 = 4.0f;
 	int probeSpacing0 = 2;
-	uint32_t raysPerProbe0 = 16u;
+	int raysPerProbe0 = 16;
+	int maxCascadeCount = 8;
 };
 
 #define ENABLE_RT (false)

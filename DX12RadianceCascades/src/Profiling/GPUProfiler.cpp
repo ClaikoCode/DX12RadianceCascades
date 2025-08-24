@@ -266,7 +266,7 @@ void GPUProfiler::DrawProfilerUI()
 				perfProfile.currentSampleCount,
 				"",
 				0.0f,
-				15.0f,
+				FLT_MAX, // Dynamically adjust for maximum values.
 				ImVec2(350.0f, 30.0f)
 			);
 		}
