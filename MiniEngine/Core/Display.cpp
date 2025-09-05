@@ -50,7 +50,6 @@ namespace GameCore { extern HWND g_hWnd; }
 #include "CompiledShaders/GenerateMipsGammaOddYCS.h"
 
 #define SWAP_CHAIN_BUFFER_COUNT 3
-#define RES1024 (1024*2)
 
 DXGI_FORMAT SwapChainFormat = DXGI_FORMAT_R10G10B10A2_UNORM;
 
@@ -75,13 +74,13 @@ namespace Graphics
     void PreparePresentHDR();
     void CompositeOverlays( GraphicsContext& Context );
 
-    enum eResolution { k720p, k900p, k1080p, k1440p, k1800p, k2160p, k1024x2 };
+    enum eResolution { k720p, k900p, k1080p, k1440p, k1800p, k2160p, k2048x2 };
     enum eEQAAQuality { kEQAA1x1, kEQAA1x8, kEQAA1x16 };
 
     const uint32_t kNumPredefinedResolutions = 7;
 
-    // Added by JD.
-#define RES_1080P
+// Added by JD.
+#define RES_1440P
 #if defined(RES_1080P)
 	const eResolution kNativeResolution = k1080p;
 	const uint32_t baseDisplayWidth = 1920;
@@ -90,10 +89,14 @@ namespace Graphics
 	const eResolution kNativeResolution = k1440p;
 	const uint32_t baseDisplayWidth = 2560;
 	const uint32_t baseDisplayHeight = 1440;
+#elif defined(RES_2048)
+	const eResolution kNativeResolution = k2048x2;
+	const uint32_t baseDisplayWidth = 2048;
+	const uint32_t baseDisplayHeight = 2048;
 #else
-	const eResolution kNativeResolution = k720p;
-	const uint32_t baseDisplayWidth = 1280;
-	const uint32_t baseDisplayHeight = 720;
+    const eResolution kNativeResolution = k720p;
+    const uint32_t baseDisplayWidth = 1280;
+    const uint32_t baseDisplayHeight = 720;
 #endif
 
 
@@ -146,8 +149,8 @@ namespace Graphics
             width = 3840;
             height = 2160;
             break;
-        case k1024x2:
-            width = RES1024;
+        case k2048x2:
+            width = 2048;
             height = width;
             break;
         }

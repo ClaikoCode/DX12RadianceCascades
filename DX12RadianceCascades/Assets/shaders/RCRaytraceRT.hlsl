@@ -92,7 +92,7 @@ float2 LoadUVFromVertex(uint vertexByteOffset, uint uvOffsetInBytes)
 struct RayPayload
 {
     int2 probeIndex;
-    float4 result;
+    float4 result; // Check if this is atomically handled, assuming ray dispatches run concurrenctly. Test with four memory addresses that are summed and averaged at the end.
 };
 
 // Direction is filled outside of this function.
@@ -182,6 +182,11 @@ void ClosestHitShader(inout RayPayload payload, in BuiltInTriangleIntersectionAt
     const float2 uv2 = LoadUVFromVertex(vertexByteOffsets.z, uvOffset);
     const float2 uv = BARYCENTRIC_NORMALIZATION(barycentrics, uv0, uv1, uv2);
     
+    //TODO: 
+    // Add logic for fetching vertex positions, transform them, and then calculate if this hit was backface or not.
+    // If the face was emissive and backface = true, force the emissive color to be black but register it as a hit. 
+   
+    
     float3 hitColor = emissiveTex.SampleLevel(sourceSampler, uv, 0).rgb * 10.0f;
     payload.result += float4(hitColor, 0.0f);
 }
@@ -199,7 +204,7 @@ void MissShader(inout RayPayload payload)
     }
     else
     {
-        missColor = float3(0.0f, 0.0f, 0.0f);
+        missColor = 0.0f;
     }
     
     payload.result += float4(missColor, 1.0f);

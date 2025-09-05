@@ -66,7 +66,8 @@ struct RadianceCascadesSettings
 	bool visualizeRC3DGatherCascades = false;
 	bool visualizeRC3DMergeCascades = false;
 	bool seeCoalesceResult = false;
-	int cascadeVisIndex = 0;
+	int cascadeVisIndex = 0; // Shows cascades with probe grids.
+	int cascadeVisResultIndex = -1; // Shows the result from a single cascade.
 
 	bool enableCascadeProbeVis = false;
 	int cascadeVisProbeIntervalIndex = 0;
@@ -75,7 +76,7 @@ struct RadianceCascadesSettings
 	bool useDepthAwareMerging = false;
 	bool usePreAveragedGather = true;
 
-	float rayLength0 = 4.0f;
+	float rayLength0 = 5.0f;
 	int probeSpacing0 = 2;
 	int raysPerProbe0 = 16;
 	int maxCascadeCount = 8;
@@ -99,6 +100,7 @@ struct GlobalSettings
 	bool renderDebugLines = ENABLE_DEBUG_DRAW;
 	bool useDepthCheckForDebugLines = false;
 	bool useDebugCam = false;
+	bool renderUI = true;
 };
 
 struct AppSettings

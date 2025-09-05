@@ -42,6 +42,7 @@ void main( uint3 DTid : SV_DispatchThreadID )
         // If this ray is obscured (a == 0), the higher cascades should not carry over any information.
         if(IsZero(nearRadiance.a))
         {
+            // TODO: Remove this line. No reason at all and only adds ms (albiet very small amounts).
             cascadeN[pixelPos] = nearRadiance;
             return;
         }
