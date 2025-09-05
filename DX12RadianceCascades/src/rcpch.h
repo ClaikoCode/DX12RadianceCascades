@@ -15,8 +15,14 @@
 
 #pragma once
 
-// Comment toggle tests
+// Comment to toggle tests
 //#define RUN_TESTS
+
+// Comment to toggle GPU profiling
+#define PROFILE_GPU
+
+// Comment to toggle UI drawing
+#define DRAW_UI
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN             // Exclude rarely-used stuff from Windows headers.

@@ -270,7 +270,7 @@ namespace
 
 		// This will force the GPU driver to collect measurements in any way it wants to collect the data necessary for dynamic compilations.
 		// This will be queried each frame until it says it has had enough frames and will stop collecting measurements.
-		// Then these optimizations will be applied and disabled for the rest of the testing session.
+		// Then these optimizations will be applied and disabled for the rest of a testing suite.
 		ThrowIfFailedHR(device6->SetBackgroundProcessingMode(
 			D3D12_BACKGROUND_PROCESSING_MODE_ALLOW_INTRUSIVE_MEASUREMENTS,
 			D3D12_MEASUREMENTS_ACTION_KEEP_ALL,
@@ -405,12 +405,19 @@ void RadianceCascades::Update(float deltaT)
 		}
 	}
 
+	// Print the position of the camera
 	if (GameInput::IsFirstPressed(GameInput::kKey_p))
 	{
-		// Print the position of the camera:
 		const Math::Vector3& cameraPos = m_camera.GetPosition();
 		LOG_INFO(L"Camera position: ({}, {}, {})", (float)cameraPos.GetX(), (float)cameraPos.GetY(), (float)cameraPos.GetZ());
 	}
+
+	// Toggle UI
+	if (GameInput::IsFirstPressed(GameInput::kKey_u))
+	{
+		m_settings.globalSettings.renderUI = !m_settings.globalSettings.renderUI;
+	}
+
 
 #if defined(RUN_TESTS)
 	if(sTestSetup.currentFrameCount >= sTestSetup.framesBetweenTests || sTestSetup.currentTestSuiteIndex == 0)
@@ -651,9 +658,14 @@ void RadianceCascades::RenderScene()
 void RadianceCascades::RenderUI(GraphicsContext& uiContext)
 {
 
-#if defined(RUN_TESTS)
+#if !defined(DRAW_UI) || defined(RUN_TESTS)
 	return; // Skip UI rendering when test running is enabled.
 #endif
+
+	if (!m_settings.globalSettings.renderUI)
+	{
+		return;
+	}
 
 	AppGUI::NewFrame();
 
@@ -686,7 +698,12 @@ void RadianceCascades::InitializeScene()
 {
 	GPU_MEMORY_BLOCK("Scene");
 
-	int sceneIndex = 3;
+	// Super lazy, I know.
+	int sceneIndex = 0;
+
+#if defined(RUN_TESTS)
+	sceneIndex = 3; 
+#endif
 
 	if (sceneIndex == 0) // Default scene
 	{
@@ -697,11 +714,13 @@ void RadianceCascades::InitializeScene()
 		{
 			Math::Vector3 modelCenter = GetMainSceneModelCenter();
 			
-			for (int i = 0; i < 5; i++)
-			{
-				float yPos = (100.0f * i) - 500.0f;
-				AddSceneModel(ModelIDSphereTest, { 130.0f, Vector3(0.0f, yPos, 0.0f) + modelCenter, {}, ::BScriptPosOscillation });
-			}
+			AddSceneModel(ModelIDSphereTest, { 130.0f, Vector3(880.0f, -550.0f, 90.0f )});
+
+			//for (int i = 0; i < 5; i++)
+			//{
+			//	float yPos = (100.0f * i) - 500.0f;
+			//	AddSceneModel(ModelIDSphereTest, { 130.0f, Vector3(0.0f, yPos, 0.0f) + modelCenter, {}, ::BScriptPosOscillation });
+			//}
 			
 			//AddSceneModel(ModelIDSphereTest, { 50.0f, Vector3(200.0f, -300.0f, 500.0f) + modelCenter });
 			//AddSceneModel(ModelIDSphereTest, { 30.0f, Vector3(200.0f, -300.0f, -500.0f) + modelCenter });
@@ -719,7 +738,7 @@ void RadianceCascades::InitializeScene()
 	{
 		AddSceneModel(ModelIDLantern, { 100.0f });
 	}
-	else if (sceneIndex == 3)
+	else if (sceneIndex == 3) // Testing scene
 	{
 		AddSceneModel(ModelIDSponza, { 100.0f, Vector3(0.0f, 0.0f, 0.0f) });
 
@@ -1099,7 +1118,8 @@ void RadianceCascades::InitializeRCResources()
 			m_settings.rcSettings.raysPerProbe0, 
 			m_settings.rcSettings.probeSpacing0, 
 			::GetSceneColorWidth(), 
-			::GetSceneColorHeight()
+			::GetSceneColorHeight(),
+			m_settings.rcSettings.maxCascadeCount
 		);
 	}
 	
@@ -1285,7 +1305,18 @@ void RadianceCascades::RunRCGather(Camera& camera, DepthBuffer& sourceDepthBuffe
 			rtCommandList->SetComputeRootDescriptorTable(RootEntryRCRaytracingRTGDepthTextureUAV, depthUAV);
 		}
 
-		for (uint32_t cascadeIndex = 0; cascadeIndex < m_rcManager3D.GetCascadeIntervalCount(); cascadeIndex++)
+
+		uint32_t baseCascade = 0;
+		uint32_t maxCascade = uint32_t(m_rcManager3D.GetCascadeIntervalCount());
+
+		int cascdeVisResultIndex = m_settings.rcSettings.cascadeVisResultIndex;
+		if (cascdeVisResultIndex < maxCascade && cascdeVisResultIndex > -1)
+		{
+			baseCascade = m_settings.rcSettings.cascadeVisResultIndex;
+			maxCascade = baseCascade + 1;
+		}
+
+		for (uint32_t cascadeIndex = baseCascade; cascadeIndex < maxCascade; cascadeIndex++)
 		{
 			CascadeInfo cascadeInfo = {};
 			cascadeInfo.cascadeIndex = cascadeIndex;
@@ -1717,6 +1748,9 @@ void RadianceCascades::DrawSettingsUI()
 			ImGui::Checkbox("Use Depth For Debug Lines", &gs.useDepthCheckForDebugLines);
 		}
 #endif
+
+		ImGui::SeparatorText("Misc");
+		ImGui::Checkbox("Draw UI (toggle with 'u')", &gs.renderUI);
 	}
 #pragma endregion
 	
@@ -1741,6 +1775,8 @@ void RadianceCascades::DrawSettingsUI()
 				m_rcManager3D.SetDepthAwareMerging(rcs.useDepthAwareMerging);
 			}
 
+			ImGui::SliderInt("Cascade Result Index", &rcs.cascadeVisResultIndex, -1, m_rcManager3D.GetCascadeIntervalCount() - 1);
+
 			if (ImGui::SliderFloat("Ray Length", &rcs.rayLength0, 0.1f, 150.0f))
 			{
 				m_rcManager3D.SetRayLength(rcs.rayLength0);
@@ -1752,6 +1788,7 @@ void RadianceCascades::DrawSettingsUI()
 				ImGui::Text("Rays per probe 0:");
 				ImGui::SameLine();
 
+				ImGui::RadioButton("4", &rcs.raysPerProbe0, 4); ImGui::SameLine();
 				ImGui::RadioButton("16", &rcs.raysPerProbe0, 16); ImGui::SameLine();
 				ImGui::RadioButton("36", &rcs.raysPerProbe0, 36); ImGui::SameLine();
 				ImGui::RadioButton("64", &rcs.raysPerProbe0, 64);
