@@ -100,7 +100,7 @@ float3 SimpleSunsetSky(float3 viewDir, float3 sunDir)
     float sunGlow = pow(sunDot, 8.0);
     
     // Add sun and glow
-    float3 sunColor = float3(1.0, 0.6, 0.3) * 25.0; // HDR sun
+    float3 sunColor = float3(1.0, 0.6, 0.3) * 50.0; // HDR sun
     skyBaseColor += sunDisc * sunColor;
     skyBaseColor += sunGlow * float3(0.8, 0.5, 0.3) * (1.0 - height) * 0.8;
     
