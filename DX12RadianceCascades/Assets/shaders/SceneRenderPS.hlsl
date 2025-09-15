@@ -105,12 +105,19 @@ PSOutput main(VSOutput vsOutput)
     float attenuation = dot(normal, normalize(SunDirection));
     //attenuation = 1.0f;
     
-    float3 finalColor = baseColor.rgb * attenuation * SunIntensity + emissiveColor * emissiveFactor + baseColor.rgb * 0.1f;
+    float3 finalColor = baseColor.rgb + emissiveColor;
     
     PSOutput psOutput;
     
-    //psOutput.albedoBuffer = float4(finalColor, 1.0f);
-    psOutput.albedoBuffer = float4(baseColor.rgb, 1.0f);
-    psOutput.normalBuffer = float4(normal, 1.0f);
+    float isEmissive = 0.0f;
+    if (length(emissiveColor) > 0.0f)
+    {
+        isEmissive = 1.0f;
+    }
+    
+    psOutput.albedoBuffer = float4(finalColor, 1.0f);
+    //psOutput.albedoBuffer = float4(baseColor.rgb, 1.0f);
+    // Store emissiveness in normal buffer.
+    psOutput.normalBuffer = float4(normal, isEmissive);
     return psOutput;
 }

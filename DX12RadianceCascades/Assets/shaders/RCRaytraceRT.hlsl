@@ -113,6 +113,19 @@ inline RayDesc GenerateProbeRay(ProbeInfo3D probeInfo3D)
 void RayGenerationShader()
 {
     uint2 pixelPos = DispatchRaysIndex().xy;
+    
+    /*
+        TODO:
+    
+        To enable accurate representation of the rendering equation, emission should be ADDED to the irradiance at a certain point. 
+        Howerver, currently it is just set to the color value from the albedo buffer (which includes emission as well). 
+        This means that they dont take influence from any other light source, which might be noticeable for weaker emissive object, but it is not accurate.
+    
+        This can be fixed by having an ID per object that can be read from a screen space position, sampling it from the same pixel as the depth is sampled,
+        storing it in the ray payload, and then comparing the object ID from a ray hit with the original ID. If they are the same, do not store its emission.
+        This should only really apply for cascade 0 as any higher level might actually need this emission information. This is an imperfect solution though.
+    */
+    
     ProbeInfo3D probeInfo3D = BuildProbeInfo3DDirFirst(pixelPos, cascadeInfo.cascadeIndex, rcGlobals);
     RayDesc ray = GenerateProbeRay(probeInfo3D);
     
@@ -186,7 +199,6 @@ void ClosestHitShader(inout RayPayload payload, in BuiltInTriangleIntersectionAt
     // Add logic for fetching vertex positions, transform them, and then calculate if this hit was backface or not.
     // If the face was emissive and backface = true, force the emissive color to be black but register it as a hit. 
    
-    
     float3 hitColor = emissiveTex.SampleLevel(sourceSampler, uv, 0).rgb * 10.0f;
     payload.result += float4(hitColor, 0.0f);
 }

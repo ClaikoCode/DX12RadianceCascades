@@ -699,7 +699,7 @@ void RadianceCascades::InitializeScene()
 	GPU_MEMORY_BLOCK("Scene");
 
 	// Super lazy, I know.
-	int sceneIndex = 0;
+	int sceneIndex = 4;
 
 #if defined(RUN_TESTS)
 	sceneIndex = 3; 
@@ -716,16 +716,16 @@ void RadianceCascades::InitializeScene()
 			
 			AddSceneModel(ModelIDSphereTest, { 130.0f, Vector3(880.0f, -550.0f, 90.0f )});
 
-			//for (int i = 0; i < 5; i++)
-			//{
-			//	float yPos = (100.0f * i) - 500.0f;
-			//	AddSceneModel(ModelIDSphereTest, { 130.0f, Vector3(0.0f, yPos, 0.0f) + modelCenter, {}, ::BScriptPosOscillation });
-			//}
+			for (int i = 0; i < 5; i++)
+			{
+				float yPos = (100.0f * i) - 500.0f;
+				AddSceneModel(ModelIDSphereTest, { 130.0f, Vector3(0.0f, yPos, 0.0f) + modelCenter, {}, ::BScriptPosOscillation });
+			}
 			
-			//AddSceneModel(ModelIDSphereTest, { 50.0f, Vector3(200.0f, -300.0f, 500.0f) + modelCenter });
-			//AddSceneModel(ModelIDSphereTest, { 30.0f, Vector3(200.0f, -300.0f, -500.0f) + modelCenter });
-			//
-			//AddSceneModel(ModelIDLantern, { 25.0f, Vector3(1100.0f, -500.0f, 0.0f) + modelCenter, Math::Quaternion(0.0f, Math::XM_PI, 0.0f)});
+			AddSceneModel(ModelIDSphereTest, { 50.0f, Vector3(200.0f, -300.0f, 500.0f) + modelCenter });
+			AddSceneModel(ModelIDSphereTest, { 30.0f, Vector3(200.0f, -300.0f, -500.0f) + modelCenter });
+			
+			AddSceneModel(ModelIDLantern, { 25.0f, Vector3(1100.0f, -500.0f, 0.0f) + modelCenter, Math::Quaternion(0.0f, Math::XM_PI, 0.0f)});
 		}
 
 
@@ -745,6 +745,14 @@ void RadianceCascades::InitializeScene()
 		Math::Vector3 modelCenter = GetMainSceneModelCenter();
 		float yPos = -100.0f;
 		AddSceneModel(ModelIDSphereTest, { 130.0f, Vector3(0.0f, yPos, 0.0f) + modelCenter, {}, ::BScriptPosOscillation });
+	}
+	else if (sceneIndex == 4)
+	{
+		AddSceneModel(ModelIDSponza, { 100.0f, Vector3(0.0f, 0.0f, 0.0f) });
+
+		Math::Vector3 modelCenter = GetMainSceneModelCenter();
+
+		AddSceneModel(ModelIDSphereTest, { 130.0f, Vector3(880.0f, -550.0f, 90.0f) });
 	}
 
 	// Setup camera
@@ -809,10 +817,11 @@ void RadianceCascades::InitializePSOs()
 		rootSig[RootEntryDeferredLightingDiffuseRadianceSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 2, 1);
 		rootSig[RootEntryDeferredLightingCascade0MinMaxDepthSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 3, 1);
 		rootSig[RootEntryDeferredLightingDepthBufferSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 4, 1);
+		rootSig[RootEntryDeferredLightingCascade0SRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 5, 1);
 		rootSig[RootEntryDeferredLightingGlobalInfoCB].InitAsConstantBuffer(0);
 		rootSig[RootEntryDeferredLightingRCGlobalsCB].InitAsConstantBuffer(1);
 		{
-			SamplerDesc samplerState = Graphics::SamplerLinearClampDesc;
+			SamplerDesc samplerState = Graphics::SamplerLinearBorderDesc;
 			rootSig.InitStaticSampler(0, samplerState);
 		}
 		rootSig.Finalize(L"Deferred Lighting");
@@ -1634,6 +1643,7 @@ void RadianceCascades::RunDeferredLightingPass(ColorBuffer& albedoBuffer, ColorB
 	// TODO: Have these as input parameters. Better yet, create an input struct because its getting very long.
 	ColorBuffer& depthBuffer = m_depthBufferCopy;
 	ColorBuffer& minMaxDepthBuffer = m_minMaxDepthMips;
+	ColorBuffer& cascade0Buffer = m_rcManager3D.GetCascadeIntervalBuffer(0);
 
 	GlobalInfo globalInfo = {};
 	::FillGlobalInfo(globalInfo, m_camera); // TODO: Make camera as input.
@@ -1652,6 +1662,7 @@ void RadianceCascades::RunDeferredLightingPass(ColorBuffer& albedoBuffer, ColorB
 		gfxContext.TransitionResource(diffuseRadianceBuffer, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 		gfxContext.TransitionResource(depthBuffer, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 		gfxContext.TransitionResource(minMaxDepthBuffer, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+		gfxContext.TransitionResource(cascade0Buffer, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 		gfxContext.TransitionResource(outputBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
 		// Set up the pipeline state and root signature
@@ -1668,6 +1679,7 @@ void RadianceCascades::RunDeferredLightingPass(ColorBuffer& albedoBuffer, ColorB
 		gfxContext.SetDynamicDescriptor(RootEntryDeferredLightingDiffuseRadianceSRV, 0, diffuseRadianceBuffer.GetSRV());
 		gfxContext.SetDynamicDescriptor(RootEntryDeferredLightingCascade0MinMaxDepthSRV, 0, minMaxDepthBuffer.GetSRV());
 		gfxContext.SetDynamicDescriptor(RootEntryDeferredLightingDepthBufferSRV, 0, depthBuffer.GetSRV());
+		gfxContext.SetDynamicDescriptor(RootEntryDeferredLightingCascade0SRV, 0, cascade0Buffer.GetSRV());
 		gfxContext.SetDynamicConstantBufferView(RootEntryDeferredLightingGlobalInfoCB, sizeof(GlobalInfo), &globalInfo);
 		gfxContext.SetDynamicConstantBufferView(RootEntryDeferredLightingRCGlobalsCB, sizeof(RCGlobals), &rcGlobalInfo);
 

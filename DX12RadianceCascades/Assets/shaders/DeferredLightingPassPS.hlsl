@@ -3,12 +3,14 @@
 
 SamplerState linearSampler : register(s0);
 
-Texture2D<float3> albedoBuffer : register(t0);
+Texture2D<float4> albedoBuffer : register(t0);
 Texture2D<float4> normalBuffer : register(t1);
 Texture2D<float4> diffuseRadianceBuffer : register(t2);
 
 Texture2D<float2> cascade0MinMaxDepth : register(t3);
 Texture2D<float> depthBuffer : register(t4);
+
+Texture2D<float4> cascade0RadianceBuffer : register(t5);
 
 ConstantBuffer<GlobalInfo> globalInfo : register(b0);
 ConstantBuffer<RCGlobals> rcGlobals : register(b1);
@@ -23,14 +25,30 @@ float4 main(Interpolators i) : SV_TARGET
 {
     float2 uv = i.texcoord;
     
-    float4 albedo = float4(albedoBuffer.Sample(linearSampler, uv), 1.0f);
-    float4 normals = normalBuffer.Sample(linearSampler, uv);
+    int2 outputDims;
+    GetDims(albedoBuffer, outputDims);
+    float2 texelSize = 1.0f / outputDims;
+    
+    float4 albedo = albedoBuffer.Sample(linearSampler, uv);
+    float4 normals = normalBuffer[uv * outputDims];
     float4 diffuseRadiance = diffuseRadianceBuffer.Sample(linearSampler, uv);
-
-    float4 finalColor;
-    if(IsZero(normals))
+    
+    // Yellow if values was never changed (useful for debugging).
+    float4 finalColor = float4(1.0f, 1.0f, 0.0f, 1.0f);
+    
+    // If normals match the buffers clear value, the pixel has not been written to. 
+    if(IsZero(normals.rgb))
     {
+       // Apply the background color.
+       // TODO: When a proper skybox is added (which doesnt write normal info), this step should return early, keeping the color of the skybox.
        finalColor = float4(diffuseRadiance.rgb, 1.0f);
+    }
+    // Alpha value informs if this pixel was emissive or not. 
+    else if(normals.a == 1.0f) 
+    {
+        // If emissive, write the albedo color (which contains emissive light info) directly. 
+        // This ensures crisp emissives as RC can produce discontinues emissive values that look strange/wrong for emissives with lower strength.
+        finalColor = float4(albedo.rgb, 1.0f);
     }
     else
     {
@@ -73,10 +91,53 @@ float4 main(Interpolators i) : SV_TARGET
         }
         else
         {
-            float4 radiance = diffuseRadianceBuffer.Sample(linearSampler, uv);
-            finalColor = albedo * radiance;
+            if (true)
+            {
+                normals = float4(normals.rgb, 1.0f);
+                
+                float3 radiance = 0.0f;
+                
+                uint rayCount = rcGlobals.rayCount0;
+                // If the merge has been pre-averaged it means that each original ray has 
+                // casted a ray equal to its ray scaling factor. 
+                if (rcGlobals.usePreAveraging)
+                {
+                    rayCount /= rcGlobals.rayScalingFactor;
+                }
+                
+                uint rayCount0Sqrt = sqrt(rayCount);
+                int2 probeCounts = int2(rcGlobals.probeCount0X, rcGlobals.probeCount0Y);
+                
+                float2 probeUV = uv / rayCount0Sqrt;
+                float2 probeUVSize = 1.0f / (outputDims / rayCount0Sqrt);
+                probeUV = clamp(probeUV, probeUVSize, 1.0f / rayCount0Sqrt);
+                
+                float4 summedRadiance = 0.0f;
+                for (int i = 0; i < rayCount0Sqrt; i++)
+                {
+                    for (int k = 0; k < rayCount0Sqrt; k++)
+                    {
+                        int2 rayIndex = int2(i, k);
+      
+                        float3 rayDir = GetRCRayDir(rayIndex, rayCount0Sqrt);
+                        float normalAttenuation = clamp(dot(normals.rgb, rayDir), 0.0f, 1.0f);
+                        
+                        int2 probeIndex = uv * probeCounts;
+                        float4 radianceSample = cascade0RadianceBuffer[probeIndex + rayIndex * probeCounts];
+                        
+                        summedRadiance += radianceSample * normalAttenuation;
+                    }
+                }
+                
+                radiance = summedRadiance.rgb / rayCount;
+                finalColor = float4(albedo.rgb * radiance, 1.0f);
+            }
+            else
+            {
+                float4 radiance = diffuseRadianceBuffer.Sample(linearSampler, uv);
+                finalColor = float4(albedo.rgb, 1.0f) * radiance;
+            }
         }
-       
     }
     
     return finalColor;

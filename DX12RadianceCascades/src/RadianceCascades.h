@@ -196,6 +196,7 @@ private:
 		RootEntryDeferredLightingDiffuseRadianceSRV,
 		RootEntryDeferredLightingCascade0MinMaxDepthSRV,
 		RootEntryDeferredLightingDepthBufferSRV,
+		RootEntryDeferredLightingCascade0SRV,
 		RootEntryDeferredLightingGlobalInfoCB,
 		RootEntryDeferredLightingRCGlobalsCB,
 		RootEntryDeferredLightingCount,
