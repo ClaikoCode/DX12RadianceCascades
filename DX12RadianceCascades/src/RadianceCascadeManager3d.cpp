@@ -31,14 +31,7 @@ namespace
 	}
 }
 
-RadianceCascadeManager3D::RadianceCascadeManager3D(float rayLength0, bool usePreAverage, bool useDepthAwareMerging)
-	: m_rayLength0(rayLength0), 
-	m_raysPerProbe0(0), 
-	m_preAveragedIntervals(usePreAverage), 
-	m_depthAwareMerging(useDepthAwareMerging),
-	m_probeSpacing0(0),
-	m_probeCount0X(0),
-	m_probeCount0Y(0)
+RadianceCascadeManager3D::RadianceCascadeManager3D(float rayLength0, bool usePreAverage) : m_rayLength0(rayLength0), m_preAveragedIntervals(usePreAverage)
 {
 	// Empty
 }
@@ -63,12 +56,14 @@ void RadianceCascadeManager3D::Generate(uint32_t raysPerProbe0, uint32_t probeSp
 	}
 
 	m_cascadeIntervals.resize(maxCalculatedCascadeLevels);
+	m_cascadeGatherFilters.resize(maxCalculatedCascadeLevels - 1);
 
 	uint32_t raysPerProbe = raysPerProbe0;
 	ProbeDims probeDims = { probeCount0X, probeCount0Y };
 	for (uint32_t i = 0; i < maxCalculatedCascadeLevels; i++)
 	{
 		std::wstring cascadeName = std::wstring(L"Cascade Interval ") + std::to_wstring(i);
+		std::wstring cascadeFilterName = cascadeName + L" Gather Filter";
 
 		// If pre averaged intervals are used, each original ray will average the rays that would be averaged into the lower cascades.
 		// This means that each dispatched pixel, representing a probe and a direciton, will already account for the information of rays equal to rayScalingFactor.
@@ -80,6 +75,15 @@ void RadianceCascadeManager3D::Generate(uint32_t raysPerProbe0, uint32_t probeSp
 		// Clear color has alpha of 1.0, indicating that each cascade assumes that its rays are not obscured.
 		m_cascadeIntervals[i].SetClearColor(Color(0.0f, 0.0f, 0.0f, 1.0f));
 		m_cascadeIntervals[i].Create(cascadeName, probeBufferWidth, probeBufferHeight, 1, DefaultFormat);
+
+		if (i > 0)
+		{
+			uint32_t filterIndex = i - 1;
+
+			// TODO: Change the type to DXGI_FORMAT_R8_UINT and handle that in shaders.
+			m_cascadeGatherFilters[filterIndex].SetClearColor(Color(0.0f, 0.0f, 0.0f, 1.0f));
+			m_cascadeGatherFilters[filterIndex].Create(cascadeFilterName, probeBufferWidth, probeBufferHeight, 1, DXGI_FORMAT_R32_UINT);
+		}
 
 		probeDims.probesX /= m_scalingFactor.probeScalingFactor;
 		probeDims.probesY /= m_scalingFactor.probeScalingFactor;
@@ -112,13 +116,17 @@ void RadianceCascadeManager3D::FillRCGlobalInfo(RCGlobals& rcGlobalInfo)
 	rcGlobalInfo.rayScalingFactor = m_scalingFactor.rayScalingFactor;
 	
 	rcGlobalInfo.cascadeCount = GetCascadeIntervalCount();
+	rcGlobalInfo.gatherFilterCount = rcGlobalInfo.cascadeCount - 1; // By definition.
+	
 
 	rcGlobalInfo.usePreAveraging = m_preAveragedIntervals;
-	rcGlobalInfo.depthAwareMerging = m_depthAwareMerging;
+	rcGlobalInfo.depthAwareMerging = useDepthAwareMerging;
 
 	rcGlobalInfo.probeCount0X = m_probeCount0X;
 	rcGlobalInfo.probeCount0Y = m_probeCount0Y;
 	rcGlobalInfo.probeSpacing0 = m_probeSpacing0;
+
+	rcGlobalInfo.useGatherFiltering = useGatherFiltering;
 }
 
 void RadianceCascadeManager3D::ClearBuffers(GraphicsContext& gfxContext)
@@ -127,6 +135,12 @@ void RadianceCascadeManager3D::ClearBuffers(GraphicsContext& gfxContext)
 	{
 		gfxContext.TransitionResource(cascadeInterval, D3D12_RESOURCE_STATE_RENDER_TARGET);
 		gfxContext.ClearColor(cascadeInterval);
+	}
+
+	for (ColorBuffer& cascadeGatherFilter : m_cascadeGatherFilters)
+	{
+		gfxContext.TransitionResource(cascadeGatherFilter, D3D12_RESOURCE_STATE_RENDER_TARGET);
+		gfxContext.ClearColor(cascadeGatherFilter);
 	}
 
 	gfxContext.TransitionResource(m_coalescedResult, D3D12_RESOURCE_STATE_RENDER_TARGET);
@@ -186,6 +200,12 @@ void RadianceCascadeManager3D::UpdateResourceDescriptors()
 	{
 		RuntimeResourceManager::UpdateDescriptor(m_cascadeIntervals[i].GetSRV());
 		RuntimeResourceManager::UpdateDescriptor(m_cascadeIntervals[i].GetUAV());
+	}
+
+	for (size_t i = 0; i < m_cascadeGatherFilters.size(); i++)
+	{
+		RuntimeResourceManager::UpdateDescriptor(m_cascadeGatherFilters[i].GetSRV());
+		RuntimeResourceManager::UpdateDescriptor(m_cascadeGatherFilters[i].GetUAV());
 	}
 
 	RuntimeResourceManager::UpdateDescriptor(m_coalescedResult.GetSRV());

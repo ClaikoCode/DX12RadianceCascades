@@ -38,8 +38,10 @@ __declspec(align(16)) struct RCGlobals
 	uint32_t rayCount0;
 	float rayLength0;
 	uint32_t cascadeCount;
+	uint32_t gatherFilterCount;
 	BOOL usePreAveraging;
 	BOOL depthAwareMerging;
+	BOOL useGatherFiltering;
 	uint32_t probeCount0X; 
 	uint32_t probeCount0Y;
 	uint32_t probeSpacing0; // Spacing between probes in pixels.

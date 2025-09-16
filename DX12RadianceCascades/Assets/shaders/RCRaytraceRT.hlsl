@@ -43,7 +43,9 @@ ConstantBuffer<GeometryOffsets> geomOffsets : register(b0, space1);
 ConstantBuffer<RCGlobals> rcGlobals : register(b1);
 ConstantBuffer<CascadeInfo> cascadeInfo : register(b2);
 
-RWTexture2D<float> depthTex : register(u1);
+RWTexture2D<uint> gatherFilterTexN : register(u1);
+RWTexture2D<uint> gatherFilterTexN1 : register(u2);
+RWTexture2D<float> depthTex : register(u3);
 
 float3 GetBarycentrics(float2 inputBarycentrics)
 {
@@ -92,7 +94,7 @@ float2 LoadUVFromVertex(uint vertexByteOffset, uint uvOffsetInBytes)
 struct RayPayload
 {
     int2 probeIndex;
-    float4 result; // Check if this is atomically handled, assuming ray dispatches run concurrenctly. Test with four memory addresses that are summed and averaged at the end.
+    float4 result;
 };
 
 // Direction is filled outside of this function.
@@ -127,9 +129,22 @@ void RayGenerationShader()
     */
     
     ProbeInfo3D probeInfo3D = BuildProbeInfo3DDirFirst(pixelPos, cascadeInfo.cascadeIndex, rcGlobals);
-    RayDesc ray = GenerateProbeRay(probeInfo3D);
     
-    RayPayload payload = { probeInfo3D.probeIndex, float4(0.0f, 0.0f, 0.0f, 0.0f) };
+    if(rcGlobals.useGatherFiltering)
+    {
+        uint2 clampedProbeNIndex = clamp(probeInfo3D.probeIndex, 1.0f, probeInfo3D.probesPerDim - 1);
+        uint2 probeNSampleIndex = clampedProbeNIndex + probeInfo3D.rayIndex * probeInfo3D.probesPerDim;
+        
+        if (cascadeInfo.cascadeIndex > 0 && cascadeInfo.cascadeIndex < rcGlobals.gatherFilterCount && gatherFilterTexN[probeNSampleIndex] == 0u)
+        {
+            // This line can be removed if clear color is assumed to have alpha 0
+            renderOutput[probeNSampleIndex] = float4(0.0f, 0.0f, 0.0f, 0.0f);
+            return;
+        }
+    }
+    
+    ProbeInfo3D probeInfo3DN1 = BuildProbeInfo3DDirFirst(pixelPos, cascadeInfo.cascadeIndex + 1, rcGlobals);
+    RayDesc ray = GenerateProbeRay(probeInfo3D);
     
     DrawProbe(cascadeInfo.cascadeIndex, probeInfo3D.probeIndex, ray.Origin, ray.TMin);
     
@@ -142,26 +157,59 @@ void RayGenerationShader()
         int2 translationDims = sqrt(rcGlobals.rayScalingFactor);
         int2 baseRayIndex = probeInfo3D.rayIndex * translationDims;
         
+        RayPayload rayPayloads[4];
+        
         // Pre-averaging is done by sampling all upper rays at once.
         for (int i = 0; i < rcGlobals.rayScalingFactor; i++)
         {
             int2 rayIndexOffset = Translate1DTo2D(i, translationDims);
+            rayPayloads[i].probeIndex = probeInfo3D.probeIndex;
 
             // Scale with sqrtRayCount to get the correct ray index.
             ray.Direction = GetRCRayDir(baseRayIndex + rayIndexOffset, sqrtRayCount);
-            TraceRay(Scene, rayFlags, ~0, 0, 1, 0, ray, payload);
+            TraceRay(Scene, rayFlags, ~0, 0, 1, 0, ray, rayPayloads[i]);
+        }
+        
+        float4 summedRadiance = 0.0f;
+        for (int i = 0; i < rcGlobals.rayScalingFactor; i++)
+        {
+            summedRadiance += rayPayloads[i].result;
         }
         
         // Normalized sum.
-        radianceOutput = payload.result / rcGlobals.rayScalingFactor;
+        radianceOutput = summedRadiance / rcGlobals.rayScalingFactor;
     }
     else
     {
+        RayPayload payload = { probeInfo3D.probeIndex, float4(0.0f, 0.0f, 0.0f, 0.0f) };
+        
         ray.Direction = GetRCRayDir(probeInfo3D.rayIndex, sqrtRayCount);
         TraceRay(Scene, rayFlags, ~0, 0, 1, 0, ray, payload);
         
         radianceOutput = payload.result;
     }
+    
+    if(rcGlobals.useGatherFiltering)
+    {
+        if (radianceOutput.a > 0.0f && cascadeInfo.cascadeIndex < (rcGlobals.gatherFilterCount - 1))
+        {
+            int2 translationDims = sqrt(rcGlobals.rayScalingFactor);
+            for (int i = 0; i < rcGlobals.rayScalingFactor; i++)
+            {
+                int2 rayIndexOffset = Translate1DTo2D(i, translationDims);
+                float2 cascadeN1SamplePos = GetCascadeN1SamplePosition(probeInfo3D, probeInfo3DN1, rayIndexOffset);
+                
+                // Flag Bilateral sampling points that they will be used in gathering.
+                for (int k = 0; k < 4; k++)
+                {
+                    int2 sampleOffset = TranslateCoord4x1To2x2(k);
+                    
+                    gatherFilterTexN1[cascadeN1SamplePos + sampleOffset] = 1u;
+                }
+            }
+        }
+    }
+   
     
     renderOutput[DispatchRaysIndex().xy] = radianceOutput;
 }
@@ -200,7 +248,7 @@ void ClosestHitShader(inout RayPayload payload, in BuiltInTriangleIntersectionAt
     // If the face was emissive and backface = true, force the emissive color to be black but register it as a hit. 
    
     float3 hitColor = emissiveTex.SampleLevel(sourceSampler, uv, 0).rgb * 10.0f;
-    payload.result += float4(hitColor, 0.0f);
+    payload.result = float4(hitColor, 0.0f);
 }
 
 [shader("miss")]
@@ -219,5 +267,5 @@ void MissShader(inout RayPayload payload)
         missColor = 0.0f;
     }
     
-    payload.result += float4(missColor, 1.0f);
+    payload.result = float4(missColor, 1.0f);
 }

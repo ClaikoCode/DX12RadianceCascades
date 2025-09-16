@@ -216,7 +216,7 @@ namespace
 		float frequency = 1.0f;
 
 		Vector3 position = centerPoint;
-		position += Vector3(amplitude * sin(frequency * time + yPos), 0.0f, 0.0f);
+		position += Vector3(amplitude * float(sin(double(frequency * time + yPos))), 0.0f, 0.0f);
 
 		transform.SetTranslation(position);
 	}
@@ -313,8 +313,7 @@ RadianceCascades::RadianceCascades()
 	m_mainScissor({}), 
 	m_rcManager3D(
 		m_settings.rcSettings.rayLength0, 
-		m_settings.rcSettings.usePreAveragedGather, 
-		m_settings.rcSettings.useDepthAwareMerging
+		m_settings.rcSettings.usePreAveragedGather
 	)
 {
 	m_sceneModels.reserve(MAX_INSTANCES);
@@ -1062,13 +1061,15 @@ void RadianceCascades::InitializePSOs()
 
 		globalRootSig[RootEntryRCRaytracingRTGSceneSRV].InitAsShaderResourceView(0);
 		globalRootSig[RootEntryRCRaytracingRTGOutputUAV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 1);
+		globalRootSig[RootEntryRCRaytracingRTGGatherFilterNUAV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 1);
+		globalRootSig[RootEntryRCRaytracingRTGGatherFilterN1UAV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 2, 1);
 		globalRootSig[RootEntryRCRaytracingRTGGlobalInfoCB].InitAsConstantBufferView(0);
 		globalRootSig[RootEntryRCRaytracingRTGRCGlobalsCB].InitAsConstantBufferView(1);
 		globalRootSig[RootEntryRCRaytracingRTGCascadeInfoCB].InitAsConstantBufferView(2);
 #if defined(_DEBUG)
 		globalRootSig[RootEntryRCRaytracingRTGRCVisCB].InitAsConstantBufferView(127);
 #endif
-		globalRootSig[RootEntryRCRaytracingRTGDepthTextureUAV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 1);
+		globalRootSig[RootEntryRCRaytracingRTGDepthTextureUAV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 3, 1);
 		{
 			SamplerDesc sampler = Graphics::SamplerLinearWrapDesc;
 			globalRootSig.InitStaticSampler(0, sampler);
@@ -1319,7 +1320,7 @@ void RadianceCascades::RunRCGather(Camera& camera, DepthBuffer& sourceDepthBuffe
 		uint32_t maxCascade = uint32_t(m_rcManager3D.GetCascadeIntervalCount());
 
 		int cascdeVisResultIndex = m_settings.rcSettings.cascadeVisResultIndex;
-		if (cascdeVisResultIndex < maxCascade && cascdeVisResultIndex > -1)
+		if (cascdeVisResultIndex < int(maxCascade) && cascdeVisResultIndex > -1)
 		{
 			baseCascade = m_settings.rcSettings.cascadeVisResultIndex;
 			maxCascade = baseCascade + 1;
@@ -1333,10 +1334,31 @@ void RadianceCascades::RunRCGather(Camera& camera, DepthBuffer& sourceDepthBuffe
 			rtContext.SetDynamicConstantBufferView(RootEntryRCRaytracingRTGCascadeInfoCB, sizeof(CascadeInfo), &cascadeInfo);
 
 			ColorBuffer& cascadeBuffer = m_rcManager3D.GetCascadeIntervalBuffer(cascadeIndex);
+			rtContext.InsertUAVBarrier(cascadeBuffer);
 			rtContext.TransitionResource(cascadeBuffer, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
 
 			const DescriptorHandle& rcBufferUAV = RuntimeResourceManager::GetDescCopy(cascadeBuffer.GetUAV());
 			rtCommandList->SetComputeRootDescriptorTable(RootEntryRCRaytracingRTGOutputUAV, rcBufferUAV);
+
+			if (cascadeIndex < m_rcManager3D.GetCascadeIntervalCount() - 1)
+			{
+				ColorBuffer& gatherFilterBufferN1 = m_rcManager3D.GetCascadeGatherFilterBuffer(cascadeIndex);
+				rtContext.InsertUAVBarrier(gatherFilterBufferN1);
+				rtContext.TransitionResource(gatherFilterBufferN1, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
+
+				const DescriptorHandle& rcFilterBufferN1UAV = RuntimeResourceManager::GetDescCopy(gatherFilterBufferN1.GetUAV());
+				rtCommandList->SetComputeRootDescriptorTable(RootEntryRCRaytracingRTGGatherFilterN1UAV, rcFilterBufferN1UAV);
+
+				if (cascadeIndex > 0)
+				{
+					ColorBuffer& gatherFilterBufferN = m_rcManager3D.GetCascadeGatherFilterBuffer(cascadeIndex - 1);
+					//rtContext.TransitionResource(gatherFilterBufferN1, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
+
+					const DescriptorHandle& rcFilterBufferNUAV = RuntimeResourceManager::GetDescCopy(gatherFilterBufferN.GetUAV());
+					rtCommandList->SetComputeRootDescriptorTable(RootEntryRCRaytracingRTGGatherFilterNUAV, rcFilterBufferNUAV);
+				}
+			}
+			
 
 			::DispatchRays(
 				RayDispatchIDRCRaytracing,
@@ -1782,10 +1804,8 @@ void RadianceCascades::DrawSettingsUI()
 
 			ImGui::Separator();
 
-			if (ImGui::Checkbox("Use Depth Aware Merging", &rcs.useDepthAwareMerging))
-			{
-				m_rcManager3D.SetDepthAwareMerging(rcs.useDepthAwareMerging);
-			}
+			ImGui::Checkbox("Use Depth Aware Merging", &m_rcManager3D.useDepthAwareMerging);
+			ImGui::Checkbox("Use Gather Filtering", &m_rcManager3D.useGatherFiltering);
 
 			ImGui::SliderInt("Cascade Result Index", &rcs.cascadeVisResultIndex, -1, m_rcManager3D.GetCascadeIntervalCount() - 1);
 

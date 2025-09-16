@@ -12,7 +12,7 @@ class RadianceCascadeManager3D
 {
 public:
 	RadianceCascadeManager3D() = default;
-	RadianceCascadeManager3D(float rayLength0, bool usePreAverage, bool useDepthAwareMerging);
+	RadianceCascadeManager3D(float rayLength0, bool usePreAverage);
 
 	void Generate(uint32_t raysPerProbe0, uint32_t probeSpacing0, uint32_t swapchainWidth, uint32_t swapchainHeight, uint32_t maxAllowedCascadeLevels = 8u);
 
@@ -29,15 +29,19 @@ public:
 
 	uint32_t GetCascadeIntervalCount() { return (uint32_t)m_cascadeIntervals.size(); }
 	ColorBuffer& GetCascadeIntervalBuffer(uint32_t cascadeIndex) { ASSERT(cascadeIndex < GetCascadeIntervalCount()); return m_cascadeIntervals[cascadeIndex]; }
+	ColorBuffer& GetCascadeGatherFilterBuffer(uint32_t filterIndex) { ASSERT(filterIndex < m_cascadeGatherFilters.size()); return m_cascadeGatherFilters[filterIndex]; }
 	uint32_t GetProbeScalingFactor() const { return m_scalingFactor.probeScalingFactor; }
 	float GetRayLength() { return m_rayLength0; }
 	void SetRayLength(float rayLength) { m_rayLength0 = rayLength; }
-	void SetDepthAwareMerging(bool depthAwareMerging) { m_depthAwareMerging = depthAwareMerging; }
 	bool UsesPreAveragedIntervals() const { return m_preAveragedIntervals; }
 
 	ColorBuffer& GetCoalesceBuffer() { return m_coalescedResult; }
 
 	uint64_t GetTotalVRAMUsage();
+
+public:
+	bool useGatherFiltering = true;
+	bool useDepthAwareMerging = false;
 
 private:
 
@@ -52,16 +56,17 @@ private:
 	} m_scalingFactor;
 
 	std::vector<ColorBuffer> m_cascadeIntervals;
+	// Will have same dimensions for color buffers for all but cascade level 0.
+	std::vector<ColorBuffer> m_cascadeGatherFilters;
 	ColorBuffer m_coalescedResult;
 
 	float m_rayLength0;
-	uint32_t m_raysPerProbe0;
+	uint32_t m_raysPerProbe0 = 0u;
 
 	// Signifies that the cascade textures will be 1 / rayscalingfactor of the original size.
 	bool m_preAveragedIntervals;
-	bool m_depthAwareMerging;
 
-	uint32_t m_probeSpacing0;
-	uint32_t m_probeCount0X;
-	uint32_t m_probeCount0Y;
+	uint32_t m_probeSpacing0 = 0u;
+	uint32_t m_probeCount0X = 0u;
+	uint32_t m_probeCount0Y = 0u;
 };
