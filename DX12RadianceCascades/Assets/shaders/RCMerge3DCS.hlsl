@@ -43,7 +43,7 @@ void main( uint3 DTid : SV_DispatchThreadID )
         if(IsZero(nearRadiance.a))
         {
             // TODO: Remove this line. No reason at all and only adds ms (albiet very small amounts).
-            cascadeN[pixelPos] = nearRadiance;
+            //cascadeN[pixelPos] = nearRadiance;
             return;
         }
         
@@ -130,11 +130,9 @@ void main( uint3 DTid : SV_DispatchThreadID )
             int raysToMerge = rcGlobals.rayScalingFactor;
             for (int i = 0; i < raysToMerge; i++)
             {
-                int2 offset = TranslateCoord4x1To2x2(i);
-                
-                // This is the texel position of the 0th probe of our base probe group.
-                uint2 cascadeN1BaseProbeIndex = (probeInfoN.rayIndex * 2 + offset) * probeInfoN1.probesPerDim;
-                float2 sampleTexelPos = cascadeN1BaseProbeIndex + clampedProbeN1Index + 0.25f;
+                int2 rayOffset = TranslateCoord4x1To2x2(i);
+
+                float2 sampleTexelPos = GetCascadeN1SamplePosition(probeInfoN, probeInfoN1, rayOffset);
                 float2 sampleUV = sampleTexelPos / sourceDims;
                 float4 farRadiance = cascadeN1.SampleLevel(linearSampler, sampleUV, 0.0f);
                 

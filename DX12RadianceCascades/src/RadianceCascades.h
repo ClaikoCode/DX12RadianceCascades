@@ -73,7 +73,6 @@ struct RadianceCascadesSettings
 	int cascadeVisProbeIntervalIndex = 0;
 	int cascadeVisProbeSubset = 256;
 
-	bool useDepthAwareMerging = false;
 	bool usePreAveragedGather = true;
 
 	float rayLength0 = 5.0f;
@@ -164,6 +163,8 @@ private:
 
 		RootEntryRCRaytracingRTGSceneSRV = 0,
 		RootEntryRCRaytracingRTGOutputUAV,
+		RootEntryRCRaytracingRTGGatherFilterNUAV,
+		RootEntryRCRaytracingRTGGatherFilterN1UAV,
 		RootEntryRCRaytracingRTGGlobalInfoCB,
 		RootEntryRCRaytracingRTGRCGlobalsCB,
 		RootEntryRCRaytracingRTGCascadeInfoCB,
