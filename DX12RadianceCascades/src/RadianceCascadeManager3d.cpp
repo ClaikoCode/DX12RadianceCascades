@@ -9,6 +9,7 @@
 #include "RuntimeResourceManager.h"
 
 constexpr DXGI_FORMAT DefaultFormat = DXGI_FORMAT_R16G16B16A16_FLOAT;
+constexpr DXGI_FORMAT DefaultGatherFilterFormat = DXGI_FORMAT_R8_UINT;
 
 namespace
 {
@@ -82,7 +83,7 @@ void RadianceCascadeManager3D::Generate(uint32_t raysPerProbe0, uint32_t probeSp
 
 			// TODO: Change the type to DXGI_FORMAT_R8_UINT and handle that in shaders.
 			m_cascadeGatherFilters[filterIndex].SetClearColor(Color(0.0f, 0.0f, 0.0f, 1.0f));
-			m_cascadeGatherFilters[filterIndex].Create(cascadeFilterName, probeBufferWidth, probeBufferHeight, 1, DXGI_FORMAT_R32_UINT);
+			m_cascadeGatherFilters[filterIndex].Create(cascadeFilterName, probeBufferWidth, probeBufferHeight, 1, DefaultGatherFilterFormat);
 		}
 
 		probeDims.probesX /= m_scalingFactor.probeScalingFactor;

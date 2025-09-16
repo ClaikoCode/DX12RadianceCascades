@@ -201,11 +201,11 @@ float3 GetProbeWorldPos(ProbeInfo3D probeInfo3D, Texture2D<float> depthTex, floa
 float2 GetCascadeN1SamplePosition(ProbeInfo3D probeInfoN, ProbeInfo3D probeInfoN1, int2 rayOffset)
 {
     float2 probeN1Index = probeInfoN.probeIndex * 0.5f;
-    float2 clampedProbeN1Index = clamp(probeN1Index, 1.0f, probeInfoN1.probesPerDim - 1);
+    float2 clampedProbeN1Index = clamp(probeN1Index + 0.25f, 1.0f, probeInfoN1.probesPerDim - 1);
     
     // This is the texel position of the 0th probe of our base probe group.
     uint2 cascadeN1BaseProbeIndex = (probeInfoN.rayIndex * 2 + rayOffset) * probeInfoN1.probesPerDim;
-    float2 cascadeN1SamplePos = cascadeN1BaseProbeIndex + clampedProbeN1Index + 0.25f;
+    float2 cascadeN1SamplePos = cascadeN1BaseProbeIndex + clampedProbeN1Index;
     
     return cascadeN1SamplePos;
 }
