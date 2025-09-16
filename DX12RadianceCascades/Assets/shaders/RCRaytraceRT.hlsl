@@ -135,6 +135,10 @@ void RayGenerationShader()
         uint2 clampedProbeNIndex = clamp(probeInfo3D.probeIndex, 1.0f, probeInfo3D.probesPerDim - 1);
         uint2 probeNSampleIndex = clampedProbeNIndex + probeInfo3D.rayIndex * probeInfo3D.probesPerDim;
         
+        // The 0th cascade does not have any filtering information to read from.
+        // The last cascade will not skip its gathering step no matter what as 
+        // that is the diffuse environment lighting that should be carried no matter what.
+        // This is my theory at least, I have not completely figured out why this breaks when not skipping the final cascade level.
         if (cascadeInfo.cascadeIndex > 0 && cascadeInfo.cascadeIndex < rcGlobals.gatherFilterCount && gatherFilterTexN[probeNSampleIndex] == 0u)
         {
             // This line can be removed if clear color is assumed to have alpha 0
@@ -191,6 +195,8 @@ void RayGenerationShader()
     
     if(rcGlobals.useGatherFiltering)
     {
+        // If gather rays are not full occluded, they will be used in the gather step: write a flag telling next cascade that it should not ignore gathering.
+        // Because the last cascade will not be included in the filtering step, the last upper cascade to be filtered should be the one before it.
         if (radianceOutput.a > 0.0f && cascadeInfo.cascadeIndex < (rcGlobals.gatherFilterCount - 1))
         {
             int2 translationDims = sqrt(rcGlobals.rayScalingFactor);
