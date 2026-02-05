@@ -5,7 +5,7 @@ ModelViewer/
 
 # Ignore everything in run folder except models folder.
 Run/*
-!Run/models  
+!Run/models
 
 # Local runtime files.
 runtime_logs.txt
@@ -455,3 +455,7 @@ FodyWeavers.xsd
 # Additional files built by Visual Studio
 
 # End of https://www.toptal.com/developers/gitignore/api/visualstudio,c++
+
+### Exceptions for gitignore ###
+
+!Libs/**
