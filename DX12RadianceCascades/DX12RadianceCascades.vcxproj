@@ -126,8 +126,9 @@
       <AdditionalLibraryDirectories>$(SolutionDir)Packages\directxtex_desktop_win10.2024.10.29.1\native\lib\$(Platform)\$(Configuration)\;$(SolutionDir)Packages\directxmesh_desktop_win10.2024.10.29.1\native\lib\$(Platform)\$(Configuration)\;$(SolutionDir)Libs\dxc_2025_02_20\lib\x64\;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <PostBuildEvent>
-      <Command>robocopy $(ProjectDir)Assets\ $(SolutionDir)Run\ /E /XO /NP
-robocopy $(SolutionDir)Libs\dxc_2025_02_20\bin\$(Platform)\ $(SolutionDir)Run\ *.dll /E /XO /NP
+      <Command>robocopy $(SolutionDir)Libs\dxc_2025_02_20\bin\$(Platform)\ $(SolutionDir)Run\ *.dll /E /XO /NP
+robocopy $(ProjectDir)Assets\shaders\ $(SolutionDir)Run\shaders\ /E /XO /NP
+robocopy $(OutDir) $(SolutionDir)Run\ *.exe /NP
 if %errorlevel% leq 3 exit 0</Command>
     </PostBuildEvent>
     <PreBuildEvent>

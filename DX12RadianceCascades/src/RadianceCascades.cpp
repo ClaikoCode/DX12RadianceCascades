@@ -210,13 +210,13 @@ namespace
 	void BScriptPosOscillation(ModelInstance* modelInstance, float deltaTime, double time)
 	{
 		UniformTransform& transform = modelInstance->GetTransform();
-		float yPos = transform.GetTranslation().GetY();
-		Vector3 centerPoint = Vector3(0.0f, yPos, 0.0f);
+		double yPos = transform.GetTranslation().GetY();
+		Vector3 centerPoint = Vector3(0.0f, (float)yPos, 0.0f);
 		float amplitude = 1000.0f;      
-		float frequency = 1.0f;
+		double frequency = 1.0;
 
 		Vector3 position = centerPoint;
-		position += Vector3(amplitude * sin(frequency * time + yPos), 0.0f, 0.0f);
+		position += Vector3(amplitude * (float)sin(frequency * time + yPos), 0.0f, 0.0f);
 
 		transform.SetTranslation(position);
 	}
@@ -1319,7 +1319,7 @@ void RadianceCascades::RunRCGather(Camera& camera, DepthBuffer& sourceDepthBuffe
 		uint32_t maxCascade = uint32_t(m_rcManager3D.GetCascadeIntervalCount());
 
 		int cascdeVisResultIndex = m_settings.rcSettings.cascadeVisResultIndex;
-		if (cascdeVisResultIndex < maxCascade && cascdeVisResultIndex > -1)
+		if (cascdeVisResultIndex > -1 && (uint32_t)cascdeVisResultIndex < maxCascade)
 		{
 			baseCascade = m_settings.rcSettings.cascadeVisResultIndex;
 			maxCascade = baseCascade + 1;
