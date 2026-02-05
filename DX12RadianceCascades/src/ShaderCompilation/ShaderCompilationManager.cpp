@@ -4,11 +4,7 @@
 
 using namespace Microsoft::WRL;
 
-#if defined(_DEBUG)
-static const std::wstring c_ShaderFolder = L"..\\DX12RadianceCascades\\Assets\\shaders\\";
-#else
-static const std::wstring c_ShaderFolder = L"shaders\\";
-#endif
+static const std::wstring c_ShaderFolder = L".\\shaders\\";
 
 // Contains the preprocessor defines to be added to all files (note ALL). The vector is allowed to be empty.
 static const std::vector<std::wstring> s_ppDefines = {
