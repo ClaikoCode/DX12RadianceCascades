@@ -146,6 +146,7 @@ private:
     std::unordered_map<std::wstring, std::set<UUID64>> m_shaderDependencyMap;
 
     // New IDs are added every time a re-compilation of a shader is successful. Needs to be cleared manually.
+    // A set is used to avoid reconstructing PSOs several times if several re-compilations oif the same shader had occured before a clear.
     std::set<UUID64> m_recentReCompilations;
 
     DirectoryWatcher m_shaderDirWatcher;

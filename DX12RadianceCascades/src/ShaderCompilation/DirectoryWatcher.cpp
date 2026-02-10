@@ -16,6 +16,7 @@ void DirectoryWatcher::PollingLoop()
 
 			const std::string filePath = file.path().string();
 
+			// Take by reference to update value if needed without requiring a second lookup.
 			std::chrono::system_clock::duration& previousWriteTime = m_fileModificationTime[filePath];
 			std::chrono::system_clock::duration currentWriteTime = file.last_write_time().time_since_epoch();
 
