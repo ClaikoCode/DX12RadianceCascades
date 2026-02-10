@@ -1790,7 +1790,7 @@ void RadianceCascades::DrawSettingsUI()
 
 			ImGui::Separator();
 
-			if (ImGui::Checkbox("Use Depth Aware Merging", &rcs.useDepthAwareMerging))
+			if (ImGui::Checkbox("Use Depth Aware Merging (BROKEN)", &rcs.useDepthAwareMerging))
 			{
 				m_rcManager3D.SetDepthAwareMerging(rcs.useDepthAwareMerging);
 			}
