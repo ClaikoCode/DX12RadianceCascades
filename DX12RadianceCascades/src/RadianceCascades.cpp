@@ -1761,6 +1761,9 @@ void RadianceCascades::DrawSettingsUI()
 		}
 #endif
 
+		ImGui::SeparatorText("GPU Profiler");
+		ImGui::Checkbox("Draw inactive profile graphs", &GPUProfiler::Get().profilerSettings.drawInactiveProfiles);
+
 		ImGui::SeparatorText("Misc");
 		ImGui::Checkbox("Draw UI (toggle with 'u')", &gs.renderUI);
 	}
