@@ -40,6 +40,7 @@ struct MemoryProfile
 	uint64_t totalVRAM = 0u; // In bytes
 };
 
+
 typedef TreeNode<MemoryProfile> MemoryProfileNode;
 
 struct PerfProfile
@@ -91,8 +92,9 @@ public:
 	void UpdatePerformanceProfiles(uint64_t timestampFrequency);
 
 	void UpdateData(uint64_t timestampFrequency);
-	void DrawProfilerUI();
 
+	// Profiles that has not been updated this frame are not rendered.
+	void DrawProfilerUI();
 
 private:
 
@@ -103,9 +105,17 @@ private:
 
 	void DrawMemoryProfileTree(std::shared_ptr<MemoryProfileNode> root, MemoryUnit defaultMemoryUnit = MemoryUnit::MegaByte);
 
+public:
+
+	struct ProfilerSettings
+	{
+		bool drawInactiveProfiles = false;
+	} profilerSettings;
+
 private:
 
 	std::array<PerfProfile, MaxProfiles> m_profiles;
+	std::array<bool, MaxProfiles> m_profileActiveThisFrame; // Resets each UI draw.
 	uint32_t m_profileCount = 0;
 	
 	Microsoft::WRL::ComPtr<IDXGIAdapter3> m_vramAdapter = nullptr;
@@ -117,6 +127,8 @@ private:
 
 	std::shared_ptr<MemoryProfileNode> m_memoryRoot = nullptr;
 	std::shared_ptr<MemoryProfileNode> m_memoryRootHead = nullptr;
+
+	
 };
 
 struct PerfProfileBlock
