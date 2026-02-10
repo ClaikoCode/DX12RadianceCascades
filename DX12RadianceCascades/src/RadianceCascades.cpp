@@ -1746,6 +1746,14 @@ void RadianceCascades::DrawSettingsUI()
 	{
 		GlobalSettings& gs = m_settings.globalSettings;
 
+		ImGui::SeparatorText("UI");
+		ImGui::Checkbox("Draw UI (toggle with 'u')", &gs.renderUI);
+
+		if (ImGui::Checkbox("Use larger font scale for UI", &gs.useLargerUIFontScale))
+		{
+			AppGUI::SetFontScale(gs.useLargerUIFontScale ? 1.5f : 1.0f);
+		}
+
 		ImGui::SeparatorText("Rendering Mode");
 		int* renderMode = reinterpret_cast<int*>(&gs.renderMode);
 		ImGui::RadioButton("Raster", renderMode, GlobalSettings::RenderModeRaster); ImGui::SameLine();
@@ -1763,9 +1771,6 @@ void RadianceCascades::DrawSettingsUI()
 
 		ImGui::SeparatorText("GPU Profiler");
 		ImGui::Checkbox("Draw inactive profile graphs", &GPUProfiler::Get().profilerSettings.drawInactiveProfiles);
-
-		ImGui::SeparatorText("Misc");
-		ImGui::Checkbox("Draw UI (toggle with 'u')", &gs.renderUI);
 	}
 #pragma endregion
 	

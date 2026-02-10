@@ -101,6 +101,7 @@ struct GlobalSettings
 	bool useDepthCheckForDebugLines = false;
 	bool useDebugCam = false;
 	bool renderUI = true;
+	bool useLargerUIFontScale = false;
 };
 
 struct AppSettings
