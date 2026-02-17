@@ -698,7 +698,7 @@ void RadianceCascades::InitializeScene()
 	GPU_MEMORY_BLOCK("Scene");
 
 	// Super lazy, I know.
-	int sceneIndex = 4;
+	int sceneIndex = 6;
 
 #if defined(RUN_TESTS)
 	sceneIndex = 3; 
@@ -745,13 +745,13 @@ void RadianceCascades::InitializeScene()
 		float yPos = -100.0f;
 		AddSceneModel(ModelIDSphereTest, { 130.0f, Vector3(0.0f, yPos, 0.0f) + modelCenter, {}, ::BScriptPosOscillation });
 	}
-	else if (sceneIndex == 4)
+	else if (sceneIndex == 6) // Presentation photos
 	{
 		AddSceneModel(ModelIDSponza, { 100.0f, Vector3(0.0f, 0.0f, 0.0f) });
 
 		Math::Vector3 modelCenter = GetMainSceneModelCenter();
 
-		AddSceneModel(ModelIDSphereTest, { 130.0f, Vector3(880.0f, -550.0f, 90.0f) });
+		AddSceneModel(ModelIDSphereTest, { 130.0f, Vector3(0.0f, -550.0f, 0.0f) });
 	}
 
 	// Setup camera
@@ -763,6 +763,7 @@ void RadianceCascades::InitializeScene()
 		
 		Vector3 modelCenter = GetMainSceneModelCenter();
 		m_camera.SetEyeAtUp(Vector3(0.0f, -560.0f, -200.0f), modelCenter - Vector3(0.0f, 300.0f, 0.0f), Vector3(kYUnitVector));
+		//m_camera.SetEyeAtUp(Vector3(-250.0f, -325.0f, 0.0f), Vector3(0.0f, -550.0f, 0.0f), Vector3(kYUnitVector));
 		m_camera.SetZRange(0.5f, 5000.0f);
 		
 		m_cameraController.reset(new FlyingFPSCamera(m_camera, Vector3(kYUnitVector)));
@@ -1807,9 +1808,18 @@ void RadianceCascades::DrawSettingsUI()
 			ImGui::Checkbox("Use Depth Aware Merging", &m_rcManager3D.useDepthAwareMerging);
 			ImGui::Checkbox("Use Gather Filtering", &m_rcManager3D.useGatherFiltering);
 
+			bool prevPreAverageUsage = m_rcManager3D.m_preAveragedIntervals;
+			if (ImGui::Checkbox("Use Pre Average Intervals", &m_rcManager3D.m_preAveragedIntervals))
+			{
+				if (prevPreAverageUsage != m_rcManager3D.m_preAveragedIntervals)
+				{
+					shouldGenerateRCResources = true;
+				}
+			}
+
 			ImGui::SliderInt("Cascade Result Index", &rcs.cascadeVisResultIndex, -1, m_rcManager3D.GetCascadeIntervalCount() - 1);
 
-			if (ImGui::SliderFloat("Ray Length", &rcs.rayLength0, 0.1f, 150.0f))
+			if (ImGui::SliderFloat("Ray Length", &rcs.rayLength0, 0.1f, 250.0f))
 			{
 				m_rcManager3D.SetRayLength(rcs.rayLength0);
 			}

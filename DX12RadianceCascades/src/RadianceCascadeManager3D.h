@@ -42,6 +42,8 @@ public:
 public:
 	bool useGatherFiltering = true;
 	bool useDepthAwareMerging = false;
+	// Signifies that the cascade textures will be 1 / rayscalingfactor of the original size.
+	bool m_preAveragedIntervals;
 
 private:
 
@@ -63,8 +65,7 @@ private:
 	float m_rayLength0;
 	uint32_t m_raysPerProbe0 = 0u;
 
-	// Signifies that the cascade textures will be 1 / rayscalingfactor of the original size.
-	bool m_preAveragedIntervals;
+	
 
 	uint32_t m_probeSpacing0 = 0u;
 	uint32_t m_probeCount0X = 0u;
