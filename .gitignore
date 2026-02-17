@@ -2,8 +2,18 @@
 Intermediates/
 Bin/
 ModelViewer/
-Run/
-*/Assets/models/
+
+# Ignore everything in run folder except models folder.
+Run/*
+!Run/models
+
+# Local runtime files.
+runtime_logs.txt
+imgui.ini
+
+# These files are created at runtime by the Windows MiniEngine asset loader.
+*.mini
+*.dds
 
 # This file is auto-generated during pre-build through a script.
 ShaderIDs.h 
@@ -445,3 +455,7 @@ FodyWeavers.xsd
 # Additional files built by Visual Studio
 
 # End of https://www.toptal.com/developers/gitignore/api/visualstudio,c++
+
+### Exceptions for gitignore ###
+
+!Libs/**

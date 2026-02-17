@@ -80,7 +80,7 @@ namespace Graphics
     const uint32_t kNumPredefinedResolutions = 7;
 
 // Added by JD.
-#define RES_1440P
+#define RES_1080P
 #if defined(RES_1080P)
 	const eResolution kNativeResolution = k1080p;
 	const uint32_t baseDisplayWidth = 1920;

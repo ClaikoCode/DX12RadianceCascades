@@ -210,13 +210,13 @@ namespace
 	void BScriptPosOscillation(ModelInstance* modelInstance, float deltaTime, double time)
 	{
 		UniformTransform& transform = modelInstance->GetTransform();
-		float yPos = transform.GetTranslation().GetY();
-		Vector3 centerPoint = Vector3(0.0f, yPos, 0.0f);
+		double yPos = transform.GetTranslation().GetY();
+		Vector3 centerPoint = Vector3(0.0f, (float)yPos, 0.0f);
 		float amplitude = 1000.0f;      
-		float frequency = 1.0f;
+		double frequency = 1.0;
 
 		Vector3 position = centerPoint;
-		position += Vector3(amplitude * float(sin(double(frequency * time + yPos))), 0.0f, 0.0f);
+		position += Vector3(amplitude * (float)sin(frequency * time + yPos), 0.0f, 0.0f);
 
 		transform.SetTranslation(position);
 	}
@@ -1321,7 +1321,7 @@ void RadianceCascades::RunRCGather(Camera& camera, DepthBuffer& sourceDepthBuffe
 		uint32_t maxCascade = uint32_t(m_rcManager3D.GetCascadeIntervalCount());
 
 		int cascdeVisResultIndex = m_settings.rcSettings.cascadeVisResultIndex;
-		if (cascdeVisResultIndex < int(maxCascade) && cascdeVisResultIndex > -1)
+		if (cascdeVisResultIndex > -1 && (uint32_t)cascdeVisResultIndex < maxCascade)
 		{
 			baseCascade = m_settings.rcSettings.cascadeVisResultIndex;
 			maxCascade = baseCascade + 1;
@@ -1769,6 +1769,14 @@ void RadianceCascades::DrawSettingsUI()
 	{
 		GlobalSettings& gs = m_settings.globalSettings;
 
+		ImGui::SeparatorText("UI");
+		ImGui::Checkbox("Draw UI (toggle with 'u')", &gs.renderUI);
+
+		if (ImGui::Checkbox("Use larger font scale for UI", &gs.useLargerUIFontScale))
+		{
+			AppGUI::SetFontScale(gs.useLargerUIFontScale ? 1.5f : 1.0f);
+		}
+
 		ImGui::SeparatorText("Rendering Mode");
 		int* renderMode = reinterpret_cast<int*>(&gs.renderMode);
 		ImGui::RadioButton("Raster", renderMode, GlobalSettings::RenderModeRaster); ImGui::SameLine();
@@ -1784,8 +1792,8 @@ void RadianceCascades::DrawSettingsUI()
 		}
 #endif
 
-		ImGui::SeparatorText("Misc");
-		ImGui::Checkbox("Draw UI (toggle with 'u')", &gs.renderUI);
+		ImGui::SeparatorText("GPU Profiler");
+		ImGui::Checkbox("Draw inactive profile graphs", &GPUProfiler::Get().profilerSettings.drawInactiveProfiles);
 	}
 #pragma endregion
 	

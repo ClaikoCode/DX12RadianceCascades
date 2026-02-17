@@ -152,6 +152,9 @@ void GPUProfiler::EndPerformanceProfile(ID3D12GraphicsCommandList* commandList, 
 	);
 
 	m_profiles[profileIndex].isQuerying = false;
+
+	// Signal that this profile has been updated this frame.
+	m_profileActiveThisFrame[profileIndex] = true;
 }
 
 std::shared_ptr<MemoryProfileNode> GPUProfiler::PushMemoryProfile(const char* name)
@@ -238,9 +241,16 @@ void GPUProfiler::DrawProfilerUI()
 			}
 		}
 
-		for (PerfProfile& perfProfile : m_profiles)
+		for (uint32_t profileIndex = 0; profileIndex < m_profiles.size(); profileIndex++)
 		{
+			PerfProfile& perfProfile = m_profiles[profileIndex];
+
 			if (perfProfile.name == nullptr)
+			{
+				continue;
+			}
+
+			if (!profilerSettings.drawInactiveProfiles && m_profileActiveThisFrame[profileIndex] == false)
 			{
 				continue;
 			}
@@ -257,18 +267,30 @@ void GPUProfiler::DrawProfilerUI()
 			float averageTime = timeSum / perfProfile.timeSamples.size();
 
 			char formattedPlotName[128] = { 0 };
-			sprintf_s(formattedPlotName, "%-*s (% 6.2f ms | Avg: % 6.2f ms)", longestProfileName, perfProfile.name, lastSampleTime, averageTime);
+			sprintf_s(formattedPlotName, "%-*s (%.2f ms | Avg: %.2f ms)", longestProfileName, perfProfile.name, lastSampleTime, averageTime);
+
+			const char* overlayText = "";
+			if (profilerSettings.drawInactiveProfiles && m_profileActiveThisFrame[profileIndex] == false)
+			{
+				overlayText = "[INACTIVE]";
+			}
 
 			ImGui::PlotLines(
 				formattedPlotName,
 				perfProfile.timeSamples.data(),
 				(int)perfProfile.timeSamples.size(),
 				perfProfile.currentSampleCount,
-				"",
+				overlayText,
 				0.0f,
 				FLT_MAX, // Dynamically adjust for maximum values.
 				ImVec2(350.0f, 30.0f)
 			);
+		}
+
+		// Reset update flags
+		for (uint32_t i = 0; i < m_profileActiveThisFrame.size(); i++)
+		{
+			m_profileActiveThisFrame[i] = false;
 		}
 	}
 

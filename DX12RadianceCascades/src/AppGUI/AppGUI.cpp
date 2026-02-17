@@ -27,7 +27,6 @@ namespace AppGUI
 		{
 			ImGuiIO& io = ImGui::GetIO();
 			io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-			io.FontGlobalScale = 1.5f;
 		}
 
 		ImGui::StyleColorsDark();
@@ -71,6 +70,12 @@ namespace AppGUI
 
 		// Render the UI.
 		ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), uiContext.GetCommandList());
+	}
+
+	void SetFontScale(float fontScale)
+	{
+		ImGuiIO& io = ImGui::GetIO();
+		io.FontGlobalScale = fontScale;
 	}
 
 	void Shutdown()
