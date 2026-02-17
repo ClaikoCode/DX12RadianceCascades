@@ -4,7 +4,13 @@
 
 using namespace Microsoft::WRL;
 
+
+#if defined(_DEBUG)
+// This folder has to be used to leverage live shader compilation as it contains the files being worked on during development.
+static const std::wstring c_ShaderFolder = L"..\\DX12RadianceCascades\\Assets\\shaders\\";
+#else
 static const std::wstring c_ShaderFolder = L".\\shaders\\";
+#endif
 
 // Contains the preprocessor defines to be added to all files (note ALL). The vector is allowed to be empty.
 static const std::vector<std::wstring> s_ppDefines = {
