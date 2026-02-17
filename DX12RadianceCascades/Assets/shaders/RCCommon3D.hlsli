@@ -154,11 +154,12 @@ float3 GetRCRayDir(int2 rayIndex, int raysPerDim)
     // Remap a ray index from [0, raysPerDim] -> [-1, 1].
     // This will evenly distribute points accross the sampling area [-1, 1].
     float2 uvCoord = Remap(float2(0, 0), float2(raysPerDim, raysPerDim), -1.0f, 1.0f, rayIndexFloat);
-    
+
     return normalize(OctToFloat3EqualArea(uvCoord));
 }
 
-float3 GetProbeWorldPosRWTex(ProbeInfo3D probeInfo3D, RWTexture2D<float> depthTex, float4x4 invProjMatrix, float4x4 invViewMatrix)
+template <typename TexType>
+float3 GetProbeWorldPos(ProbeInfo3D probeInfo3D, TexType depthTex, float4x4 invProjMatrix, float4x4 invViewMatrix)
 {
     uint2 depthDims;
     GetDims(depthTex, depthDims);
@@ -170,26 +171,6 @@ float3 GetProbeWorldPosRWTex(ProbeInfo3D probeInfo3D, RWTexture2D<float> depthTe
     if (!IsZero(depthVal))
     {
         depthVal += PROBE_DEPTH_OFFSET;
-    }
-        
-    float2 texelSize = 1.0f / depthDims;
-    float3 worldPos = WorldPosFromDepth(depthVal, (float2(samplePos) + 0.5f) * texelSize, invProjMatrix, invViewMatrix);
-
-    return worldPos;
-}
-
-float3 GetProbeWorldPos(ProbeInfo3D probeInfo3D, Texture2D<float> depthTex, float4x4 invProjMatrix, float4x4 invViewMatrix)
-{
-    uint2 depthDims;
-    GetDims(depthTex, depthDims);
-        
-    DepthTile depthTile = GetDepthTile(probeInfo3D.probeSpacing);
-    uint2 samplePos = GetDepthSamplePos(depthTile, probeInfo3D.probeIndex, depthDims);
-     
-    float depthVal = depthTex.Load(int3(samplePos, 0));
-    if (!IsZero(depthVal))
-    {
-        depthVal += PROBE_DEPTH_OFFSET; // Offset to ensure that probes dont spawn inside walls.
     }
         
     float2 texelSize = 1.0f / depthDims;

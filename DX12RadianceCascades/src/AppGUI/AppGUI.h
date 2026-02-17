@@ -9,6 +9,7 @@ namespace AppGUI
 	void Initialize(HWND hwnd);
     void NewFrame();
     void Render(GraphicsContext& uiContext);
+    void SetFontScale(float fontScale);
     void Shutdown();
 }
 

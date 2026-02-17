@@ -102,7 +102,7 @@ inline RayDesc GenerateProbeRay(ProbeInfo3D probeInfo3D)
 {
     RayDesc ray;
 
-    float3 rayOrigin = GetProbeWorldPosRWTex(probeInfo3D, depthTex, globalInfo.invProjMatrix, globalInfo.invViewMatrix);
+    float3 rayOrigin = GetProbeWorldPos(probeInfo3D, depthTex, globalInfo.invProjMatrix, globalInfo.invViewMatrix);
    
     ray.Origin = rayOrigin;
     ray.TMax = probeInfo3D.startDistance + probeInfo3D.range;
