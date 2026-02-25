@@ -9,7 +9,11 @@
 #include "RuntimeResourceManager.h"
 
 constexpr DXGI_FORMAT DefaultFormat = DXGI_FORMAT_R16G16B16A16_FLOAT;
-constexpr DXGI_FORMAT DefaultGatherFilterFormat = DXGI_FORMAT_R8_UINT;
+// Using R8_UINT instead of R8_UNORM for these textures (and corrected shader code) has the same performance (down to 0.01 ms).
+// I chose R8_UNORM to better work with shaders that expect floating point texel samples, like my debug visualziation shaders.
+// TODO: Because gather filtering only checks for 0 or 1, there could exist a solution where only certain bits is modified of each texel but I worry for
+// data races as I am doubtful that concurrently modifying bits inside of the same word is possible.
+constexpr DXGI_FORMAT DefaultGatherFilterFormat = DXGI_FORMAT_R8_UNORM;
 
 namespace
 {
@@ -81,7 +85,6 @@ void RadianceCascadeManager3D::Generate(uint32_t raysPerProbe0, uint32_t probeSp
 		{
 			uint32_t filterIndex = i - 1;
 
-			// TODO: Change the type to DXGI_FORMAT_R8_UINT and handle that in shaders.
 			m_cascadeGatherFilters[filterIndex].SetClearColor(Color(0.0f, 0.0f, 0.0f, 1.0f));
 			m_cascadeGatherFilters[filterIndex].Create(cascadeFilterName, probeBufferWidth, probeBufferHeight, 1, DefaultGatherFilterFormat);
 		}

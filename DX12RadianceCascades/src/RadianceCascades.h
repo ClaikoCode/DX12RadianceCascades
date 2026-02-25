@@ -62,9 +62,17 @@ struct ModelInstanceDesc
 
 struct RadianceCascadesSettings
 {
+	// NOTE: Has to enforce int type
+	enum CascadeTextureVis : int
+	{
+		CascadeTextureVisNone = 0,
+		CascadeTextureVisGather,
+		CascadeTextureVisMerge,
+		CascadeTextureVisGatherFilter,
+	};
+
+	CascadeTextureVis currentTextureVis = CascadeTextureVisNone;
 	bool renderRC3D = true;
-	bool visualizeRC3DGatherCascades = false;
-	bool visualizeRC3DMergeCascades = false;
 	bool seeCoalesceResult = false;
 	int cascadeVisIndex = 0; // Shows cascades with probe grids.
 	int cascadeVisResultIndex = -1; // Shows the result from a single cascade.

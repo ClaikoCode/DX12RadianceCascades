@@ -563,15 +563,19 @@ void RadianceCascades::RenderScene()
 
 			RunRCGather(renderCamera, Graphics::g_SceneDepthBuffer);
 
-			if (m_settings.rcSettings.visualizeRC3DGatherCascades)
+			if (m_settings.rcSettings.currentTextureVis == RadianceCascadesSettings::CascadeTextureVisGather)
 			{
 				FullScreenCopyCompute(m_rcManager3D.GetCascadeIntervalBuffer(m_settings.rcSettings.cascadeVisIndex), Graphics::g_SceneColorBuffer);
+			}
+			else if (m_settings.rcSettings.currentTextureVis == RadianceCascadesSettings::CascadeTextureVisGatherFilter)
+			{
+				FullScreenCopyCompute(m_rcManager3D.GetCascadeGatherFilterBuffer(m_settings.rcSettings.cascadeVisIndex), Graphics::g_SceneColorBuffer);
 			}
 			else
 			{
 				RunRCMerge(renderCamera, m_minMaxDepthMips);
 
-				if (m_settings.rcSettings.visualizeRC3DMergeCascades)
+				if (m_settings.rcSettings.currentTextureVis == RadianceCascadesSettings::CascadeTextureVisMerge)
 				{
 					FullScreenCopyCompute(m_rcManager3D.GetCascadeIntervalBuffer(m_settings.rcSettings.cascadeVisIndex), Graphics::g_SceneColorBuffer);
 				}
@@ -1353,7 +1357,6 @@ void RadianceCascades::RunRCGather(Camera& camera, DepthBuffer& sourceDepthBuffe
 				if (cascadeIndex > 0)
 				{
 					ColorBuffer& gatherFilterBufferN = m_rcManager3D.GetCascadeGatherFilterBuffer(cascadeIndex - 1);
-					//rtContext.TransitionResource(gatherFilterBufferN1, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
 
 					const DescriptorHandle& rcFilterBufferNUAV = RuntimeResourceManager::GetDescCopy(gatherFilterBufferN.GetUAV());
 					rtCommandList->SetComputeRootDescriptorTable(RootEntryRCRaytracingRTGGatherFilterNUAV, rcFilterBufferNUAV);
@@ -1813,7 +1816,7 @@ void RadianceCascades::DrawSettingsUI()
 
 			ImGui::Separator();
 
-			ImGui::Checkbox("Use Depth Aware Merging", &m_rcManager3D.useDepthAwareMerging);
+			ImGui::Checkbox("Use Depth Aware Merging (WIP)", &m_rcManager3D.useDepthAwareMerging);
 			ImGui::Checkbox("Use Gather Filtering", &m_rcManager3D.useGatherFiltering);
 
 			bool prevPreAverageUsage = m_rcManager3D.m_preAveragedIntervals;
@@ -1946,19 +1949,26 @@ void RadianceCascades::DrawSettingsUI()
 			}
 
 			ImGui::SeparatorText("Radiance Cascade Visualizations");
+
 			ImGui::Checkbox("See Coalesce Result", &rcs.seeCoalesceResult);
-			ImGui::Checkbox("Visualize Gather Cascades", &rcs.visualizeRC3DGatherCascades);
-			ImGui::Checkbox("Visualize Merge Cascades", &rcs.visualizeRC3DMergeCascades);
-			if (rcs.visualizeRC3DGatherCascades || rcs.visualizeRC3DMergeCascades)
-			{
-				ImGui::SliderInt("Cascade Index", &rcs.cascadeVisIndex, 0, m_rcManager3D.GetCascadeIntervalCount() - 1);
-			}
 
 			ImGui::Checkbox("Visualize Probes", &rcs.enableCascadeProbeVis);
 			if (rcs.enableCascadeProbeVis)
 			{
 				ImGui::SliderInt("Cascade Interval", &rcs.cascadeVisProbeIntervalIndex, 0, m_rcManager3D.GetCascadeIntervalCount() - 1);
 				ImGui::SliderInt("Probe Subset", &rcs.cascadeVisProbeSubset, 1, 256);
+			}
+
+			ImGui::Text("Cascade Texture Visualization:");
+			int* visEnumToIntPtr = reinterpret_cast<int*>(&rcs.currentTextureVis);
+			ImGui::RadioButton("None", visEnumToIntPtr, RadianceCascadesSettings::CascadeTextureVisNone); ImGui::SameLine();
+			ImGui::RadioButton("Gather", visEnumToIntPtr, RadianceCascadesSettings::CascadeTextureVisGather); ImGui::SameLine();
+			ImGui::RadioButton("Merge", visEnumToIntPtr, RadianceCascadesSettings::CascadeTextureVisMerge); ImGui::SameLine();
+			ImGui::RadioButton("Gather Filter", visEnumToIntPtr, RadianceCascadesSettings::CascadeTextureVisGatherFilter);
+
+			if (rcs.currentTextureVis != RadianceCascadesSettings::CascadeTextureVisNone)
+			{
+				ImGui::SliderInt("Cascade Index", &rcs.cascadeVisIndex, 0, m_rcManager3D.GetCascadeIntervalCount() - 1);
 			}
 		}
 	}
@@ -2022,12 +2032,12 @@ void RadianceCascades::FullScreenCopyCompute(PixelBuffer& source, D3D12_CPU_DESC
 
 	ComputeContext& cmptContext = ComputeContext::Begin(L"Full Screen Copy Compute");
 
-	cmptContext.TransitionResource(dest, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-	cmptContext.InsertUAVBarrier(source);
-	cmptContext.TransitionResource(source, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-
 	cmptContext.SetPipelineState(m_fullScreenCopyComputePSO);
 	cmptContext.SetRootSignature(m_fullScreenCopyComputeRootSig);
+
+	cmptContext.TransitionResource(dest, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+	cmptContext.InsertUAVBarrier(dest);
+	cmptContext.TransitionResource(source, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 	cmptContext.SetConstants(RootEntryFullScreenCopyComputeDestInfo, destWidth, destHeight);
 	cmptContext.SetDynamicDescriptor(RootEntryFullScreenCopyComputeDest, 0, dest.GetUAV());
