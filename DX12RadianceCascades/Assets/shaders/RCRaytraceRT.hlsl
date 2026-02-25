@@ -43,8 +43,8 @@ ConstantBuffer<GeometryOffsets> geomOffsets : register(b0, space1);
 ConstantBuffer<RCGlobals> rcGlobals : register(b1);
 ConstantBuffer<CascadeInfo> cascadeInfo : register(b2);
 
-RWTexture2D<uint> gatherFilterTexN : register(u1);
-RWTexture2D<uint> gatherFilterTexN1 : register(u2);
+RWTexture2D<float> gatherFilterTexN : register(u1);
+RWTexture2D<float> gatherFilterTexN1 : register(u2);
 RWTexture2D<float> depthTex : register(u3);
 
 float3 GetBarycentrics(float2 inputBarycentrics)
@@ -139,7 +139,7 @@ void RayGenerationShader()
         // The last cascade will not skip its gathering step no matter what as 
         // that is the diffuse environment lighting that should be carried no matter what.
         // This is my theory at least, I have not completely figured out why this breaks when not skipping the final cascade level.
-        if (cascadeInfo.cascadeIndex > 0 && cascadeInfo.cascadeIndex < rcGlobals.gatherFilterCount && gatherFilterTexN[probeNSampleIndex] == 0u)
+        if (cascadeInfo.cascadeIndex > 0 && cascadeInfo.cascadeIndex < rcGlobals.gatherFilterCount && gatherFilterTexN[probeNSampleIndex] == 0.0f)
         {
             // This line can be removed if clear color is assumed to have alpha 0
             renderOutput[probeNSampleIndex] = float4(0.0f, 0.0f, 0.0f, 0.0f);
@@ -210,7 +210,7 @@ void RayGenerationShader()
                 {
                     int2 sampleOffset = TranslateCoord4x1To2x2(k);
                     
-                    gatherFilterTexN1[cascadeN1SamplePos + sampleOffset] = 1u;
+                    gatherFilterTexN1[cascadeN1SamplePos + sampleOffset] = 1.0f;
                 }
             }
         }
