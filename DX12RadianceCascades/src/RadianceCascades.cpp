@@ -1353,14 +1353,14 @@ void RadianceCascades::RunRCGather(Camera& camera, DepthBuffer& sourceDepthBuffe
 
 				const DescriptorHandle& rcFilterBufferN1UAV = RuntimeResourceManager::GetDescCopy(gatherFilterBufferN1.GetUAV());
 				rtCommandList->SetComputeRootDescriptorTable(RootEntryRCRaytracingRTGGatherFilterN1UAV, rcFilterBufferN1UAV);
+			}
 
-				if (cascadeIndex > 0)
-				{
-					ColorBuffer& gatherFilterBufferN = m_rcManager3D.GetCascadeGatherFilterBuffer(cascadeIndex - 1);
+			if (cascadeIndex > 0)
+			{
+				ColorBuffer& gatherFilterBufferN = m_rcManager3D.GetCascadeGatherFilterBuffer(cascadeIndex - 1);
 
-					const DescriptorHandle& rcFilterBufferNUAV = RuntimeResourceManager::GetDescCopy(gatherFilterBufferN.GetUAV());
-					rtCommandList->SetComputeRootDescriptorTable(RootEntryRCRaytracingRTGGatherFilterNUAV, rcFilterBufferNUAV);
-				}
+				const DescriptorHandle& rcFilterBufferNUAV = RuntimeResourceManager::GetDescCopy(gatherFilterBufferN.GetUAV());
+				rtCommandList->SetComputeRootDescriptorTable(RootEntryRCRaytracingRTGGatherFilterNUAV, rcFilterBufferNUAV);
 			}
 			
 

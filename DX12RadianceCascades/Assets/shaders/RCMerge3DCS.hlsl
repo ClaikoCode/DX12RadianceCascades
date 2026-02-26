@@ -132,7 +132,7 @@ void main( uint3 DTid : SV_DispatchThreadID )
                 int2 rayOffset = Translate1DTo2D(i, translationDims);
 
                 float2 sampleTexelPos = GetCascadeN1SamplePosition(probeInfoN, probeInfoN1, rayOffset);
-                float2 sampleUV = sampleTexelPos / sourceDims;
+                //float2 sampleUV = sampleTexelPos / sourceDims;
                 //float4 farRadiance = cascadeN1.SampleLevel(linearSampler, sampleUV, 0.0f);
                 
                 float4 samples[4];
