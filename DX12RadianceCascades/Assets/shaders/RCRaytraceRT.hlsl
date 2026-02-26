@@ -142,8 +142,9 @@ void RayGenerationShader()
         if (cascadeInfo.cascadeIndex > 0 && cascadeInfo.cascadeIndex < rcGlobals.gatherFilterCount && gatherFilterTexN[probeNSampleIndex] == 0.0f)
         {
             // This line can be removed if clear color is assumed to have alpha 0
-            renderOutput[probeNSampleIndex] = float4(0.0f, 0.0f, 0.0f, 0.0f);
-            return;
+            // renderOutput[probeNSampleIndex] = float4(0.0f, 0.0f, 0.0f, 0.0f);
+            
+            return; // Return early as these rays will not be used by any lower cascade.
         }
     }
     
@@ -193,29 +194,29 @@ void RayGenerationShader()
         radianceOutput = payload.result;
     }
     
-    if(rcGlobals.useGatherFiltering)
+    if (rcGlobals.useGatherFiltering)
     {
-        // If gather rays are not full occluded, they will be used in the gather step: write a flag telling next cascade that it should not ignore gathering.
+        // If gather rays are not full occluded, they will be used in cascade merging: write a flag telling next cascade that it should not ignore gathering.
         // Because the last cascade will not be included in the filtering step, the last upper cascade to be filtered should be the one before it.
         if (radianceOutput.a > 0.0f && cascadeInfo.cascadeIndex < (rcGlobals.gatherFilterCount - 1))
-        {
+        { 
             int2 translationDims = sqrt(rcGlobals.rayScalingFactor);
             for (int i = 0; i < rcGlobals.rayScalingFactor; i++)
             {
                 int2 rayIndexOffset = Translate1DTo2D(i, translationDims);
+                
                 float2 cascadeN1SamplePos = GetCascadeN1SamplePosition(probeInfo3D, probeInfo3DN1, rayIndexOffset);
                 
-                // Flag Bilateral sampling points that they will be used in gathering.
+                // Flag Bilinear sampling points that they will be used in merging.
                 for (int k = 0; k < 4; k++)
                 {
                     int2 sampleOffset = TranslateCoord4x1To2x2(k);
                     
-                    gatherFilterTexN1[cascadeN1SamplePos + sampleOffset] = 1.0f;
+                    gatherFilterTexN1[floor(cascadeN1SamplePos) + sampleOffset] = 1.0f;
                 }
             }
         }
     }
-   
     
     renderOutput[DispatchRaysIndex().xy] = radianceOutput;
 }
