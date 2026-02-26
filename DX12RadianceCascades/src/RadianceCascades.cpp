@@ -569,7 +569,7 @@ void RadianceCascades::RenderScene()
 			}
 			else if (m_settings.rcSettings.currentTextureVis == RadianceCascadesSettings::CascadeTextureVisGatherFilter)
 			{
-				FullScreenCopyCompute(m_rcManager3D.GetCascadeGatherFilterBuffer(m_settings.rcSettings.cascadeVisIndex), Graphics::g_SceneColorBuffer);
+				FullScreenCopyCompute(m_rcManager3D.GetCascadeGatherFilterBuffer(m_settings.rcSettings.cascadeFilterIndex), Graphics::g_SceneColorBuffer);
 			}
 			else
 			{
@@ -1968,7 +1968,16 @@ void RadianceCascades::DrawSettingsUI()
 
 			if (rcs.currentTextureVis != RadianceCascadesSettings::CascadeTextureVisNone)
 			{
-				ImGui::SliderInt("Cascade Index", &rcs.cascadeVisIndex, 0, m_rcManager3D.GetCascadeIntervalCount() - 1);
+				if (rcs.currentTextureVis == RadianceCascadesSettings::CascadeTextureVisGatherFilter)
+				{
+					static int correspondingCascadeIndexForFilter = 1;
+					ImGui::SliderInt("Cascade Index", &correspondingCascadeIndexForFilter, 1, m_rcManager3D.GetCascadeIntervalCount() - 1);
+					rcs.cascadeFilterIndex = correspondingCascadeIndexForFilter - 1;
+				}
+				else
+				{
+					ImGui::SliderInt("Cascade Index", &rcs.cascadeVisIndex, 0, m_rcManager3D.GetCascadeIntervalCount() - 1);
+				}
 			}
 		}
 	}
