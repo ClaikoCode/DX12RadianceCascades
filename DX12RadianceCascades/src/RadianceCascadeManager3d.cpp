@@ -77,15 +77,15 @@ void RadianceCascadeManager3D::Generate(uint32_t raysPerProbe0, uint32_t probeSp
 		const uint32_t probeBufferWidth = probeDims.probesX * raysPerProbeDim;
 		const uint32_t probeBufferHeight = probeDims.probesY * raysPerProbeDim;
 
-		// Clear color has alpha of 1.0, indicating that each cascade assumes that its rays are not obscured.
-		m_cascadeIntervals[i].SetClearColor(Color(0.0f, 0.0f, 0.0f, 1.0f));
+		// Clear color has alpha of 0.0, indicating that each cascade assumes that its rays are obscured.
+		m_cascadeIntervals[i].SetClearColor(Color(0.0f, 0.0f, 0.0f, 0.0f));
 		m_cascadeIntervals[i].Create(cascadeName, probeBufferWidth, probeBufferHeight, 1, DefaultFormat);
 
 		if (i > 0)
 		{
 			uint32_t filterIndex = i - 1;
 
-			m_cascadeGatherFilters[filterIndex].SetClearColor(Color(0.0f, 0.0f, 0.0f, 1.0f));
+			m_cascadeGatherFilters[filterIndex].SetClearColor(Color(0.0f, 0.0f, 0.0f, 0.0f));
 			m_cascadeGatherFilters[filterIndex].Create(cascadeFilterName, probeBufferWidth, probeBufferHeight, 1, DefaultGatherFilterFormat);
 		}
 

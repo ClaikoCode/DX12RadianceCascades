@@ -181,14 +181,13 @@ float3 GetProbeWorldPos(ProbeInfo3D probeInfo3D, TexType depthTex, float4x4 invP
 
 float2 GetCascadeN1SamplePosition(ProbeInfo3D probeInfoN, ProbeInfo3D probeInfoN1, int2 rayOffset)
 {
-    float2 probeN1Index = probeInfoN.probeIndex * 0.5f;
-    float2 clampedProbeN1Index = clamp(probeN1Index + 0.25f, 1.0f, probeInfoN1.probesPerDim - 1);
-    
-    // This is the texel position of the 0th probe of our base probe group.
-    uint2 cascadeN1BaseProbeIndex = (probeInfoN.rayIndex * 2 + rayOffset) * probeInfoN1.probesPerDim;
-    float2 cascadeN1SamplePos = cascadeN1BaseProbeIndex + clampedProbeN1Index;
-    
-    return cascadeN1SamplePos;
+    // +0.5 to get in the middle of texel in cascade N.
+    float2 probeN1Index = float2(probeInfoN.probeIndex + 0.5f) / 2.0f; // TODO: Replace hardcoded 2 with probescalingfactor (per dim)
+    // Clamp to avoid sampling over edges of probe groups.
+    float2 clampedProbeN1Index = clamp(probeN1Index, 1.0f, float2(probeInfoN1.probesPerDim) - 2.0f);
+    float2 rayN1Index = probeInfoN.rayIndex * 2.0f; // TODO: Replace hardcoded 2 with sqrt(rayscalingfactor)
+        
+    return clampedProbeN1Index + probeInfoN1.probesPerDim * (rayN1Index + rayOffset);
 }
 
 #endif // RCCOMMON_H

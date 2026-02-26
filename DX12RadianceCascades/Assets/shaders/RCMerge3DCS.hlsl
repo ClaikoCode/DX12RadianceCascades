@@ -126,9 +126,10 @@ void main( uint3 DTid : SV_DispatchThreadID )
             float4 farRadianceSum = 0.0f;
         
             int raysToMerge = rcGlobals.rayScalingFactor;
+            int2 translationDims = sqrt(rcGlobals.rayScalingFactor);
             for (int i = 0; i < raysToMerge; i++)
             {
-                int2 rayOffset = TranslateCoord4x1To2x2(i);
+                int2 rayOffset = Translate1DTo2D(i, translationDims);
 
                 float2 sampleTexelPos = GetCascadeN1SamplePosition(probeInfoN, probeInfoN1, rayOffset);
                 float2 sampleUV = sampleTexelPos / sourceDims;
