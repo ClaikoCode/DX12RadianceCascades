@@ -1320,7 +1320,6 @@ void RadianceCascades::RunRCGather(Camera& camera, DepthBuffer& sourceDepthBuffe
 			rtCommandList->SetComputeRootDescriptorTable(RootEntryRCRaytracingRTGDepthTextureUAV, depthUAV);
 		}
 
-
 		uint32_t baseCascade = 0;
 		uint32_t maxCascade = uint32_t(m_rcManager3D.GetCascadeIntervalCount());
 
@@ -1345,15 +1344,20 @@ void RadianceCascades::RunRCGather(Camera& camera, DepthBuffer& sourceDepthBuffe
 			const DescriptorHandle& rcBufferUAV = RuntimeResourceManager::GetDescCopy(cascadeBuffer.GetUAV());
 			rtCommandList->SetComputeRootDescriptorTable(RootEntryRCRaytracingRTGOutputUAV, rcBufferUAV);
 
-			if (cascadeIndex < m_rcManager3D.GetCascadeIntervalCount() - 1)
+			if (m_rcManager3D.useGatherFiltering)
 			{
-				ColorBuffer& gatherFilterBufferN1 = m_rcManager3D.GetCascadeGatherFilterBuffer(cascadeIndex);
-				rtContext.InsertUAVBarrier(gatherFilterBufferN1);
-				rtContext.TransitionResource(gatherFilterBufferN1, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
+				// Last cascade has no higher cascade to filter.
+				if (cascadeIndex < m_rcManager3D.GetCascadeIntervalCount() - 1)
+				{
+					ColorBuffer& gatherFilterBufferN1 = m_rcManager3D.GetCascadeGatherFilterBuffer(cascadeIndex);
+					rtContext.InsertUAVBarrier(gatherFilterBufferN1);
+					rtContext.TransitionResource(gatherFilterBufferN1, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
 
-				const DescriptorHandle& rcFilterBufferN1UAV = RuntimeResourceManager::GetDescCopy(gatherFilterBufferN1.GetUAV());
-				rtCommandList->SetComputeRootDescriptorTable(RootEntryRCRaytracingRTGGatherFilterN1UAV, rcFilterBufferN1UAV);
+					const DescriptorHandle& rcFilterBufferN1UAV = RuntimeResourceManager::GetDescCopy(gatherFilterBufferN1.GetUAV());
+					rtCommandList->SetComputeRootDescriptorTable(RootEntryRCRaytracingRTGGatherFilterN1UAV, rcFilterBufferN1UAV);
+				}
 
+				// First cascade has no prior cascade to be filtered by.
 				if (cascadeIndex > 0)
 				{
 					ColorBuffer& gatherFilterBufferN = m_rcManager3D.GetCascadeGatherFilterBuffer(cascadeIndex - 1);
@@ -1362,7 +1366,6 @@ void RadianceCascades::RunRCGather(Camera& camera, DepthBuffer& sourceDepthBuffe
 					rtCommandList->SetComputeRootDescriptorTable(RootEntryRCRaytracingRTGGatherFilterNUAV, rcFilterBufferNUAV);
 				}
 			}
-			
 
 			::DispatchRays(
 				RayDispatchIDRCRaytracing,
