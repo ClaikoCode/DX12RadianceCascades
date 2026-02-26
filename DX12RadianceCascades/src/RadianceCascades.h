@@ -74,7 +74,8 @@ struct RadianceCascadesSettings
 	CascadeTextureVis currentTextureVis = CascadeTextureVisNone;
 	bool renderRC3D = true;
 	bool seeCoalesceResult = false;
-	int cascadeVisIndex = 0; // Shows cascades with probe grids.
+	int cascadeVisIndex = 0;
+	int cascadeFilterIndex = 0;
 	int cascadeVisResultIndex = -1; // Shows the result from a single cascade.
 
 	bool enableCascadeProbeVis = false;

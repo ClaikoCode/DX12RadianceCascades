@@ -28,8 +28,10 @@ public:
 	float GetRayLength(uint32_t cascadeIndex);
 
 	uint32_t GetCascadeIntervalCount() { return (uint32_t)m_cascadeIntervals.size(); }
+	// Always one less than cascade interval count.
+	uint32_t GetGatherFilterCount() { return (uint32_t)m_cascadeGatherFilters.size(); }
 	ColorBuffer& GetCascadeIntervalBuffer(uint32_t cascadeIndex) { ASSERT(cascadeIndex < GetCascadeIntervalCount()); return m_cascadeIntervals[cascadeIndex]; }
-	ColorBuffer& GetCascadeGatherFilterBuffer(uint32_t filterIndex) { ASSERT(filterIndex < m_cascadeGatherFilters.size()); return m_cascadeGatherFilters[filterIndex]; }
+	ColorBuffer& GetCascadeGatherFilterBuffer(uint32_t filterIndex) { ASSERT(filterIndex < GetGatherFilterCount()); return m_cascadeGatherFilters[filterIndex]; }
 	uint32_t GetProbeScalingFactor() const { return m_scalingFactor.probeScalingFactor; }
 	float GetRayLength() { return m_rayLength0; }
 	void SetRayLength(float rayLength) { m_rayLength0 = rayLength; }
