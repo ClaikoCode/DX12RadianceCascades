@@ -133,7 +133,16 @@ void main( uint3 DTid : SV_DispatchThreadID )
 
                 float2 sampleTexelPos = GetCascadeN1SamplePosition(probeInfoN, probeInfoN1, rayOffset);
                 float2 sampleUV = sampleTexelPos / sourceDims;
-                float4 farRadiance = cascadeN1.SampleLevel(linearSampler, sampleUV, 0.0f);
+                //float4 farRadiance = cascadeN1.SampleLevel(linearSampler, sampleUV, 0.0f);
+                
+                float4 samples[4];
+                for (int i = 0; i < 4; i++)
+                {
+                    int2 texelCoord = floor(sampleTexelPos) + TranslateCoord4x1To2x2(i);
+                    samples[i] = cascadeN1.Load(int3(texelCoord, 0));
+                }
+                
+                float4 farRadiance = BilinearInterpolation(samples[0], samples[1], samples[2], samples[3], frac(sampleTexelPos));
                 
                 float3 radiance = nearRadiance.a * farRadiance.rgb; // Radiance is only carried if near field is visible.
                 float visibility = nearRadiance.a * farRadiance.a; // Make sure visibility is updated if near field is not visible.

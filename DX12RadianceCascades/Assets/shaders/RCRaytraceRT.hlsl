@@ -142,7 +142,7 @@ void RayGenerationShader()
         if (cascadeInfo.cascadeIndex > 0 && cascadeInfo.cascadeIndex < rcGlobals.gatherFilterCount && gatherFilterTexN[probeNSampleIndex] == 0.0f)
         {
             // This line can be removed if clear color is assumed to have alpha 0
-            // renderOutput[probeNSampleIndex] = float4(0.0f, 0.0f, 0.0f, 0.0f);
+            renderOutput[probeNSampleIndex] = float4(1.0f, 0.0f, 1.0f, 0.0f);
             
             return; // Return early as these rays will not be used by any lower cascade.
         }
@@ -254,7 +254,7 @@ void ClosestHitShader(inout RayPayload payload, in BuiltInTriangleIntersectionAt
     // Add logic for fetching vertex positions, transform them, and then calculate if this hit was backface or not.
     // If the face was emissive and backface = true, force the emissive color to be black but register it as a hit. 
    
-    float3 hitColor = emissiveTex.SampleLevel(sourceSampler, uv, 0).rgb * 10.0f;
+    float3 hitColor = emissiveTex.SampleLevel(sourceSampler, uv, 0).rgb;
     payload.result = float4(hitColor, 0.0f);
 }
 
