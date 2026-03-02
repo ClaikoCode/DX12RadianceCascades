@@ -91,26 +91,19 @@ float4 main(Interpolators i) : SV_TARGET
         }
         else
         {
-            if (false)
+            // Fix for weird normals: let raycount not be affected by pre averaging and adjust rayindex when sampling accordingly. 
+            // The problem arises from too low angular resolution to accurately calculate attenuation on the surface.
+            
+            if (true)
             {
                 normals = float4(normals.rgb, 1.0f);
                 
                 float3 radiance = 0.0f;
                 
                 uint rayCount = rcGlobals.rayCount0;
-                // If the merge has been pre-averaged it means that each original ray has 
-                // casted a ray equal to its ray scaling factor. 
-                if (rcGlobals.usePreAveraging)
-                {
-                    rayCount /= rcGlobals.rayScalingFactor;
-                }
                 
                 uint rayCount0Sqrt = sqrt(rayCount);
                 int2 probeCounts = int2(rcGlobals.probeCount0X, rcGlobals.probeCount0Y);
-                
-                float2 probeUV = uv / rayCount0Sqrt;
-                float2 probeUVSize = 1.0f / (outputDims / rayCount0Sqrt);
-                probeUV = clamp(probeUV, probeUVSize, 1.0f / rayCount0Sqrt);
                 
                 float4 summedRadiance = 0.0f;
                 for (int i = 0; i < rayCount0Sqrt; i++)
@@ -123,7 +116,17 @@ float4 main(Interpolators i) : SV_TARGET
                         float normalAttenuation = clamp(dot(normals.rgb, rayDir), 0.0f, 1.0f);
                         
                         int2 probeIndex = uv * probeCounts;
-                        float4 radianceSample = cascade0RadianceBuffer[probeIndex + rayIndex * probeCounts];
+
+                        float4 radianceSample = 0.0f;
+                        
+                        if (rcGlobals.usePreAveraging)
+                        {
+                            radianceSample = cascade0RadianceBuffer[probeIndex + (rayIndex / 2) * probeCounts];
+                        }
+                        else
+                        {
+                            radianceSample = cascade0RadianceBuffer[probeIndex + rayIndex * probeCounts];
+                        }              
                         
                         summedRadiance += radianceSample * normalAttenuation;
                     }
