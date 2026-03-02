@@ -100,7 +100,7 @@ float3 SimpleSunsetSky(float3 viewDir, float3 sunDir)
     float sunGlow = pow(sunDot, 8.0);
     
     // Add sun and glow
-    float3 sunColor = float3(1.0, 0.6, 0.3) * 50.0; // HDR sun
+    float3 sunColor = float3(1.0, 0.6, 0.3) * 25.0; // HDR sun
     skyBaseColor += sunDisc * sunColor;
     skyBaseColor += sunGlow * float3(0.8, 0.5, 0.3) * (1.0 - height) * 0.8;
     
@@ -171,6 +171,16 @@ float2 ClampPixelPos(float2 pixelPos, int2 dims)
     return clamp(pixelPos, int2(0, 0), dims);
 }
 
+// t = texel, 00 = top left, 11 = bottom right
+float4 BilinearInterpolation(float4 t00, float4 t10, float4 t01, float4 t11, float2 frac)
+{
+    float2 negFrac = 1.0f - frac;
+    
+    return  t00 * negFrac.x * negFrac.y +
+            t10 * frac.x * negFrac.y +
+            t01 * negFrac.x * frac.y +
+            t11 * frac.x * frac.y;
+}
 
 
 #endif // COMMON_H

@@ -62,18 +62,26 @@ struct ModelInstanceDesc
 
 struct RadianceCascadesSettings
 {
+	// NOTE: Has to enforce int type
+	enum CascadeTextureVis : int
+	{
+		CascadeTextureVisNone = 0,
+		CascadeTextureVisGather,
+		CascadeTextureVisMerge,
+		CascadeTextureVisGatherFilter,
+	};
+
+	CascadeTextureVis currentTextureVis = CascadeTextureVisNone;
 	bool renderRC3D = true;
-	bool visualizeRC3DGatherCascades = false;
-	bool visualizeRC3DMergeCascades = false;
 	bool seeCoalesceResult = false;
-	int cascadeVisIndex = 0; // Shows cascades with probe grids.
+	int cascadeVisIndex = 0;
+	int cascadeFilterIndex = 0;
 	int cascadeVisResultIndex = -1; // Shows the result from a single cascade.
 
 	bool enableCascadeProbeVis = false;
 	int cascadeVisProbeIntervalIndex = 0;
 	int cascadeVisProbeSubset = 256;
 
-	bool useDepthAwareMerging = false;
 	bool usePreAveragedGather = true;
 
 	float rayLength0 = 5.0f;
@@ -165,6 +173,8 @@ private:
 
 		RootEntryRCRaytracingRTGSceneSRV = 0,
 		RootEntryRCRaytracingRTGOutputUAV,
+		RootEntryRCRaytracingRTGGatherFilterNUAV,
+		RootEntryRCRaytracingRTGGatherFilterN1UAV,
 		RootEntryRCRaytracingRTGGlobalInfoCB,
 		RootEntryRCRaytracingRTGRCGlobalsCB,
 		RootEntryRCRaytracingRTGCascadeInfoCB,

@@ -168,28 +168,4 @@
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
-  <ItemGroup>
-    <None Include="Assets\shaders\Common.hlsli" />
-    <None Include="Assets\shaders\RCCommon.hlsli" />
-    <None Include="Assets\shaders\DebugDraw.hlsli" />
-    <None Include="Assets\shaders\RadianceCascadeVis.hlsli" />
-    <None Include="Assets\shaders\RCCommon3D.hlsli" />
-  </ItemGroup>
-  <ItemGroup>
-    <FxCompile Include="Assets\shaders\DirectCopyCS.hlsl" />
-    <FxCompile Include="Assets\shaders\DirectWritePS.hlsl" />
-    <FxCompile Include="Assets\shaders\FlatlandSceneCS.hlsl" />
-    <FxCompile Include="Assets\shaders\FullScreenQuadVS.hlsl" />
-    <FxCompile Include="Assets\shaders\RCGatherCS.hlsl" />
-    <FxCompile Include="Assets\shaders\RCMergeCS.hlsl" />
-    <FxCompile Include="Assets\shaders\SceneRenderPS.hlsl" />
-    <FxCompile Include="Assets\shaders\SceneRenderVS.hlsl" />
-    <FxCompile Include="Assets\shaders\RCRadianceFieldCS.hlsl" />
-    <FxCompile Include="Assets\shaders\DebugDrawPS.hlsl" />
-    <FxCompile Include="Assets\shaders\DebugDrawVS.hlsl" />
-    <FxCompile Include="Assets\shaders\MinMaxDepthCS.hlsl" />
-    <FxCompile Include="Assets\shaders\RCMerge3DCS.hlsl" />
-    <FxCompile Include="Assets\shaders\RCCoalesce3DCS.hlsl" />
-    <FxCompile Include="Assets\shaders\DeferredLightingPassPS.hlsl" />
-  </ItemGroup>
 </Project>

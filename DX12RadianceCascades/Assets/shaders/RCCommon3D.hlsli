@@ -19,8 +19,10 @@ struct RCGlobals
     uint rayCount0;
     float rayLength0;
     uint cascadeCount;
+    uint gatherFilterCount;
     bool usePreAveraging;
     bool depthAwareMerging;
+    bool useGatherFiltering;
     uint probeCount0X;
     uint probeCount0Y;
     uint probeSpacing0; // Spacing between probes in pixels.
@@ -175,6 +177,17 @@ float3 GetProbeWorldPos(ProbeInfo3D probeInfo3D, TexType depthTex, float4x4 invP
     float3 worldPos = WorldPosFromDepth(depthVal, (float2(samplePos) + 0.5f) * texelSize, invProjMatrix, invViewMatrix);
 
     return worldPos;
+}
+
+float2 GetCascadeN1SamplePosition(ProbeInfo3D probeInfoN, ProbeInfo3D probeInfoN1, int2 rayOffset)
+{
+    // -0.5 to get in the middle of texel in cascade N.
+    float2 probeN1Index = float2(probeInfoN.probeIndex - 0.5f) / 2.0f; // TODO: Replace hardcoded 2 with probescalingfactor (per dim)
+    // Clamp to avoid sampling over edges of probe groups.
+    float2 clampedProbeN1Index = clamp(probeN1Index, 1.0f, float2(probeInfoN1.probesPerDim) - 2.0f);
+    float2 rayN1Index = probeInfoN.rayIndex * 2.0f; // TODO: Replace hardcoded 2 with sqrt(rayscalingfactor)
+        
+    return clampedProbeN1Index + probeInfoN1.probesPerDim * (rayN1Index + rayOffset);
 }
 
 #endif // RCCOMMON_H
