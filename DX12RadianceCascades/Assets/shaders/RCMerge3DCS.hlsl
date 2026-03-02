@@ -42,8 +42,6 @@ void main( uint3 DTid : SV_DispatchThreadID )
         // If this ray is obscured (a == 0), the higher cascades should not carry over any information.
         if(IsZero(nearRadiance.a))
         {
-            // TODO: Remove this line. No reason at all and only adds ms (albiet very small amounts).
-            cascadeN[pixelPos] = nearRadiance;
             return;
         }
         
@@ -128,15 +126,23 @@ void main( uint3 DTid : SV_DispatchThreadID )
             float4 farRadianceSum = 0.0f;
         
             int raysToMerge = rcGlobals.rayScalingFactor;
+            int2 translationDims = sqrt(rcGlobals.rayScalingFactor);
             for (int i = 0; i < raysToMerge; i++)
             {
-                int2 offset = TranslateCoord4x1To2x2(i);
+                int2 rayOffset = Translate1DTo2D(i, translationDims);
+
+                float2 sampleTexelPos = GetCascadeN1SamplePosition(probeInfoN, probeInfoN1, rayOffset);
+                //float2 sampleUV = sampleTexelPos / sourceDims;
+                //float4 farRadiance = cascadeN1.SampleLevel(linearSampler, sampleUV, 0.0f);
                 
-                // This is the texel position of the 0th probe of our base probe group.
-                uint2 cascadeN1BaseProbeIndex = (probeInfoN.rayIndex * 2 + offset) * probeInfoN1.probesPerDim;
-                float2 sampleTexelPos = cascadeN1BaseProbeIndex + clampedProbeN1Index + 0.25f;
-                float2 sampleUV = sampleTexelPos / sourceDims;
-                float4 farRadiance = cascadeN1.SampleLevel(linearSampler, sampleUV, 0.0f);
+                float4 samples[4];
+                for (int i = 0; i < 4; i++)
+                {
+                    int2 texelCoord = floor(sampleTexelPos) + TranslateCoord4x1To2x2(i);
+                    samples[i] = cascadeN1.Load(int3(texelCoord, 0));
+                }
+                
+                float4 farRadiance = BilinearInterpolation(samples[0], samples[1], samples[2], samples[3], frac(sampleTexelPos));
                 
                 float3 radiance = nearRadiance.a * farRadiance.rgb; // Radiance is only carried if near field is visible.
                 float visibility = nearRadiance.a * farRadiance.a; // Make sure visibility is updated if near field is not visible.

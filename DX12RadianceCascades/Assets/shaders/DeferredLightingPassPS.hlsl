@@ -91,7 +91,7 @@ float4 main(Interpolators i) : SV_TARGET
         }
         else
         {
-            if (true)
+            if (false)
             {
                 normals = float4(normals.rgb, 1.0f);
                 

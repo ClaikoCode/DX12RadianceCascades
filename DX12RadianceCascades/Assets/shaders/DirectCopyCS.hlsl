@@ -1,3 +1,7 @@
+// This shader is not as general as I thought. 
+// For example, if a texture with format of uint is used as input, the shader will run but will not sample the texture correctly.
+// SampleLevel does not exist for Texture2D<uint> and only gives a comp error once the type is explicitly defined for the texture.
+// TODO: Make different shaders that follow common rules and figure out what shader to use depending on format at runtime from a single CopyTexture() call (if possible).
 
 #define OUT_OF_BOUNDS_RELATIVE(relPos) (relPos.x >= 1.0f || relPos.x < 0.0f || relPos.y >= 1.0f || relPos.x < 0.0f)
 #define OUT_OF_BOUNDS(pos, bounds) (pos.x >= bounds.x || pos.x < 0 || pos.y >= bounds.y || pos.y < 0) 
@@ -25,7 +29,8 @@ void main(uint3 DTid : SV_DispatchThreadID)
     if (IN_BOUNDS(pixelPos, destInfo.destResolution))
     {
         float2 relative = pixelPos / float2(destInfo.destResolution);
-        float4 sampledColor = sourceTex.SampleLevel(linearSampler, relative, 0);
+
+        float4 sampledColor = sourceTex.SampleLevel(linearSampler, relative, 0.0f);
         destTex[pixelPos] = float4(sampledColor.rgb, 1.0f);
     }
 }
