@@ -19,6 +19,9 @@
 
 #include "RadianceCascades.h"
 
+#include "TestSuiteMasters.h"
+#include "TestSuiteGatherFilter.h"
+
 using namespace Microsoft::WRL;
 
 // Mimicing how Microsoft exposes their global variables (example in Display.cpp)
@@ -26,8 +29,9 @@ namespace GameCore { extern HWND g_hWnd; }
 
 #if defined(PROFILE_GPU)
 	#if defined(RUN_TESTS)
-		// 0: Full test, 1: Half test, 2: Simple test
-		#define TEST_TO_RUN 0
+		static std::unique_ptr<TestSuiteBase> sTestSuite = nullptr;
+		bool sNeedMoreOptimizationFrames = false;
+		bool sShouldWaitNextAvailableFrame = false;
 	#endif // RUN_TESTS
 #endif // PROFILE_GPU
 
@@ -38,102 +42,6 @@ static const std::wstring s_BackupModelPath = L"models\\Testing\\SphereTest.gltf
 #define SAMPLE_LEN_0 20.0f
 #define RAYS_PER_PROBE_0 4.0f
 #define CAM_FOV 90.0f
-
-enum TestSuite
-{
-	// Test suite indices.
-	TestSuiteRaysPerProbe0 = 0,
-	TestSuiteProbeSpacing0,
-	TestSuiteMaxAllowedCascadeLevels,
-
-	// Total number of test suites.
-	TestSuiteCount
-};
-
-struct TestSuiteData
-{
-	std::array<uint32_t, TestSuiteCount> testIndices;
-
-	std::vector<std::pair<const char*, float>> averageFrametimes; // Pair of profile name and average time in ms.
-	uint64_t totalVRAMSize = 0; // Total VRAM size of resources relevant to the test suite.
-};
-
-struct TestSetup
-{
-	uint32_t framesBetweenTests;
-
-	std::vector<uint32_t> raysPerProbe0Vals;
-	std::vector<uint32_t> probeSpacing0Vals;
-	std::vector<uint32_t> maxAllowedCascadeLevelsVals;
-
-	std::vector<TestSuiteData> testSuites;
-
-	// Updates every frame and resets when frames between tests is reached.
-	uint32_t currentFrameCount = 0;
-
-	// Increments every frame and resets when frames between tests is reached.
-	uint32_t currentTestSuiteIndex = 0;
-
-	bool needMoreFrames = true;
-
-	void WriteTestSuiteToCSVFile()
-	{
-		std::wstring fileName = std::format(L"RadianceCascadesTestResult_{}x{}.csv", Graphics::g_DisplayWidth, Graphics::g_DisplayHeight);
-		std::wofstream fileStream(fileName);
-		if (!fileStream.is_open())
-		{
-			throw std::runtime_error("Failed to open file for writing test suite data.");
-		}
-
-		LOG_INFO(L"Writing test suite data to file: {}", fileName);
-
-		// Headers
-		{
-			// Add names for each column in the CSV file.
-			fileStream << L"RaysPerProbe,ProbeSpacing,MaxCascadeLevels";
-
-			// Add names of each average frame time as headers.
-			for (const auto& averageFrameTime : testSuites[0].averageFrametimes)
-			{
-				fileStream << L"," << averageFrameTime.first;
-			}
-
-			// Add VRAM size column header.
-			fileStream << L",VRAM";
-
-			fileStream << L"\n";
-		}
-
-		// Data
-		for(size_t i = 0; i < testSuites.size(); i++)
-		{
-			TestSuiteData& testSuite = testSuites[i];
-
-			uint32_t raysPerProbeValueIndex = testSuite.testIndices[TestSuiteRaysPerProbe0];
-			uint32_t probeSpacingValueIndex = testSuite.testIndices[TestSuiteProbeSpacing0];
-			uint32_t cascadeLevelValueIndex = testSuite.testIndices[TestSuiteMaxAllowedCascadeLevels];
-
-			fileStream
-				<< raysPerProbe0Vals[raysPerProbeValueIndex] << L","
-				<< probeSpacing0Vals[probeSpacingValueIndex] << L","
-				<< maxAllowedCascadeLevelsVals[cascadeLevelValueIndex] << L",";
-
-			for (const auto& averageFrameTime : testSuite.averageFrametimes)
-			{
-				fileStream << averageFrameTime.second << L",";
-			}
-
-			fileStream << testSuite.totalVRAMSize;
-
-			fileStream << L"\n";
-		}
-
-		fileStream.close();
-	}
-};
-
-static TestSetup sTestSetup;
-
 
 typedef ComputeContext RaytracingContext;
 
@@ -221,48 +129,6 @@ namespace
 		transform.SetTranslation(position);
 	}
 
-	void InitTestSetup()
-	{
-		// Make sure that the frames between tests is greater than the maximum number of frames that can be sampled.
-		// This is to ensure that every test suite has enough frames to collect the average frame time data.
-		sTestSetup.framesBetweenTests = MaxFrametimeSampleCount + 10;
-
-#if (TEST_TO_RUN == 0)
-		// Full test setup
-		sTestSetup.maxAllowedCascadeLevelsVals = { 5, 6, 7, 8 };
-		sTestSetup.probeSpacing0Vals = { 1, 2, 3, 4 };
-		sTestSetup.raysPerProbe0Vals = { 16, 36, 64 };
-#elif (TEST_TO_RUN == 1)
-		// Half test setup
-		sTestSetup.maxAllowedCascadeLevelsVals = { 5, 6, 7 };
-		sTestSetup.probeSpacing0Vals = { 1, 2, 3 };
-		sTestSetup.raysPerProbe0Vals = { 16 };
-#elif (TEST_TO_RUN == 2)
-		// Simple test setup
-		sTestSetup.maxAllowedCascadeLevelsVals = { 5 };
-		sTestSetup.probeSpacing0Vals = { 2 };
-		sTestSetup.raysPerProbe0Vals = { 16 };
-#endif 
-
-		
-
-		for (size_t clI = 0; clI < sTestSetup.maxAllowedCascadeLevelsVals.size(); clI++)
-		{
-			for(size_t psI = 0; psI < sTestSetup.probeSpacing0Vals.size(); psI++)
-			{
-				for (size_t rppI = 0; rppI < sTestSetup.raysPerProbe0Vals.size(); rppI++)
-				{
-					TestSuiteData testSuite;
-					testSuite.testIndices[TestSuiteRaysPerProbe0] = uint32_t(rppI);
-					testSuite.testIndices[TestSuiteProbeSpacing0] = uint32_t(psI);
-					testSuite.testIndices[TestSuiteMaxAllowedCascadeLevels] = uint32_t(clI);
-
-					sTestSetup.testSuites.push_back(testSuite);
-				}
-			}
-		}
-	}
-
 	void EnableDriverBackgroundOptimizations()
 	{
 		ComPtr<ID3D12Device6> device6;
@@ -317,10 +183,6 @@ RadianceCascades::RadianceCascades()
 	)
 {
 	m_sceneModels.reserve(MAX_INSTANCES);
-
-#if defined(RUN_TESTS)
-	::InitTestSetup();
-#endif
 }
 
 RadianceCascades::~RadianceCascades()
@@ -354,10 +216,14 @@ void RadianceCascades::Startup()
 		{
 			GPU_MEMORY_BLOCK("Misc");
 
-			m_albedoBuffer.Create(L"Albedo Buffer", ::GetSceneColorWidth(), ::GetSceneColorHeight(), 1, ::GetSceneColorFormat());
+			uint32_t width = ::GetSceneColorWidth();
+			uint32_t height = ::GetSceneColorHeight();
 
-			DepthBuffer& sceneDepthBuff = Graphics::g_SceneDepthBuffer;
-			m_debugCamDepthBuffer.Create(L"Debug Cam Depth Buffer", sceneDepthBuff.GetWidth(), sceneDepthBuff.GetHeight(), sceneDepthBuff.GetFormat());
+			m_albedoBuffer.Create(L"Albedo Buffer", width, height, 1, ::GetSceneColorFormat());
+			RegisterDisplayDependentTexture(&m_albedoBuffer, TextureTypeColor);
+
+			m_debugCamDepthBuffer.Create(L"Debug Cam Depth Buffer", width, height, Graphics::g_SceneDepthBuffer.GetFormat());
+			RegisterDisplayDependentTexture(&m_debugCamDepthBuffer, TextureTypeDepth);
 		}
 	}
 	
@@ -366,6 +232,8 @@ void RadianceCascades::Startup()
 #if defined(RUN_TESTS)
 	::EnableStablePowerState();
 	::EnableDriverBackgroundOptimizations();
+
+	sTestSuite = std::make_unique<TestSuiteGatherFilter>(*this, m_rcManager3D, m_camera);
 #endif
 }
 
@@ -388,7 +256,7 @@ void RadianceCascades::Update(float deltaT)
 	static double sTime = 0.0;
 	sTime += deltaT;
 
-
+#if !defined(RUN_TESTS)
 	// Mouse update
 	{
 		static bool isMouseExclusive = true;
@@ -404,11 +272,13 @@ void RadianceCascades::Update(float deltaT)
 		}
 	}
 
-	// Print the position of the camera
+	// Print the position and direction of the camera
 	if (GameInput::IsFirstPressed(GameInput::kKey_p))
 	{
-		const Math::Vector3& cameraPos = m_camera.GetPosition();
+		const Math::Vector3 cameraPos = m_camera.GetPosition();
 		LOG_INFO(L"Camera position: ({}, {}, {})", (float)cameraPos.GetX(), (float)cameraPos.GetY(), (float)cameraPos.GetZ());
+		const Math::Vector3 cameraDir = m_camera.GetForwardVec();
+		LOG_INFO(L"Camera direction: ({}, {}, {})", (float)cameraDir.GetX(), (float)cameraDir.GetY(), (float)cameraDir.GetZ());
 	}
 
 	// Toggle UI
@@ -417,94 +287,43 @@ void RadianceCascades::Update(float deltaT)
 		m_settings.globalSettings.renderUI = !m_settings.globalSettings.renderUI;
 	}
 
+#endif
+
 
 #if defined(RUN_TESTS)
-	if(sTestSetup.currentFrameCount >= sTestSetup.framesBetweenTests || sTestSetup.currentTestSuiteIndex == 0)
+	if (!sTestSuite->HasCompleted())
 	{
-		if (sTestSetup.currentTestSuiteIndex > 0)
+		if (sNeedMoreOptimizationFrames == false)
 		{
-			TestSuiteData& previousTestSuite = sTestSetup.testSuites[sTestSetup.currentTestSuiteIndex - 1];
-			// Calculate and write frametime info for the previous test suite.
-			auto& profiles = GPUProfiler::Get().GetProfiles();
-			for (const auto& profile : profiles)
+			if (!sShouldWaitNextAvailableFrame)
 			{
-				if (profile.name == nullptr)
-				{
-					continue; // Skip null profiles.
-				}
+				bool newTestCase = sTestSuite->Tick();
 
-				float frametimeSum = 0.0f;
-				for (float frameTime : profile.timeSamples)
+				if (newTestCase)
 				{
-					frametimeSum += frameTime;
+					// Assumes that more optimization frames are to be required when new test case is instantiated.
+					sNeedMoreOptimizationFrames = true;
+					::EnableDriverBackgroundOptimizations();
+					sShouldWaitNextAvailableFrame = true;
 				}
-
-				const float frametimeAverage = frametimeSum / profile.timeSamples.size();
-				previousTestSuite.averageFrametimes.push_back({ profile.name, frametimeAverage });
 			}
-
-			// Save VRAM usage before generating new RC resources.
-			previousTestSuite.totalVRAMSize = m_rcManager3D.GetTotalVRAMUsage();
-		}
-
-		if (sTestSetup.currentTestSuiteIndex < sTestSetup.testSuites.size())
-		{
-			TestSuiteData& currentTestSuite = sTestSetup.testSuites[sTestSetup.currentTestSuiteIndex];
-			const auto& testIndices = currentTestSuite.testIndices;
+			else
+			{
+				sShouldWaitNextAvailableFrame = false;
+			}
 			
-			uint32_t raysPerProbe0 = sTestSetup.raysPerProbe0Vals[testIndices[TestSuiteRaysPerProbe0]];
-			uint32_t probeSpacing0 = sTestSetup.probeSpacing0Vals[testIndices[TestSuiteProbeSpacing0]];
-			uint32_t maxAllowedCascadeLevels = sTestSetup.maxAllowedCascadeLevelsVals[testIndices[TestSuiteMaxAllowedCascadeLevels]];
-
-			m_rcManager3D.Generate(
-				raysPerProbe0,
-				probeSpacing0,
-				::GetSceneColorWidth(),
-				::GetSceneColorHeight(),
-				maxAllowedCascadeLevels
-			);
-
-			// Update settings
-			m_settings.rcSettings.raysPerProbe0 = raysPerProbe0;
-			m_settings.rcSettings.probeSpacing0 = probeSpacing0;
-
-			LOG_INFO(
-				L"Running test suite {}/{} ({}%): RaysPerProbe0 = {}, ProbeSpacing0 = {}, MaxAllowedCascadeLevels = {}",
-				sTestSetup.currentTestSuiteIndex + 1,
-				sTestSetup.testSuites.size(),
-				(sTestSetup.currentTestSuiteIndex + 1) * 100 / sTestSetup.testSuites.size(),
-				raysPerProbe0,
-				probeSpacing0,
-				maxAllowedCascadeLevels
-			);
-
-			sTestSetup.currentTestSuiteIndex++;
-			sTestSetup.currentFrameCount = 0;
-
-			// Assume that change of settings requires more frames to be rendered for the optimizations to take effect.
-			sTestSetup.needMoreFrames = TRUE;
-			::EnableDriverBackgroundOptimizations();
-		}
-		else
-		{
-			sTestSetup.WriteTestSuiteToCSVFile();
-
-			// All tests are done, quit the application.
-			m_shouldQuit = true;
-		}
-	}
-	else
-	{
-		// If the test setup is not waiting for further driver optimizations then the frame counting can begin.
-		if (!sTestSetup.needMoreFrames)
-		{
-			sTestSetup.currentFrameCount++;
-			LOG_DEBUG(L"Current frame count: {} ({}%)", sTestSetup.currentFrameCount, 100 * sTestSetup.currentFrameCount / sTestSetup.framesBetweenTests);
 		}
 		else
 		{
 			LOG_DEBUG(L"Waiting for GPU driver optimizations to finish before continuing with the tests.");
 		}
+	}
+	else
+	{
+		sTestSuite->OutputTestSuiteToCSV();
+
+		// All tests are done, quit the application.
+		m_shouldQuit = true;
 	}
 #endif
 
@@ -632,11 +451,11 @@ void RadianceCascades::RenderScene()
 
 #if defined(RUN_TESTS)
 	
-	if (sTestSetup.needMoreFrames)
+	if (sNeedMoreOptimizationFrames)
 	{
-		sTestSetup.needMoreFrames = NeedsMoreFramesForOptimization();
+		sNeedMoreOptimizationFrames = NeedsMoreFramesForOptimization();
 
-		if (sTestSetup.needMoreFrames == false)
+		if (sNeedMoreOptimizationFrames == false)
 		{
 			ComPtr<ID3D12Device6> device6;
 			ThrowIfFailedHR(Graphics::g_Device->QueryInterface(IID_PPV_ARGS(&device6)));
@@ -651,6 +470,9 @@ void RadianceCascades::RenderScene()
 				nullptr,
 				nullptr
 			));
+
+			// Clear profile data.
+			GPUProfiler::Get().ClearProfiles();
 
 			LOG_INFO(L"GPU driver optimizations have been applied and disabled for the rest of the testing suite.");
 		}
@@ -695,6 +517,86 @@ bool RadianceCascades::IsDone()
 	}
 
 	return isDone;
+}
+
+void RadianceCascades::ResizeToResolutionTarget(ResolutionTarget resolutionTarget)
+{
+	// TODO: Fix this quick and dirty solution that is due to bad architecture for this feature.
+	static ResolutionTarget prevResTarget = ResolutionTargetInvalid;
+
+	if (prevResTarget == resolutionTarget)
+	{
+		return;
+	}
+	prevResTarget = resolutionTarget;
+
+	uint32_t width, height;
+	ResolutionTargetToDimensions(resolutionTarget, width, height);
+
+	switch (resolutionTarget)
+	{
+		case ResolutionTarget1080p:
+			Display::Set1080p();
+			break;
+	
+		case ResolutionTarget1440p:
+			Display::Set1440p();
+			break;
+	
+		case ResolutionTarget2160p:
+			Display::Set2160p();
+			break;
+	
+		default:
+			ASSERT(false, "Invalid resolution target");
+	}
+
+	LOG_INFO(L"Resizing buffers ({}x{}).", width, height);
+
+	Graphics::g_CommandManager.IdleGPU();
+
+	for (auto& textureRef : m_displayDependentTextures)
+	{
+		ASSERT(textureRef.pixelBuffer != nullptr);
+
+		wchar_t nameRaw[128] = {0};
+#if defined(DEBUG)
+		UINT size = sizeof(nameRaw);
+		ThrowIfFailedHR(textureRef.pixelBuffer->GetResource()->GetPrivateData(WKPDID_D3DDebugObjectNameW, &size, nameRaw));
+#endif 
+		std::wstring name = std::wstring(nameRaw);
+
+		switch (textureRef.pixelBufferType)
+		{
+			case TextureTypeColor:
+			{
+				ColorBuffer* colorTexture = dynamic_cast<ColorBuffer*>(textureRef.pixelBuffer);
+
+				uint32_t numMips = colorTexture->GetNumMipMaps();
+				ASSERT(numMips == 0, "Does not support resizing textures with mip maps.");
+
+				// At creation, num mips includes the 0:th mip (the texture itself). Using 0 means all mips.
+				colorTexture->Create(name, width, height, numMips + 1, colorTexture->GetFormat());
+				break;
+			}
+
+			case TextureTypeDepth:
+			{
+				DepthBuffer* depthTexture = dynamic_cast<DepthBuffer*>(textureRef.pixelBuffer);
+				depthTexture->Create(name, width, height, depthTexture->GetFormat());
+				break;
+			}
+
+			default:
+				LOG_ERROR(L"Texture type was not identifable during resize.");
+		}
+	}
+
+	m_rcManager3D.Resize(width, height);
+
+	// When resources are reinstantiated, the cache for keeping their GPU descriptor is invalidated and therefore has to be cleared.
+	// NOTE: This is a desperate fix without having to rewrite large parts of MiniEngine to comply with my app architecture.
+	RuntimeResourceManager::ClearCopiedDescriptorsMap();
 }
 
 void RadianceCascades::InitializeScene()
@@ -1125,15 +1027,19 @@ void RadianceCascades::InitializeRCResources()
 	{
 		GPU_MEMORY_BLOCK("RC 3D");
 
-		DepthBuffer& sceneDepthBuff = Graphics::g_SceneDepthBuffer;
-		m_depthBufferCopy.Create(L"Depth Copy", sceneDepthBuff.GetWidth(), sceneDepthBuff.GetHeight(), 1, DXGI_FORMAT_R32_FLOAT);
-		m_minMaxDepthMips.Create(L"Min Max Depth Mips", sceneDepthBuff.GetWidth() / 2, sceneDepthBuff.GetHeight() / 2, 0, DXGI_FORMAT_R32G32_FLOAT);
+		uint32_t screenWidth = ::GetSceneColorWidth();
+		uint32_t screenHeight = ::GetSceneColorHeight();
+
+		m_depthBufferCopy.Create(L"Depth Copy", screenWidth, screenHeight, 1, DXGI_FORMAT_R32_FLOAT);
+		RegisterDisplayDependentTexture(&m_depthBufferCopy, TextureTypeColor);
+
+		m_minMaxDepthMips.Create(L"Min Max Depth Mips", screenWidth / 2, screenHeight / 2, 0, DXGI_FORMAT_R32G32_FLOAT);
 
 		m_rcManager3D.Generate(
 			m_settings.rcSettings.raysPerProbe0, 
 			m_settings.rcSettings.probeSpacing0, 
-			::GetSceneColorWidth(), 
-			::GetSceneColorHeight(),
+			screenWidth,
+			screenHeight,
 			m_settings.rcSettings.maxCascadeCount
 		);
 	}
@@ -1742,7 +1648,7 @@ void RadianceCascades::DrawSettingsUI()
 	ImGui::Begin("Settings");
 
 #pragma region Info
-	if (ImGui::CollapsingHeader("App Info", ImGuiTreeNodeFlags_DefaultOpen))
+	if (ImGui::CollapsingHeader("App", ImGuiTreeNodeFlags_DefaultOpen))
 	{
 		ImGui::Text("Swapchain Resolution: %u x %u", ::GetSceneColorWidth(), ::GetSceneColorHeight());
 	}
@@ -1774,6 +1680,18 @@ void RadianceCascades::DrawSettingsUI()
 	if (ImGui::CollapsingHeader("Global Settings", ImGuiTreeNodeFlags_DefaultOpen))
 	{
 		GlobalSettings& gs = m_settings.globalSettings;
+
+		ImGui::SeparatorText("Display Resolution");
+		int* resolutionTarget = reinterpret_cast<int*>(&gs.resolutionTarget);
+		int prevResolutionTarget = *resolutionTarget;
+		ImGui::RadioButton("1080p", resolutionTarget, ResolutionTarget1080p); ImGui::SameLine();
+		ImGui::RadioButton("1440p", resolutionTarget, ResolutionTarget1440p); ImGui::SameLine();
+		ImGui::RadioButton("2160p", resolutionTarget, ResolutionTarget2160p);
+		
+		if (*resolutionTarget != prevResolutionTarget)
+		{
+			ResizeToResolutionTarget(ResolutionTarget(*resolutionTarget));
+		}
 
 		ImGui::SeparatorText("UI");
 		ImGui::Checkbox("Draw UI (toggle with 'u')", &gs.renderUI);
@@ -2119,4 +2037,9 @@ std::vector<TLASInstanceGroup> RadianceCascades::GetTLASInstanceGroups()
 	}
 
 	return instanceGroups;
+}
+
+void RadianceCascades::RegisterDisplayDependentTexture(PixelBuffer* pixelBuffer, TextureType textureType)
+{
+	m_displayDependentTextures.emplace_back(textureType, pixelBuffer);
 }

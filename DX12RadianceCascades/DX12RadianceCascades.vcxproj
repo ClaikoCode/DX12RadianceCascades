@@ -212,6 +212,9 @@ if %errorlevel% leq 3 exit 0</Command>
     <ClInclude Include="src\ShaderCompilation\ShaderCompilationManager.h" />
     <ClInclude Include="src\ShaderTable.h" />
     <ClInclude Include="src\StepTimer.h" />
+    <ClInclude Include="src\TestSuite.h" />
+    <ClInclude Include="src\TestSuiteGatherFilter.h" />
+    <ClInclude Include="src\TestSuiteMasters.h" />
     <ClInclude Include="src\Utils.h" />
   </ItemGroup>
   <ItemGroup>
@@ -254,6 +257,8 @@ if %errorlevel% leq 3 exit 0</Command>
     <ClCompile Include="src\ShaderCompilation\DirectoryWatcher.cpp" />
     <ClCompile Include="src\ShaderCompilation\ShaderCompilationManager.cpp" />
     <ClCompile Include="src\ShaderTable.cpp" />
+    <ClCompile Include="src\TestSuiteGatherFilter.cpp" />
+    <ClCompile Include="src\TestSuiteMasters.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\MiniEngine\Core\Core.vcxproj">

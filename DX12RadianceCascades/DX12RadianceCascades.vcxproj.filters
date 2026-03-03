@@ -99,6 +99,15 @@
     <ClInclude Include="src\Profiling\GPUProfiler.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="src\TestSuite.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\TestSuiteMasters.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\TestSuiteGatherFilter.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\Main.cpp">
@@ -165,6 +174,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\Profiling\GPUProfiler.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\TestSuiteMasters.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\TestSuiteGatherFilter.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

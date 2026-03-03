@@ -82,19 +82,19 @@ namespace Graphics
 // Added by JD.
 #define RES_1080P
 #if defined(RES_1080P)
-	const eResolution kNativeResolution = k1080p;
+	eResolution kNativeResolution = k1080p;
 	const uint32_t baseDisplayWidth = 1920;
 	const uint32_t baseDisplayHeight = 1080;
 #elif defined(RES_1440P)
-	const eResolution kNativeResolution = k1440p;
+	eResolution kNativeResolution = k1440p;
 	const uint32_t baseDisplayWidth = 2560;
 	const uint32_t baseDisplayHeight = 1440;
 #elif defined(RES_2048)
-	const eResolution kNativeResolution = k2048x2;
+	eResolution kNativeResolution = k2048x2;
 	const uint32_t baseDisplayWidth = 2048;
 	const uint32_t baseDisplayHeight = 2048;
 #else
-    const eResolution kNativeResolution = k720p;
+    eResolution kNativeResolution = k720p;
     const uint32_t baseDisplayWidth = 1280;
     const uint32_t baseDisplayHeight = 720;
 #endif
@@ -556,6 +556,28 @@ void Display::Present(void)
     SetDisplayResolution();
 }
 
+void SetNewNativeResolution(Graphics::eResolution newResolution)
+{
+    kNativeResolution = newResolution;
+    NativeResolution = { "Graphics/Display/Native Resolution", kNativeResolution, kNumPredefinedResolutions, ResolutionLabels };
+    DisplayResolution = { "Graphics/Display/Display Resolution", kNativeResolution, kNumPredefinedResolutions, ResolutionLabels };
+}
+
+void Display::Set1080p(void)
+{
+    SetNewNativeResolution(k1080p);
+}
+
+void Display::Set1440p(void)
+{
+    SetNewNativeResolution(k1440p);
+}
+
+void Display::Set2160p(void)
+{
+    SetNewNativeResolution(k2160p);
+}
+
 uint64_t Graphics::GetFrameCount(void)
 {
     return s_FrameIndex;
@@ -570,3 +592,5 @@ float Graphics::GetFrameRate(void)
 {
     return s_FrameTime == 0.0f ? 0.0f : 1.0f / s_FrameTime;
 }
+
+
