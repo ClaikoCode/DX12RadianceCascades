@@ -25,6 +25,53 @@
 	#define ENABLE_DEBUG_DRAW 0
 #endif
 
+enum ResolutionTarget
+{
+	ResolutionTargetInvalid = 0,
+	ResolutionTarget1080p,
+	ResolutionTarget1440p,
+	ResolutionTarget2160p,
+
+	ResolutionTargetCount // Keep last!
+};
+
+static void ResolutionTargetToDimensions(ResolutionTarget resolutionTarget, uint32_t& width, uint32_t& height)
+{
+	switch (resolutionTarget)
+	{
+		case ResolutionTarget1080p:
+			width = 1920u;
+			height = 1080u;
+			break;
+
+		case ResolutionTarget1440p:
+			width = 2560u;
+			height = 1440u;
+			break;
+
+		case ResolutionTarget2160p:
+			width = 3840u;
+			height = 2160u;
+			break;
+
+		default:
+			ASSERT(false, "Invalid resolution target");
+	}
+}
+
+enum TextureType
+{
+	TextureTypeNone = 0,
+	TextureTypeColor,
+	TextureTypeDepth
+};
+
+struct DisplayDependentTextureRef
+{
+	TextureType pixelBufferType = TextureTypeNone;
+	PixelBuffer* pixelBuffer;
+};
+
 typedef std::function<void(ModelInstance*, float, double)> UpdateScript;
 
 class InternalModelInstance : public ModelInstance
@@ -104,6 +151,7 @@ struct GlobalSettings
 	};
 
 	RenderMode renderMode = RenderModeRaster;
+	ResolutionTarget resolutionTarget = ResolutionTargetInvalid;
 
 	bool renderDebugLines = ENABLE_DEBUG_DRAW;
 	bool useDepthCheckForDebugLines = false;
@@ -229,6 +277,9 @@ public:
 
 	virtual bool IsDone() override;
 
+	// Will resize internal textures, graphics textures, and the window itself.
+	void ResizeToResolutionTarget(ResolutionTarget resolutionTarget);
+
 private:
 	void InitializeScene();
 	void InitializePSOs();
@@ -276,6 +327,8 @@ private:
 	// EXTREMELY wasteful but it gets the job done for how much energy I have currently.
 	std::unordered_map<ModelID, std::vector<Utils::GPUMatrix>> GetGroupedModelInstances();
 	std::vector<TLASInstanceGroup> GetTLASInstanceGroups();
+
+	void RegisterDisplayDependentTexture(PixelBuffer* pixelBuffer, TextureType textureType);
 
 private:
 	bool m_shouldQuit = false;
@@ -337,5 +390,6 @@ private:
 	ColorBuffer m_minMaxDepthMips;
 
 	DepthBuffer m_debugCamDepthBuffer;
-};
 
+	std::vector<DisplayDependentTextureRef> m_displayDependentTextures;
+};

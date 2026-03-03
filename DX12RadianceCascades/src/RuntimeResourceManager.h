@@ -110,6 +110,10 @@ public:
 
 	static ID3D12DescriptorHeap* GetDescriptorHeapPtr() { return Get().m_descHeap.GetHeapPointer(); }
 
+	// NOTE: This leaks descriptor memory as all the saved handles are not freed and will be newly allocated
+	// the next time they are stored in the map.
+	static void ClearCopiedDescriptorsMap() { Get().m_descriptorCopiedCBVSRVUAV.clear(); }
+
 	static RaytracingDispatchRayInputs& GetRaytracingDispatch(RayDispatchID rayDispatchID);
 	static void BuildRaytracingDispatchInputs(PSOID psoID, std::set<ModelID>& models, RayDispatchID rayDispatchID);
 
@@ -166,8 +170,6 @@ private:
 	const DescriptorHandle& GetDescCopyImpl(const D3D12_CPU_DESCRIPTOR_HANDLE& handle);
 
 	void DestroyImpl();
-
-
 
 private:
 	DescriptorHeap m_descHeap;

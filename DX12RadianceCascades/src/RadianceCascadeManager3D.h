@@ -1,5 +1,9 @@
 #pragma once
 
+#include "Core\CommandListManager.h"
+#include "Core\CommandContext.h"
+#include "Core\ColorBuffer.h"
+
 struct RCGlobals;
 
 struct ProbeDims
@@ -15,6 +19,8 @@ public:
 	RadianceCascadeManager3D(float rayLength0, bool usePreAverage);
 
 	void Generate(uint32_t raysPerProbe0, uint32_t probeSpacing0, uint32_t swapchainWidth, uint32_t swapchainHeight, uint32_t maxAllowedCascadeLevels = 8u);
+	// Calls Generate() using internal values with other width and height parameters.
+	void Resize(uint32_t width, uint32_t height);
 
 	void FillRCGlobalInfo(RCGlobals& rcGlobalInfo);
 
@@ -30,8 +36,8 @@ public:
 	uint32_t GetCascadeIntervalCount() { return (uint32_t)m_cascadeIntervals.size(); }
 	// Always one less than cascade interval count.
 	uint32_t GetGatherFilterCount() { return (uint32_t)m_cascadeGatherFilters.size(); }
-	ColorBuffer& GetCascadeIntervalBuffer(uint32_t cascadeIndex) { ASSERT(cascadeIndex < GetCascadeIntervalCount()); return m_cascadeIntervals[cascadeIndex]; }
-	ColorBuffer& GetCascadeGatherFilterBuffer(uint32_t filterIndex) { ASSERT(filterIndex < GetGatherFilterCount()); return m_cascadeGatherFilters[filterIndex]; }
+	ColorBuffer& GetCascadeIntervalBuffer(uint32_t cascadeIndex);
+	ColorBuffer& GetCascadeGatherFilterBuffer(uint32_t filterIndex);
 	uint32_t GetProbeScalingFactor() const { return m_scalingFactor.probeScalingFactor; }
 	float GetRayLength() { return m_rayLength0; }
 	void SetRayLength(float rayLength) { m_rayLength0 = rayLength; }
@@ -66,9 +72,6 @@ private:
 
 	float m_rayLength0;
 	uint32_t m_raysPerProbe0 = 0u;
-
-	
-
 	uint32_t m_probeSpacing0 = 0u;
 	uint32_t m_probeCount0X = 0u;
 	uint32_t m_probeCount0Y = 0u;

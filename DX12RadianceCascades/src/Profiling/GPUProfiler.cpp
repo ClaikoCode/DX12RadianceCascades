@@ -310,6 +310,21 @@ void GPUProfiler::DrawProfilerUI()
 	ImGui::End();
 }
 
+void GPUProfiler::ClearProfiles()
+{
+	for (uint32_t i = 0u; i < m_profileCount; i++)
+	{
+		const uint32_t queryStartIndex = i * 2;
+		PerfProfile& perfProfile = m_profiles[i];
+
+		ASSERT(perfProfile.isQuerying == false);
+
+		perfProfile.currentSampleCount = 0u;
+		perfProfile.timeSamples.fill(0.0f);
+	}
+
+}
+
 PerfProfileBlock::PerfProfileBlock(CommandContext& commandContext, const char* name)
 {
 	commandList = commandContext.GetCommandList();

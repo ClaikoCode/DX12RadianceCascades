@@ -12,7 +12,7 @@ constexpr uint32_t MaxProfiles = 16u;
 constexpr uint32_t MaxQueries = MaxProfiles * 2; // Two queries per profile.
 
 #if defined(RUN_TESTS)
-constexpr uint32_t MaxFrametimeSampleCount = 64u;
+constexpr uint32_t MaxFrametimeSampleCount = 128u;
 #else
 constexpr uint32_t MaxFrametimeSampleCount = 256u;
 #endif
@@ -52,6 +52,11 @@ struct PerfProfile
 	// Circular buffer.
 	std::array<float, MaxFrametimeSampleCount> timeSamples = {};
 	uint32_t currentSampleCount = 0u;
+
+	float GetLastSample() const
+	{
+		return timeSamples[(currentSampleCount + MaxFrametimeSampleCount - 1u) % MaxFrametimeSampleCount];
+	}
 };
 
 // Singleton class
@@ -95,6 +100,9 @@ public:
 
 	// Profiles that has not been updated this frame are not rendered.
 	void DrawProfilerUI();
+
+	// Resets all accumulated profiling values.
+	void ClearProfiles();
 
 private:
 

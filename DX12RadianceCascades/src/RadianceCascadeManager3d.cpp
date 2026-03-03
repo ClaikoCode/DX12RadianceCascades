@@ -1,9 +1,7 @@
 #include "rcpch.h"
-#include "Core\ColorBuffer.h"
 #include "Core\DepthBuffer.h"
 #include "Core\GraphicsCore.h"
-#include "Core\CommandListManager.h"
-#include "Core\CommandContext.h"
+
 #include "GPUStructs.h"
 #include "RadianceCascadeManager3D.h"
 #include "RuntimeResourceManager.h"
@@ -111,6 +109,11 @@ void RadianceCascadeManager3D::Generate(uint32_t raysPerProbe0, uint32_t probeSp
 	m_raysPerProbe0 = raysPerProbe0;
 }
 
+void RadianceCascadeManager3D::Resize(uint32_t width, uint32_t height)
+{
+	Generate(m_raysPerProbe0, m_probeSpacing0, width, height, GetCascadeIntervalCount());
+}
+
 void RadianceCascadeManager3D::FillRCGlobalInfo(RCGlobals& rcGlobalInfo)
 {
 	rcGlobalInfo.rayCount0 = m_raysPerProbe0;
@@ -182,6 +185,16 @@ float RadianceCascadeManager3D::GetStartT(uint32_t cascadeIndex)
 float RadianceCascadeManager3D::GetRayLength(uint32_t cascadeIndex)
 {
 	return m_rayLength0 * Math::Pow((float)m_scalingFactor.rayScalingFactor, (float)cascadeIndex);
+}
+
+ColorBuffer& RadianceCascadeManager3D::GetCascadeIntervalBuffer(uint32_t cascadeIndex) 
+{ 
+	ASSERT(cascadeIndex < GetCascadeIntervalCount()); return m_cascadeIntervals[cascadeIndex]; 
+}
+
+ColorBuffer& RadianceCascadeManager3D::GetCascadeGatherFilterBuffer(uint32_t filterIndex) 
+{ 
+	ASSERT(filterIndex < GetGatherFilterCount()); return m_cascadeGatherFilters[filterIndex]; 
 }
 
 uint64_t RadianceCascadeManager3D::GetTotalVRAMUsage()

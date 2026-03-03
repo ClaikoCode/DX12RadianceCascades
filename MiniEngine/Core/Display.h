@@ -21,6 +21,10 @@ namespace Display
     void Shutdown(void);
     void Resize(uint32_t width, uint32_t height);
     void Present(void);
+    // Added by JD
+    void Set1080p(void);
+    void Set1440p(void);
+    void Set2160p(void);
 }
 
 namespace Graphics
