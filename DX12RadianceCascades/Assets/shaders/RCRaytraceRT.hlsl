@@ -132,8 +132,10 @@ void RayGenerationShader()
     
     if(rcGlobals.useGatherFiltering)
     {
-        uint2 clampedProbeNIndex = clamp(probeInfo3D.probeIndex, 1.0f, probeInfo3D.probesPerDim - 2.0f);
-        uint2 probeNSampleIndex = clampedProbeNIndex + probeInfo3D.rayIndex * probeInfo3D.probesPerDim;
+        // This does not need to follow the clamping rules that sampling in the gather stage 
+        // uses (clamping probe indices at borders). The data written to the gather filter follows those rules.
+        // Probe-dirs naively check if they will be used in sampling during gathering or not. 
+        uint2 probeNSampleIndex = probeInfo3D.probeIndex + probeInfo3D.rayIndex * probeInfo3D.probesPerDim;
         
         // The 0th cascade does not have any filtering information to read from.
         if (cascadeInfo.cascadeIndex > 0 && IsZero(gatherFilterTexN[probeNSampleIndex]))
@@ -196,6 +198,7 @@ void RayGenerationShader()
         // If gather rays are not full occluded, they will be used in cascade merging: write a flag telling next cascade that it should not ignore gathering.
         // Because the last cascade will not be included in the filtering step, the last upper cascade to be filtered should be the one before it.
         if (radianceOutput.a > 0.0f && cascadeInfo.cascadeIndex < (rcGlobals.cascadeCount - 1))
+        //if (radianceOutput.a > 0.0f && cascadeInfo.cascadeIndex < (rcGlobals.cascadeCount - 1))
         { 
             int2 translationDims = sqrt(rcGlobals.rayScalingFactor);
             for (int i = 0; i < rcGlobals.rayScalingFactor; i++)

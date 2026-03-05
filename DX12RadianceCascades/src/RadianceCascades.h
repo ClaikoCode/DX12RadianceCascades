@@ -182,6 +182,11 @@ private:
 		RootEntryFlatlandSceneUAV,
 		RootEntryFlatlandCount,
 
+		RootEntryGatherFilterReductionInfo = 0,
+		RootEntryGatherFilterReductionTexture,
+		RootEntryGatherFilterReductionByteBuffer,
+		RootEntryGatherFilterReductionCount,
+
 		RootEntryFullScreenCopySource = 0,
 		RootEntryFullScreenCopyCount,
 
@@ -296,13 +301,14 @@ private:
 	void RunComputeRCGather();
 	void RunComputeRCMerge();
 	void RunRCCoalesce();
+	void RunComputeRCGatherFilterReduction();
 	void RunComputeRCRadianceField(ColorBuffer& outputBuffer);
 	void RunDeferredLightingPass(ColorBuffer& albedoBuffer, ColorBuffer& normalBuffer, ColorBuffer& diffuseRadianceBuffer, ColorBuffer& outputBuffer);
 	void UpdateViewportAndScissor();
 
 	void DrawSettingsUI();
 
-	void ClearPixelBuffers();
+	void ClearBuffers();
 
 	// Will run a compute shader that samples the source and writes to dest.
 	// TODO: Take in a sampler type and change PSO to have a binding for a dynamic sampler state that is bound at runtime.
@@ -373,6 +379,13 @@ private:
 	ComputePSO m_rc3dMergePSO = ComputePSO(L"RC 3D Merge PSO");
 	RootSignature m_rc3dMergeRootSig;
 
+	ComputePSO m_gatherFilterReductionPSO = ComputePSO(L"Gather Filter Reduction PSO");
+	RootSignature m_gatherFilterReductionRootSig;
+	// TODO: Move this to rcmanager3d as these resources heavily depend on its state. They should be re-generated if rc is re-generated.
+	ByteAddressBuffer m_gatherFilterByteAddressBuffer;
+	ReadbackBuffer m_gatherFilterReadbackBuffer;
+	uint32_t* m_gatherFilterReadbackBufferMappedPtr;
+
 	ComputePSO m_rc3dCoalescePSO = ComputePSO(L"RC 3D Coalesce PSO");
 	RootSignature m_rc3dCoalesceRootSig;
 
@@ -391,5 +404,7 @@ private:
 
 	DepthBuffer m_debugCamDepthBuffer;
 
+	// Vector used for observer pattern. Textures can subscribe here and when resize is triggered, 
+	// the textures also get resized, keeping all other creation parameters the same.
 	std::vector<DisplayDependentTextureRef> m_displayDependentTextures;
 };

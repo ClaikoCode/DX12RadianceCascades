@@ -146,7 +146,7 @@ void TestSuiteGatherFilter::OnCaseBegin(const TestCase& testCase)
 	ResolutionTargetToDimensions(inputs.resolution, width, height);
 
 	// Constant max level cascades for all tests.
-	const uint32_t maxCascadeLevel = 5u;
+	const uint32_t maxCascadeLevel = 6u;
 	m_rcManager3D.Generate(
 		inputs.raysPerProbe0,
 		inputs.probeSpacing0,

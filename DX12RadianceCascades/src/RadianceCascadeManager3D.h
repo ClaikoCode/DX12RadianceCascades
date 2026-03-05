@@ -39,9 +39,10 @@ public:
 	ColorBuffer& GetCascadeIntervalBuffer(uint32_t cascadeIndex);
 	ColorBuffer& GetCascadeGatherFilterBuffer(uint32_t filterIndex);
 	uint32_t GetProbeScalingFactor() const { return m_scalingFactor.probeScalingFactor; }
+	uint32_t GetRayScalingFactor() const { return m_scalingFactor.rayScalingFactor; }
 	float GetRayLength() { return m_rayLength0; }
 	void SetRayLength(float rayLength) { m_rayLength0 = rayLength; }
-	bool UsesPreAveragedIntervals() const { return m_preAveragedIntervals; }
+	bool UsesPreAveragedIntervals() const { return isUsingPreAveragedIntervals; }
 
 	ColorBuffer& GetCoalesceBuffer() { return m_coalescedResult; }
 
@@ -51,7 +52,7 @@ public:
 	bool useGatherFiltering = true;
 	bool useDepthAwareMerging = false;
 	// Signifies that the cascade textures will be 1 / rayscalingfactor of the original size.
-	bool m_preAveragedIntervals;
+	bool isUsingPreAveragedIntervals;
 
 private:
 

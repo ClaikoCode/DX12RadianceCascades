@@ -34,7 +34,7 @@ namespace
 	}
 }
 
-RadianceCascadeManager3D::RadianceCascadeManager3D(float rayLength0, bool usePreAverage) : m_rayLength0(rayLength0), m_preAveragedIntervals(usePreAverage)
+RadianceCascadeManager3D::RadianceCascadeManager3D(float rayLength0, bool usePreAverage) : m_rayLength0(rayLength0), isUsingPreAveragedIntervals(usePreAverage)
 {
 	// Empty
 }
@@ -70,7 +70,7 @@ void RadianceCascadeManager3D::Generate(uint32_t raysPerProbe0, uint32_t probeSp
 
 		// If pre averaged intervals are used, each original ray will average the rays that would be averaged into the lower cascades.
 		// This means that each dispatched pixel, representing a probe and a direciton, will already account for the information of rays equal to rayScalingFactor.
-		uint32_t raysPerProbeDim = m_preAveragedIntervals ? (uint32_t)sqrt(raysPerProbe / m_scalingFactor.rayScalingFactor) : (uint32_t)sqrt(raysPerProbe);
+		uint32_t raysPerProbeDim = isUsingPreAveragedIntervals ? (uint32_t)sqrt(raysPerProbe / m_scalingFactor.rayScalingFactor) : (uint32_t)sqrt(raysPerProbe);
 		
 		const uint32_t probeBufferWidth = probeDims.probesX * raysPerProbeDim;
 		const uint32_t probeBufferHeight = probeDims.probesY * raysPerProbeDim;
@@ -126,7 +126,7 @@ void RadianceCascadeManager3D::FillRCGlobalInfo(RCGlobals& rcGlobalInfo)
 	rcGlobalInfo.gatherFilterCount = rcGlobalInfo.cascadeCount - 1; // By definition.
 	
 
-	rcGlobalInfo.usePreAveraging = m_preAveragedIntervals;
+	rcGlobalInfo.usePreAveraging = isUsingPreAveragedIntervals;
 	rcGlobalInfo.depthAwareMerging = useDepthAwareMerging;
 
 	rcGlobalInfo.probeCount0X = m_probeCount0X;
