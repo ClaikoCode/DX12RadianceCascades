@@ -224,6 +224,12 @@ void RadianceCascades::Startup()
 
 			m_debugCamDepthBuffer.Create(L"Debug Cam Depth Buffer", width, height, Graphics::g_SceneDepthBuffer.GetFormat());
 			RegisterDisplayDependentTexture(&m_debugCamDepthBuffer, TextureTypeDepth);
+
+			uint32_t numElements = m_rcManager3D.GetGatherFilterCount();
+			uint32_t elementSize = sizeof(uint32_t);
+			m_gatherFilterByteAddressBuffer.Create(L"Gather Filter Reduction Sum Byte Buffer", numElements, elementSize);
+			m_gatherFilterReadbackBuffer.Create(L"Gather Filter Reduction Sum Readback Buffer", numElements, elementSize);
+			m_gatherFilterReadbackBufferMappedPtr = reinterpret_cast<uint32_t*>(m_gatherFilterReadbackBuffer.Map());
 		}
 	}
 	
@@ -241,6 +247,8 @@ void RadianceCascades::Cleanup()
 {
 	Graphics::g_CommandManager.IdleGPU();
 	AppGUI::Shutdown();
+
+	m_gatherFilterReadbackBuffer.Unmap();
 	
 	// TODO: It might make more sense for an outer scope to execute this as this class is not responsible for their initialization.
 	DebugDrawer::Destroy();
@@ -350,7 +358,7 @@ void RadianceCascades::Update(float deltaT)
 
 void RadianceCascades::RenderScene()
 {
-	ClearPixelBuffers();
+	ClearBuffers();
 
 	Camera renderCamera = m_camera;
 	if (m_settings.globalSettings.useDebugCam)
@@ -416,6 +424,11 @@ void RadianceCascades::RenderScene()
 							m_rcManager3D.GetCoalesceBuffer(),
 							Graphics::g_SceneColorBuffer
 						);
+					}
+
+					if (m_rcManager3D.useGatherFiltering)
+					{
+						RunComputeRCGatherFilterReduction();
 					}
 				}
 			}
@@ -686,6 +699,7 @@ void RadianceCascades::InitializePSOs()
 		RuntimeResourceManager::RegisterPSO(PSOIDSecondExternalPSO,			&Renderer::sm_PSOs[11],			PSOTypeGraphics);
 		RuntimeResourceManager::RegisterPSO(PSOIDComputeRCGatherPSO,		&m_rcGatherPSO,					PSOTypeCompute);
 		RuntimeResourceManager::RegisterPSO(PSOIDComputeFlatlandScenePSO,	&m_flatlandScenePSO,			PSOTypeCompute);
+		RuntimeResourceManager::RegisterPSO(PSOIDGatherFilterReductionPSO,	&m_gatherFilterReductionPSO,	PSOTypeCompute);
 		RuntimeResourceManager::RegisterPSO(PSOIDComputeFullScreenCopyPSO,	&m_fullScreenCopyComputePSO,	PSOTypeCompute);
 		RuntimeResourceManager::RegisterPSO(PSOIDComputeRCMergePSO,			&m_rcMergePSO,					PSOTypeCompute);
 		RuntimeResourceManager::RegisterPSO(PSOIDComputeRCRadianceFieldPSO, &m_rcRadianceFieldPSO,			PSOTypeCompute);
@@ -903,6 +917,21 @@ void RadianceCascades::InitializePSOs()
 		rootSig[RootEntryRC3DCoalesceOutputTexUAV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 1);
 		rootSig[RootEntryRC3DCoalesceRCGlobalsCB].InitAsConstantBuffer(0);
 		rootSig.Finalize(L"RC 3D Coalesce");
+
+		pso.SetRootSignature(rootSig);
+		pso.Finalize();
+	}
+
+	{
+		ComputePSO& pso = RuntimeResourceManager::GetComputePSO(PSOIDGatherFilterReductionPSO);
+		RuntimeResourceManager::SetShaderForPSO(PSOIDGatherFilterReductionPSO, ShaderIDGatherFilterReduceCS);
+
+		RootSignature& rootSig = m_gatherFilterReductionRootSig;
+		rootSig.Reset(RootEntryGatherFilterReductionCount, 0);
+		rootSig[RootEntryGatherFilterReductionInfo].InitAsConstantBuffer(0);
+		rootSig[RootEntryGatherFilterReductionTexture].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 0, 1);
+		rootSig[RootEntryGatherFilterReductionByteBuffer].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 1);
+		rootSig.Finalize(L"Gather Filter Reduction");
 
 		pso.SetRootSignature(rootSig);
 		pso.Finalize();
@@ -1535,7 +1564,49 @@ void RadianceCascades::RunRCCoalesce()
 		cmptContext.Dispatch2D(coalesceBuffer.GetWidth(), coalesceBuffer.GetHeight());
 	}
 
-	
+	cmptContext.Finish(true);
+}
+
+void RadianceCascades::RunComputeRCGatherFilterReduction()
+{
+	ComputeContext& cmptContext = ComputeContext::Begin(L"Gather Filter Reduction");
+
+	{
+		GPU_PROFILE_BLOCK("Gather Filter Reduction", cmptContext);
+
+		cmptContext.SetPipelineState(m_gatherFilterReductionPSO);
+		cmptContext.SetRootSignature(m_gatherFilterReductionRootSig);
+
+		cmptContext.SetDynamicDescriptor(RootEntryGatherFilterReductionByteBuffer, 0, m_gatherFilterByteAddressBuffer.GetUAV());
+
+		for (uint32_t i = 0; i < m_rcManager3D.GetGatherFilterCount(); i++)
+		{
+			ColorBuffer& gatherFilterTexture = m_rcManager3D.GetCascadeGatherFilterBuffer(i);
+
+			cmptContext.TransitionResource(gatherFilterTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+			cmptContext.SetDynamicDescriptor(RootEntryGatherFilterReductionTexture, 0, gatherFilterTexture.GetSRV());
+
+			// All data will be copied so ptr will not be invalid when executing the context at the end.
+			FilterInfo filterInfo = {
+				.width = gatherFilterTexture.GetWidth(),
+				.height = gatherFilterTexture.GetHeight(),
+				.filterIndex = i
+			};
+
+			cmptContext.SetDynamicConstantBufferView(RootEntryGatherFilterReductionInfo, sizeof(filterInfo), &filterInfo);
+
+			cmptContext.TransitionResource(m_gatherFilterByteAddressBuffer, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+			// Group size matches shader.
+			// Each thread is responsible in a 4x4 area.
+			cmptContext.Dispatch2D(filterInfo.width / 4u, filterInfo.height / 4u, 16u, 16u);
+		}
+
+		
+		cmptContext.TransitionResource(m_gatherFilterByteAddressBuffer, D3D12_RESOURCE_STATE_COPY_SOURCE);
+		cmptContext.TransitionResource(m_gatherFilterReadbackBuffer, D3D12_RESOURCE_STATE_COPY_DEST);
+		cmptContext.CopyBuffer(m_gatherFilterReadbackBuffer, m_gatherFilterByteAddressBuffer);
+	}
 
 	cmptContext.Finish(true);
 }
@@ -1740,10 +1811,10 @@ void RadianceCascades::DrawSettingsUI()
 			ImGui::Checkbox("Use Depth Aware Merging (WIP)", &m_rcManager3D.useDepthAwareMerging);
 			ImGui::Checkbox("Use Gather Filtering", &m_rcManager3D.useGatherFiltering);
 
-			bool prevPreAverageUsage = m_rcManager3D.m_preAveragedIntervals;
-			if (ImGui::Checkbox("Use Pre Average Intervals", &m_rcManager3D.m_preAveragedIntervals))
+			bool prevPreAverageUsage = m_rcManager3D.isUsingPreAveragedIntervals;
+			if (ImGui::Checkbox("Use Pre Average Intervals", &m_rcManager3D.isUsingPreAveragedIntervals))
 			{
-				if (prevPreAverageUsage != m_rcManager3D.m_preAveragedIntervals)
+				if (prevPreAverageUsage != m_rcManager3D.isUsingPreAveragedIntervals)
 				{
 					shouldGenerateRCResources = true;
 				}
@@ -1823,8 +1894,12 @@ void RadianceCascades::DrawSettingsUI()
 			uint64_t rcVRAMUsage = m_rcManager3D.GetTotalVRAMUsage();
 			ImGui::Text("Vram usage: %.1f MB", rcVRAMUsage / (float)MemoryUnit::MegaByte);
 
-			// Create a table with 5 columns: Cascade, Probe Count, Ray Count, Start Dist, Length
-			if (ImGui::BeginTable("CascadeTable", 6, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_NoHostExtendX))
+			// Create a table with 6 columns: Cascade, Buffer Resolution, Probe Count, Ray Count, Start Dist, Length
+			uint32_t cascadeTableHeaderCount = 6;
+			// One extra on the end if gather filtering is used.
+			if (m_rcManager3D.useGatherFiltering) { cascadeTableHeaderCount++; }
+
+			if (ImGui::BeginTable("CascadeTable", cascadeTableHeaderCount, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_NoHostExtendX))
 			{
 				ImGui::TableSetupColumn("Cascade", ImGuiTableColumnFlags_WidthFixed);
 				ImGui::TableSetupColumn("Buffer Resolution", ImGuiTableColumnFlags_WidthFixed);
@@ -1832,6 +1907,7 @@ void RadianceCascades::DrawSettingsUI()
 				ImGui::TableSetupColumn("Rays Per Probe", ImGuiTableColumnFlags_WidthFixed);
 				ImGui::TableSetupColumn("Ray Start Distance", ImGuiTableColumnFlags_WidthFixed);
 				ImGui::TableSetupColumn("Ray Length", ImGuiTableColumnFlags_WidthFixed);
+				if(m_rcManager3D.useGatherFiltering) { ImGui::TableSetupColumn("Filtered Rays", ImGuiTableColumnFlags_WidthFixed); }
 				ImGui::TableHeadersRow();
 
 				// Add a row for each cascade
@@ -1864,6 +1940,26 @@ void RadianceCascades::DrawSettingsUI()
 					// Ray Length column
 					ImGui::TableSetColumnIndex(5);
 					ImGui::Text("%.1f", m_rcManager3D.GetRayLength(i));
+
+					if (m_rcManager3D.useGatherFiltering)
+					{
+						ImGui::TableSetColumnIndex(6);
+						if (i == 0)
+						{
+							ImGui::Text("n/a");
+						}
+						else
+						{
+							int gatherFilterIndex = i - 1;
+							ColorBuffer& gatherFilterTexture = m_rcManager3D.GetCascadeGatherFilterBuffer(gatherFilterIndex);
+							uint32_t gatherFilterReductionSum = m_gatherFilterReadbackBufferMappedPtr[gatherFilterIndex];
+							
+							uint32_t totalRays = gatherFilterTexture.GetWidth() * gatherFilterTexture.GetHeight();
+							uint32_t filteredRayCount = totalRays - gatherFilterReductionSum;
+
+							ImGui::Text("%u (%.2f%%)", filteredRayCount, 100.0f * filteredRayCount / totalRays);
+						}
+					}
 				}
 
 				ImGui::EndTable();
@@ -1909,7 +2005,7 @@ void RadianceCascades::DrawSettingsUI()
 	ImGui::End();
 }
 
-void RadianceCascades::ClearPixelBuffers()
+void RadianceCascades::ClearBuffers()
 {
 	ColorBuffer& sceneColorBuffer = Graphics::g_SceneColorBuffer;
 	ColorBuffer& sceneNormalBuffer = Graphics::g_SceneNormalBuffer;
@@ -1950,7 +2046,14 @@ void RadianceCascades::ClearPixelBuffers()
 	{
 		m_rcManager3D.ClearBuffers(gfxContext);
 	}
-	
+
+	if(m_rcManager3D.useGatherFiltering)
+	{
+		std::vector<uint32_t> zeroVec = std::vector<uint32_t>(m_rcManager3D.GetGatherFilterCount(), 0u);
+
+		gfxContext.TransitionResource(m_gatherFilterByteAddressBuffer, D3D12_RESOURCE_STATE_COPY_DEST);
+		gfxContext.WriteBuffer(m_gatherFilterByteAddressBuffer, 0u, zeroVec.data(), sizeof(zeroVec[0]) * zeroVec.size());
+	}	
 
 	gfxContext.Finish(true);
 }

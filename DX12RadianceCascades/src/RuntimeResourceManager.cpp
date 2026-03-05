@@ -450,18 +450,18 @@ void RuntimeResourceManager::DestroyImpl()
 
 GraphicsPSO& PSOPackage::AsGraphicsPSO()
 {
-	ASSERT(PSOPointer != nullptr && psoType == PSOTypeGraphics);
+	ASSERT(PSOPointer != nullptr && psoType == PSOTypeGraphics, "Graphics PSO invalid. Check that it has been registered correctly.");
 	return *reinterpret_cast<GraphicsPSO*>(PSOPointer);
 }
 
 ComputePSO& PSOPackage::AsComputePSO()
 {
-	ASSERT(PSOPointer != nullptr && psoType == PSOTypeCompute);
+	ASSERT(PSOPointer != nullptr && psoType == PSOTypeCompute, "Compute PSO invalid. Check that it has been registered correctly.");
 	return *reinterpret_cast<ComputePSO*>(PSOPointer);
 }
 
 RaytracingPSO& PSOPackage::AsRaytracingPSO()
 {
-	ASSERT(PSOPointer != nullptr && psoType == PSOTypeRaytracing);
+	ASSERT(PSOPointer != nullptr && psoType == PSOTypeRaytracing, "Raytracing PSO invalid. Check that it has been registered correctly.");
 	return *reinterpret_cast<RaytracingPSO*>(PSOPointer);
 }

@@ -53,3 +53,11 @@ __declspec(align(16)) struct CascadeVisInfo
 	uint32_t cascadeVisIndex;
 	uint32_t probeSubset;
 };
+
+__declspec(align(16)) struct FilterInfo
+{
+	uint32_t width;
+	uint32_t height;
+	uint32_t filterIndex;
+	uint32_t padding;
+};
