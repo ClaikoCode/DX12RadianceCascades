@@ -36,8 +36,6 @@ enum PSOID : psoid_t
 	PSOIDComputeFlatlandScenePSO,
 	PSOIDGatherFilterReductionPSO,
 	PSOIDComputeFullScreenCopyPSO,
-	PSOIDComputeRCMergePSO,
-	PSOIDComputeRCRadianceFieldPSO,
 	PSOIDRaytracingTestPSO,
 	PSOIDDebugDrawNoDepthPSO,
 	PSOIDDebugDrawDepthPSO,

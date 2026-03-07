@@ -16,7 +16,6 @@
 #include "RaytracingDispatchRayInputs.h"
 #include "RuntimeResourceManager.h"
 
-#include "RadianceCascadesManager2D.h"
 #include "RadianceCascadeManager3D.h"
 
 #if defined(_DEBUGDRAWING)
@@ -195,19 +194,6 @@ private:
 		RootEntryFullScreenCopyComputeDestInfo,
 		RootEntryFullScreenCopyComputeCount,
 
-		RootEntryRCMergeCascadeNUAV = 0,
-		RootEntryRCMergeCascadeN1SRV,
-		RootEntryRCMergeCascadeInfo,
-		RootEntryRCMergeGlobals,
-		RootEntryRCMergeCount,
-
-		RootEntryRCRadianceFieldGlobals = 0,
-		RootEntryRCRadianceFieldCascadeInfo,
-		RootEntryRCRadianceFieldUAV,
-		RootEntryRCRadianceFieldCascadeSRV,
-		RootEntryRCRadianceFieldInfo,
-		RootEntryRCRadianceFieldCount,
-
 		RootEntryRTGSRV = 0,
 		RootEntryRTGUAV,
 		RootEntryRTGParamCB,
@@ -297,12 +283,8 @@ private:
 	void RunRCMerge(Math::Camera& cam, ColorBuffer& minMaxDepthBuffer);
 	void RenderDepthOnly(Camera& camera, DepthBuffer& targetDepth, D3D12_VIEWPORT viewPort, D3D12_RECT scissor, bool clearDepth = false);
 	void BuildMinMaxDepthBuffer(DepthBuffer& sourceDepthBuffer);
-	void RunComputeFlatlandScene();
-	void RunComputeRCGather();
-	void RunComputeRCMerge();
 	void RunRCCoalesce();
 	void RunComputeRCGatherFilterReduction();
-	void RunComputeRCRadianceField(ColorBuffer& outputBuffer);
 	void RunDeferredLightingPass(ColorBuffer& albedoBuffer, ColorBuffer& normalBuffer, ColorBuffer& diffuseRadianceBuffer, ColorBuffer& outputBuffer);
 	void UpdateViewportAndScissor();
 
@@ -392,9 +374,6 @@ private:
 	GraphicsPSO m_deferredLightingPSO = GraphicsPSO(L"Deferred Lighting PSO");
 	RootSignature m_deferredLightingRootSig;
 
-	ColorBuffer m_flatlandScene = ColorBuffer({ 0.0f, 0.0f, 0.0f, 100000.0f });
-
-	RadianceCascadesManager2D m_rcManager2D;
 	RadianceCascadeManager3D m_rcManager3D;
 
 	ColorBuffer m_albedoBuffer;

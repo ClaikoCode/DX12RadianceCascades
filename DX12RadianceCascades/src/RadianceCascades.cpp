@@ -701,8 +701,6 @@ void RadianceCascades::InitializePSOs()
 		RuntimeResourceManager::RegisterPSO(PSOIDComputeFlatlandScenePSO,	&m_flatlandScenePSO,			PSOTypeCompute);
 		RuntimeResourceManager::RegisterPSO(PSOIDGatherFilterReductionPSO,	&m_gatherFilterReductionPSO,	PSOTypeCompute);
 		RuntimeResourceManager::RegisterPSO(PSOIDComputeFullScreenCopyPSO,	&m_fullScreenCopyComputePSO,	PSOTypeCompute);
-		RuntimeResourceManager::RegisterPSO(PSOIDComputeRCMergePSO,			&m_rcMergePSO,					PSOTypeCompute);
-		RuntimeResourceManager::RegisterPSO(PSOIDComputeRCRadianceFieldPSO, &m_rcRadianceFieldPSO,			PSOTypeCompute);
 		RuntimeResourceManager::RegisterPSO(PSOIDRaytracingTestPSO,			&m_rtTestPSO,					PSOTypeRaytracing);
 		RuntimeResourceManager::RegisterPSO(PSOIDComputeMinMaxDepthPSO,		&m_minMaxDepthPSO,				PSOTypeCompute);
 		RuntimeResourceManager::RegisterPSO(PSOIDRCRaytracingPSO,			&m_rcRaytracePSO,				PSOTypeRaytracing);
@@ -821,49 +819,6 @@ void RadianceCascades::InitializePSOs()
 		rootSig[RootEntryFlatlandSceneInfo].InitAsConstants(0, 2);
 		rootSig[RootEntryFlatlandSceneUAV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 1);
 		rootSig.Finalize(L"Compute Flatland Scene");
-
-		pso.SetRootSignature(rootSig);
-		pso.Finalize();
-	}
-
-	{
-		ComputePSO& pso = RuntimeResourceManager::GetComputePSO(PSOIDComputeRCMergePSO);
-		RuntimeResourceManager::SetShaderForPSO(PSOIDComputeRCMergePSO, ShaderIDRCMergeCS);
-
-		RootSignature& rootSig = m_rcMergeRootSig;
-		rootSig.Reset(RootEntryRCMergeCount, 1);
-		rootSig[RootEntryRCMergeCascadeNUAV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 1);
-		rootSig[RootEntryRCMergeCascadeN1SRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 0, 1);
-		rootSig[RootEntryRCMergeGlobals].InitAsConstantBuffer(0);
-		rootSig[RootEntryRCMergeCascadeInfo].InitAsConstantBuffer(1);
-
-		{
-			SamplerDesc sampler = Graphics::SamplerPointClampDesc;
-			rootSig.InitStaticSampler(0, sampler);
-		}
-
-		rootSig.Finalize(L"Compute RC Merge");
-
-		pso.SetRootSignature(rootSig);
-		pso.Finalize();
-	}
-
-	{
-		ComputePSO& pso = RuntimeResourceManager::GetComputePSO(PSOIDComputeRCRadianceFieldPSO);
-		RuntimeResourceManager::SetShaderForPSO(PSOIDComputeRCRadianceFieldPSO, ShaderIDRCRadianceFieldCS);
-
-		RootSignature& rootSig = m_rcRadianceFieldRootSig;
-		rootSig.Reset(RootEntryRCRadianceFieldCount, 1);
-		rootSig[RootEntryRCRadianceFieldGlobals].InitAsConstantBuffer(0);
-		rootSig[RootEntryRCRadianceFieldCascadeInfo].InitAsConstantBuffer(1);
-		rootSig[RootEntryRCRadianceFieldUAV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 1);
-		rootSig[RootEntryRCRadianceFieldCascadeSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 0, 1);
-		rootSig[RootEntryRCRadianceFieldInfo].InitAsConstants(2, 2);
-		{
-			SamplerDesc sampler = Graphics::SamplerPointBorderDesc;
-			rootSig.InitStaticSampler(0, sampler);
-		}
-		rootSig.Finalize(L"Compute RC Radiance Field");
 
 		pso.SetRootSignature(rootSig);
 		pso.Finalize();
@@ -1042,16 +997,6 @@ void RadianceCascades::InitializeRCResources()
 {
 	GPU_MEMORY_BLOCK("RC Resources");
 
-	// RC 2D
-	{
-		GPU_MEMORY_BLOCK("RC 2D");
-		
-		m_flatlandScene.Create(L"Flatland Scene", ::GetSceneColorWidth(), ::GetSceneColorHeight(), 1, s_FlatlandSceneFormat);
-
-		float diag = Math::Length({ (float)::GetSceneColorWidth(), (float)::GetSceneColorHeight(), 0.0f });
-		m_rcManager2D.Init(SAMPLE_LEN_0, RAYS_PER_PROBE_0, diag);
-	}
-	
 	// RC 3D
 	{
 		GPU_MEMORY_BLOCK("RC 3D");
@@ -1451,93 +1396,6 @@ void RadianceCascades::BuildMinMaxDepthBuffer(DepthBuffer& sourceDepthBuffer)
 	cmptContext.Finish(true);
 }
 
-void RadianceCascades::RunComputeFlatlandScene()
-{
-	ColorBuffer& targetScene = m_flatlandScene;
-	uint32_t sceneWidth = targetScene.GetWidth();
-	uint32_t sceneHeight = targetScene.GetHeight();
-
-	ComputeContext& cmptContext = ComputeContext::Begin(L"Flatland Scene");
-
-	cmptContext.SetPipelineState(m_flatlandScenePSO);
-	cmptContext.SetRootSignature(m_computeFlatlandSceneRootSig);
-
-	cmptContext.TransitionResource(targetScene, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-	cmptContext.SetDynamicDescriptor(RootEntryFlatlandSceneUAV, 0, targetScene.GetUAV());
-	cmptContext.SetConstants(RootEntryFlatlandSceneInfo, sceneWidth, sceneHeight);
-	
-	cmptContext.Dispatch2D(sceneWidth, sceneHeight);
-	cmptContext.Finish(true);
-}
-
-void RadianceCascades::RunComputeRCGather()
-{
-	ColorBuffer& sceneBuffer = m_flatlandScene;
-	RC2DGlobals rcGlobals = m_rcManager2D.FillRCGlobalsData(sceneBuffer.GetWidth());
-
-	ComputeContext& cmptContext = ComputeContext::Begin(L"RC Gather Compute");
-
-	cmptContext.SetRootSignature(m_computeGatherRootSig);
-	cmptContext.SetPipelineState(m_rcGatherPSO);
-
-	cmptContext.SetDynamicConstantBufferView(RootEntryRCGatherGlobals, sizeof(rcGlobals), &rcGlobals);
-
-	cmptContext.TransitionResource(sceneBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-	cmptContext.SetDynamicDescriptor(RootEntryRCGatherSceneSRV, 0, sceneBuffer.GetSRV());
-
-	for (uint32_t i = 0; i < m_rcManager2D.GetCascadeCount(); i++)
-	{
-		ColorBuffer& target = m_rcManager2D.GetCascadeInterval(i);
-
-		CascadeInfo cascadeInfo = {};
-		cascadeInfo.cascadeIndex = i;
-		cmptContext.SetDynamicConstantBufferView(RootEntryRCGatherCascadeInfo, sizeof(cascadeInfo), &cascadeInfo);
-
-		cmptContext.TransitionResource(target, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-		cmptContext.SetDynamicDescriptor(RootEntryRCGatherCascadeUAV, 0, target.GetUAV());
-
-		cmptContext.Dispatch2D(target.GetWidth(), target.GetHeight(), 16, 16);
-	}
-
-	cmptContext.Finish(true);
-}
-
-void RadianceCascades::RunComputeRCMerge()
-{
-	ComputeContext& cmptContext = ComputeContext::Begin(L"RC Merge Compute");
-
-	cmptContext.SetRootSignature(m_rcMergeRootSig);
-	cmptContext.SetPipelineState(m_rcMergePSO);
-
-	RC2DGlobals rcGlobals = {};
-	{
-		ColorBuffer& cascade0 = m_rcManager2D.GetCascadeInterval(0);
-		rcGlobals = m_rcManager2D.FillRCGlobalsData(cascade0.GetWidth());
-	}
-	 
-	cmptContext.SetDynamicConstantBufferView(RootEntryRCMergeGlobals, sizeof(rcGlobals), &rcGlobals);
-
-	// Start loop at second last cascade and go down to the first cascade.
-	for (int i = m_rcManager2D.GetCascadeCount() - 2; i >= 0; i--)
-	{
-		ColorBuffer& target = m_rcManager2D.GetCascadeInterval(i);
-		ColorBuffer& source = m_rcManager2D.GetCascadeInterval(i + 1);
-		CascadeInfo cascadeInfo = {};
-		cascadeInfo.cascadeIndex = i;
-		cmptContext.SetDynamicConstantBufferView(RootEntryRCMergeCascadeInfo, sizeof(cascadeInfo), &cascadeInfo);
-
-		cmptContext.TransitionResource(target, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-		cmptContext.TransitionResource(source, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-
-		cmptContext.SetDynamicDescriptor(RootEntryRCMergeCascadeNUAV, 0, target.GetUAV());
-		cmptContext.SetDynamicDescriptor(RootEntryRCMergeCascadeN1SRV, 0, source.GetSRV());
-
-		cmptContext.Dispatch2D(target.GetWidth(), target.GetHeight(), 16, 16);
-	}
-
-	cmptContext.Finish(true);
-}
-
 void RadianceCascades::RunRCCoalesce()
 {
 	RCGlobals rcGlobals = {};
@@ -1609,39 +1467,6 @@ void RadianceCascades::RunComputeRCGatherFilterReduction()
 	}
 
 	cmptContext.Finish(true);
-}
-
-void RadianceCascades::RunComputeRCRadianceField(ColorBuffer& outputBuffer)
-{
-	ComputeContext& cmptContext = ComputeContext::Begin(L"RC Radiance Field Compute");
-	cmptContext.SetRootSignature(m_rcRadianceFieldRootSig);
-	cmptContext.SetPipelineState(m_rcRadianceFieldPSO);
-
-	ColorBuffer& radianceField = m_rcManager2D.GetRadianceField();
-	ColorBuffer& targetCascade = m_rcManager2D.GetCascadeInterval(0);
-
-	RC2DGlobals rcGlobals = m_rcManager2D.FillRCGlobalsData(targetCascade.GetWidth());
-	cmptContext.SetDynamicConstantBufferView(RootEntryRCRadianceFieldGlobals, sizeof(rcGlobals), &rcGlobals);
-
-	{
-		CascadeInfo cascadeInfo = {};
-		cascadeInfo.cascadeIndex = 0;
-		cmptContext.SetDynamicConstantBufferView(RootEntryRCRadianceFieldCascadeInfo, sizeof(cascadeInfo), &cascadeInfo);
-
-		cmptContext.SetConstants(RootEntryRCRadianceFieldInfo, radianceField.GetWidth(), radianceField.GetHeight());
-
-		cmptContext.TransitionResource(radianceField, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-		cmptContext.TransitionResource(targetCascade, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-
-		cmptContext.SetDynamicDescriptor(RootEntryRCRadianceFieldUAV, 0, radianceField.GetUAV());
-		cmptContext.SetDynamicDescriptor(RootEntryRCRadianceFieldCascadeSRV, 0, targetCascade.GetSRV());
-		cmptContext.Dispatch2D(radianceField.GetWidth(), radianceField.GetHeight());
-	}
-
-	cmptContext.Finish(true);
-
-	// Copy over the result to the output buffer.
-	FullScreenCopyCompute(radianceField, outputBuffer);
 }
 
 void RadianceCascades::RunDeferredLightingPass(ColorBuffer& albedoBuffer, ColorBuffer& normalBuffer, ColorBuffer& diffuseRadianceBuffer, ColorBuffer& outputBuffer)
@@ -2025,11 +1850,6 @@ void RadianceCascades::ClearBuffers()
 	}
 
 	{
-		gfxContext.TransitionResource(m_flatlandScene, D3D12_RESOURCE_STATE_RENDER_TARGET, true);
-		gfxContext.ClearColor(m_flatlandScene);
-	}
-
-	{
 		gfxContext.TransitionResource(m_minMaxDepthMips, D3D12_RESOURCE_STATE_RENDER_TARGET, true);
 		gfxContext.ClearColor(m_minMaxDepthMips);
 	}
@@ -2037,10 +1857,6 @@ void RadianceCascades::ClearBuffers()
 	{
 		gfxContext.TransitionResource(m_debugCamDepthBuffer, D3D12_RESOURCE_STATE_DEPTH_WRITE, true);
 		gfxContext.ClearDepth(m_debugCamDepthBuffer);
-	}
-	
-	{
-		m_rcManager2D.ClearBuffers(gfxContext);
 	}
 
 	{
