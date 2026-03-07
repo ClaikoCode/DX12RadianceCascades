@@ -47,6 +47,12 @@ __declspec(align(16)) struct RCGlobals
 	uint32_t probeSpacing0; // Spacing between probes in pixels.
 };
 
+__declspec(align(16)) struct CascadeInfo
+{
+	uint32_t cascadeIndex;
+	float padding[3];
+};
+
 __declspec(align(16)) struct CascadeVisInfo
 {
 	BOOL enableProbeVis;

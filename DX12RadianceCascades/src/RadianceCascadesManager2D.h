@@ -1,11 +1,5 @@
 #pragma once
 
-__declspec(align(16)) struct CascadeInfo
-{
-	uint32_t cascadeIndex;
-	float padding[3];
-};
-
 __declspec(align(16)) struct RC2DGlobals
 {
 	uint32_t probeScalingFactor;
