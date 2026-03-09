@@ -363,10 +363,6 @@ private:
 
 	ComputePSO m_gatherFilterReductionPSO = ComputePSO(L"Gather Filter Reduction PSO");
 	RootSignature m_gatherFilterReductionRootSig;
-	// TODO: Move this to rcmanager3d as these resources heavily depend on its state. They should be re-generated if rc is re-generated.
-	ByteAddressBuffer m_gatherFilterByteAddressBuffer;
-	ReadbackBuffer m_gatherFilterReadbackBuffer;
-	uint32_t* m_gatherFilterReadbackBufferMappedPtr;
 
 	ComputePSO m_rc3dCoalescePSO = ComputePSO(L"RC 3D Coalesce PSO");
 	RootSignature m_rc3dCoalesceRootSig;

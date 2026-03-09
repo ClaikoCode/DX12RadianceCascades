@@ -111,6 +111,7 @@ public:
 
 	// NOTE: This leaks descriptor memory as all the saved handles are not freed and will be newly allocated
 	// the next time they are stored in the map.
+	// TODO: You already have solved this scenario, which should be used instead (UpdateDescriptor()).
 	static void ClearCopiedDescriptorsMap() { Get().m_descriptorCopiedCBVSRVUAV.clear(); }
 
 	static RaytracingDispatchRayInputs& GetRaytracingDispatch(RayDispatchID rayDispatchID);
@@ -120,6 +121,8 @@ public:
 	static GraphicsPSO& GetGraphicsPSO(PSOID gfxPSOID) { return Get().GetGraphicsPSOImpl(gfxPSOID); }
 	static ComputePSO& GetComputePSO(PSOID cmptPSOID) { return Get().GetComputePSOImpl(cmptPSOID); }
 
+	// NOTE: This leaks descriptor memory as all saved handles are not deallocated. 
+	// New allocators are allocated and old ones are left to be hanging as there is no dealloc call that can be made.
 	static void UpdateDescriptor(const D3D12_CPU_DESCRIPTOR_HANDLE& handle) { Get().UpdateDescriptorImpl(handle); }
 	static void CopyDescriptor(const D3D12_CPU_DESCRIPTOR_HANDLE& handle) { Get().CopyDescriptorImpl(handle); }
 	// Will allocate and copy the descriptor if it doesnt exist already.

@@ -101,6 +101,12 @@ void RadianceCascadeManager3D::Generate(uint32_t raysPerProbe0, uint32_t probeSp
 		DefaultFormat
 	);
 
+	uint32_t numElements = GetGatherFilterCount();
+	uint32_t elementSize = sizeof(uint32_t);
+	m_gatherFilterByteAddressBuffer.Create(L"Gather Filter Reduction Sum Byte Buffer", numElements, elementSize);
+	m_gatherFilterReadbackBuffer.Create(L"Gather Filter Reduction Sum Readback Buffer", numElements, elementSize);
+	m_gatherFilterReadbackBufferMappedPtr = reinterpret_cast<uint32_t*>(m_gatherFilterReadbackBuffer.Map());
+
 	UpdateResourceDescriptors();
 
 	m_probeSpacing0 = probeSpacing0;
@@ -152,6 +158,11 @@ void RadianceCascadeManager3D::ClearBuffers(GraphicsContext& gfxContext)
 
 	gfxContext.TransitionResource(m_coalescedResult, D3D12_RESOURCE_STATE_RENDER_TARGET);
 	gfxContext.ClearColor(m_coalescedResult);
+
+	std::vector<uint32_t> zeroVec = std::vector<uint32_t>(GetGatherFilterCount(), 0u);
+
+	gfxContext.TransitionResource(m_gatherFilterByteAddressBuffer, D3D12_RESOURCE_STATE_COPY_DEST);
+	gfxContext.WriteBuffer(m_gatherFilterByteAddressBuffer, 0u, zeroVec.data(), sizeof(zeroVec[0]) * zeroVec.size());
 }
 
 uint32_t RadianceCascadeManager3D::GetRaysPerProbe(uint32_t cascadeIndex)
@@ -211,6 +222,13 @@ uint64_t RadianceCascadeManager3D::GetTotalVRAMUsage()
 	return totalSize;
 }
 
+uint32_t RadianceCascadeManager3D::GetFilteredRayCount(uint32_t filterIndex)
+{
+	ASSERT(m_gatherFilterReadbackBufferMappedPtr != nullptr && filterIndex < GetGatherFilterCount());
+
+	return m_gatherFilterReadbackBufferMappedPtr[filterIndex];
+}
+
 void RadianceCascadeManager3D::UpdateResourceDescriptors()
 {
 	for (size_t i = 0; i < m_cascadeIntervals.size(); i++)
@@ -227,4 +245,6 @@ void RadianceCascadeManager3D::UpdateResourceDescriptors()
 
 	RuntimeResourceManager::UpdateDescriptor(m_coalescedResult.GetSRV());
 	RuntimeResourceManager::UpdateDescriptor(m_coalescedResult.GetUAV());
+
+	RuntimeResourceManager::UpdateDescriptor(m_gatherFilterByteAddressBuffer.GetUAV());
 }

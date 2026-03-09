@@ -225,11 +225,8 @@ void RadianceCascades::Startup()
 			m_debugCamDepthBuffer.Create(L"Debug Cam Depth Buffer", width, height, Graphics::g_SceneDepthBuffer.GetFormat());
 			RegisterDisplayDependentTexture(&m_debugCamDepthBuffer, TextureTypeDepth);
 
-			uint32_t numElements = m_rcManager3D.GetGatherFilterCount();
-			uint32_t elementSize = sizeof(uint32_t);
-			m_gatherFilterByteAddressBuffer.Create(L"Gather Filter Reduction Sum Byte Buffer", numElements, elementSize);
-			m_gatherFilterReadbackBuffer.Create(L"Gather Filter Reduction Sum Readback Buffer", numElements, elementSize);
-			m_gatherFilterReadbackBufferMappedPtr = reinterpret_cast<uint32_t*>(m_gatherFilterReadbackBuffer.Map());
+			m_depthBufferCopy.Create(L"Depth Copy", width, height, 1, DXGI_FORMAT_R32_FLOAT);
+			RegisterDisplayDependentTexture(&m_depthBufferCopy, TextureTypeColor);
 		}
 	}
 	
@@ -247,8 +244,6 @@ void RadianceCascades::Cleanup()
 {
 	Graphics::g_CommandManager.IdleGPU();
 	AppGUI::Shutdown();
-
-	m_gatherFilterReadbackBuffer.Unmap();
 	
 	// TODO: It might make more sense for an outer scope to execute this as this class is not responsible for their initialization.
 	DebugDrawer::Destroy();
@@ -584,12 +579,17 @@ void RadianceCascades::ResizeToResolutionTarget(ResolutionTarget resolutionTarge
 			case TextureTypeColor:
 			{
 				ColorBuffer* colorTexture = dynamic_cast<ColorBuffer*>(textureRef.pixelBuffer);
-
+				
 				uint32_t numMips = colorTexture->GetNumMipMaps();
 				ASSERT(numMips == 0, "Does not support resizing textures with mip maps.");
 
 				// At creation, num mips includes the 0:th mip (the texture itself). Using 0 means all mips.
 				colorTexture->Create(name, width, height, numMips + 1, colorTexture->GetFormat());
+
+				// Update resource manager descriptors.
+				RuntimeResourceManager::UpdateDescriptor(colorTexture->GetUAV());
+				RuntimeResourceManager::UpdateDescriptor(colorTexture->GetSRV());
+
 				break;
 			}
 
@@ -606,10 +606,6 @@ void RadianceCascades::ResizeToResolutionTarget(ResolutionTarget resolutionTarge
 	}
 
 	m_rcManager3D.Resize(width, height);
-
-	// When resources are reinstantiated, the cache for keeping their GPU descriptor is invalidated and therefore has to be cleared.
-	// NOTE: This is a desperate fix without having to rewrite large parts of MiniEngine to comply with my app architecture.
-	RuntimeResourceManager::ClearCopiedDescriptorsMap();
 }
 
 void RadianceCascades::InitializeScene()
@@ -1003,9 +999,6 @@ void RadianceCascades::InitializeRCResources()
 
 		uint32_t screenWidth = ::GetSceneColorWidth();
 		uint32_t screenHeight = ::GetSceneColorHeight();
-
-		m_depthBufferCopy.Create(L"Depth Copy", screenWidth, screenHeight, 1, DXGI_FORMAT_R32_FLOAT);
-		RegisterDisplayDependentTexture(&m_depthBufferCopy, TextureTypeColor);
 
 		m_minMaxDepthMips.Create(L"Min Max Depth Mips", screenWidth / 2, screenHeight / 2, 0, DXGI_FORMAT_R32G32_FLOAT);
 
@@ -1429,13 +1422,16 @@ void RadianceCascades::RunComputeRCGatherFilterReduction()
 {
 	ComputeContext& cmptContext = ComputeContext::Begin(L"Gather Filter Reduction");
 
+	ByteAddressBuffer& gatherFilterByteAddresBuffer = m_rcManager3D.GetGatherFilterByteAddressBuffer();
+	ReadbackBuffer& gatherFilterReadbackBuffer = m_rcManager3D.GetGatherFilterReadbackBuffer();
+
 	{
 		GPU_PROFILE_BLOCK("Gather Filter Reduction", cmptContext);
 
 		cmptContext.SetPipelineState(m_gatherFilterReductionPSO);
 		cmptContext.SetRootSignature(m_gatherFilterReductionRootSig);
 
-		cmptContext.SetDynamicDescriptor(RootEntryGatherFilterReductionByteBuffer, 0, m_gatherFilterByteAddressBuffer.GetUAV());
+		cmptContext.SetDynamicDescriptor(RootEntryGatherFilterReductionByteBuffer, 0, gatherFilterByteAddresBuffer.GetUAV());
 
 		for (uint32_t i = 0; i < m_rcManager3D.GetGatherFilterCount(); i++)
 		{
@@ -1453,7 +1449,7 @@ void RadianceCascades::RunComputeRCGatherFilterReduction()
 
 			cmptContext.SetDynamicConstantBufferView(RootEntryGatherFilterReductionInfo, sizeof(filterInfo), &filterInfo);
 
-			cmptContext.TransitionResource(m_gatherFilterByteAddressBuffer, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+			cmptContext.TransitionResource(gatherFilterByteAddresBuffer, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
 			// Group size matches shader.
 			// Each thread is responsible in a 4x4 area.
@@ -1461,9 +1457,9 @@ void RadianceCascades::RunComputeRCGatherFilterReduction()
 		}
 
 		
-		cmptContext.TransitionResource(m_gatherFilterByteAddressBuffer, D3D12_RESOURCE_STATE_COPY_SOURCE);
-		cmptContext.TransitionResource(m_gatherFilterReadbackBuffer, D3D12_RESOURCE_STATE_COPY_DEST);
-		cmptContext.CopyBuffer(m_gatherFilterReadbackBuffer, m_gatherFilterByteAddressBuffer);
+		cmptContext.TransitionResource(gatherFilterByteAddresBuffer, D3D12_RESOURCE_STATE_COPY_SOURCE);
+		cmptContext.TransitionResource(gatherFilterReadbackBuffer, D3D12_RESOURCE_STATE_COPY_DEST);
+		cmptContext.CopyBuffer(gatherFilterReadbackBuffer, gatherFilterByteAddresBuffer);
 	}
 
 	cmptContext.Finish(true);
@@ -1777,7 +1773,7 @@ void RadianceCascades::DrawSettingsUI()
 						{
 							int gatherFilterIndex = i - 1;
 							ColorBuffer& gatherFilterTexture = m_rcManager3D.GetCascadeGatherFilterBuffer(gatherFilterIndex);
-							uint32_t gatherFilterReductionSum = m_gatherFilterReadbackBufferMappedPtr[gatherFilterIndex];
+							uint32_t gatherFilterReductionSum = m_rcManager3D.GetFilteredRayCount(gatherFilterIndex);
 							
 							uint32_t totalRays = gatherFilterTexture.GetWidth() * gatherFilterTexture.GetHeight();
 							uint32_t filteredRayCount = totalRays - gatherFilterReductionSum;
@@ -1862,14 +1858,6 @@ void RadianceCascades::ClearBuffers()
 	{
 		m_rcManager3D.ClearBuffers(gfxContext);
 	}
-
-	if(m_rcManager3D.useGatherFiltering)
-	{
-		std::vector<uint32_t> zeroVec = std::vector<uint32_t>(m_rcManager3D.GetGatherFilterCount(), 0u);
-
-		gfxContext.TransitionResource(m_gatherFilterByteAddressBuffer, D3D12_RESOURCE_STATE_COPY_DEST);
-		gfxContext.WriteBuffer(m_gatherFilterByteAddressBuffer, 0u, zeroVec.data(), sizeof(zeroVec[0]) * zeroVec.size());
-	}	
 
 	gfxContext.Finish(true);
 }
