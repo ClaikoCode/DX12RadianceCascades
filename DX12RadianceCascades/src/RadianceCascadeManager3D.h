@@ -3,6 +3,7 @@
 #include "Core\CommandListManager.h"
 #include "Core\CommandContext.h"
 #include "Core\ColorBuffer.h"
+#include "Core\ReadbackBuffer.h"
 
 struct RCGlobals;
 
@@ -38,6 +39,8 @@ public:
 	uint32_t GetGatherFilterCount() { return (uint32_t)m_cascadeGatherFilters.size(); }
 	ColorBuffer& GetCascadeIntervalBuffer(uint32_t cascadeIndex);
 	ColorBuffer& GetCascadeGatherFilterBuffer(uint32_t filterIndex);
+	ByteAddressBuffer& GetGatherFilterByteAddressBuffer() { return m_gatherFilterByteAddressBuffer; }
+	ReadbackBuffer& GetGatherFilterReadbackBuffer() { return m_gatherFilterReadbackBuffer; }
 	uint32_t GetProbeScalingFactor() const { return m_scalingFactor.probeScalingFactor; }
 	uint32_t GetRayScalingFactor() const { return m_scalingFactor.rayScalingFactor; }
 	float GetRayLength() { return m_rayLength0; }
@@ -47,6 +50,9 @@ public:
 	ColorBuffer& GetCoalesceBuffer() { return m_coalescedResult; }
 
 	uint64_t GetTotalVRAMUsage();
+
+	// Will return the amount of rays that were filtered by a specific gather filter.
+	uint32_t GetFilteredRayCount(uint32_t filterIndex);
 
 public:
 	bool useGatherFiltering = true;
@@ -70,6 +76,11 @@ private:
 	// Will have same dimensions for color buffers for all but cascade level 0.
 	std::vector<ColorBuffer> m_cascadeGatherFilters;
 	ColorBuffer m_coalescedResult;
+
+	// TODO: Move this to rcmanager3d as these resources heavily depend on its state. They should be re-generated if rc is re-generated.
+	ByteAddressBuffer m_gatherFilterByteAddressBuffer;
+	ReadbackBuffer m_gatherFilterReadbackBuffer;
+	uint32_t* m_gatherFilterReadbackBufferMappedPtr;
 
 	float m_rayLength0;
 	uint32_t m_raysPerProbe0 = 0u;
