@@ -118,7 +118,7 @@ struct RadianceCascadesSettings
 	};
 
 	CascadeTextureVis currentTextureVis = CascadeTextureVisNone;
-	bool renderRC3D = true;
+	bool renderRC3D = false;
 	bool seeCoalesceResult = false;
 	int cascadeVisIndex = 0;
 	int cascadeFilterIndex = 0;
@@ -250,6 +250,9 @@ private:
 		RootEntryDeferredLightingGlobalInfoCB,
 		RootEntryDeferredLightingRCGlobalsCB,
 		RootEntryDeferredLightingCount,
+
+		RootEntrySkyboxGlobalInfoCB = 0,
+		RootEntrySkyboxCount,
 	};
 
 public:
@@ -369,6 +372,9 @@ private:
 
 	GraphicsPSO m_deferredLightingPSO = GraphicsPSO(L"Deferred Lighting PSO");
 	RootSignature m_deferredLightingRootSig;
+
+	GraphicsPSO m_skyboxPSO = GraphicsPSO(L"Skybox PSO");
+	RootSignature m_skyboxRootSig;
 
 	RadianceCascadeManager3D m_rcManager3D;
 
