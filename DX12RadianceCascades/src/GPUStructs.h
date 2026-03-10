@@ -11,9 +11,9 @@ __declspec(align(16)) struct GlobalInfo
 {
 	Utils::GPUMatrix viewProjMatrix;
 	Utils::GPUMatrix invViewProjMatrix;
-	Math::Vector3 cameraPos;
 	Utils::GPUMatrix invViewMatrix;
 	Utils::GPUMatrix invProjMatrix;
+	Math::Vector3 cameraPos;
 };
 
 __declspec(align(16)) struct RTParams

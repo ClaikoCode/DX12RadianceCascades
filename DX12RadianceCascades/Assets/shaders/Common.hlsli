@@ -23,9 +23,9 @@ struct GlobalInfo
 {
     matrix viewProjMatrix;
     matrix invViewProjMatrix;
-    float3 cameraPos;
     matrix invViewMatrix;
     matrix invProjMatrix;
+    float3 cameraPos;
 };
 
 struct BilinearSampleInfo

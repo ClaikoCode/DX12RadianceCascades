@@ -182,6 +182,15 @@ RadianceCascades::RadianceCascades()
 		m_settings.rcSettings.usePreAveragedGather
 	)
 {
+//
+//#include "Core\TextureManager.h"
+//#include "Model\TextureConvert.h"
+//	std::wstring originalFile = basePath + textureNames[ti];
+//	CompileTextureOnDemand(originalFile, textureOptions[ti]);
+//
+//	std::wstring ddsFile = Utility::RemoveExtension(originalFile) + L".dds";
+//	model.textures[ti] = TextureManager::LoadDDSFromFile(ddsFile);
+
 	m_sceneModels.reserve(MAX_INSTANCES);
 }
 
@@ -703,6 +712,7 @@ void RadianceCascades::InitializePSOs()
 		RuntimeResourceManager::RegisterPSO(PSOIDRC3DMergePSO,				&m_rc3dMergePSO,				PSOTypeCompute);
 		RuntimeResourceManager::RegisterPSO(PSOIDRC3DCoalescePSO,			&m_rc3dCoalescePSO,				PSOTypeCompute);
 		RuntimeResourceManager::RegisterPSO(PSOIDDeferredLightingPSO,		&m_deferredLightingPSO,			PSOTypeGraphics);
+		RuntimeResourceManager::RegisterPSO(PSOIDSkyboxPSO,					&m_skyboxPSO,					PSOTypeGraphics);
 	}
 
 	// Overwrite and update external PSO shaders.
@@ -745,6 +755,31 @@ void RadianceCascades::InitializePSOs()
 		pso.SetBlendState(Graphics::BlendTraditional);
 		pso.SetDepthStencilState(Graphics::DepthStateDisabled);
 		pso.SetRenderTargetFormats(1, &Graphics::g_SceneColorBuffer.GetFormat(), DXGI_FORMAT_UNKNOWN);
+
+		pso.SetRootSignature(rootSig);
+		pso.Finalize();
+	}
+
+	{
+		GraphicsPSO& pso = RuntimeResourceManager::GetGraphicsPSO(PSOIDSkyboxPSO);
+		RuntimeResourceManager::SetShadersForPSO(PSOIDSkyboxPSO, { ShaderIDSkyboxVS, ShaderIDSkyboxPS });
+
+		RootSignature& rootSig = m_skyboxRootSig;
+		rootSig.Reset(RootEntrySkyboxCount, 1, false);
+
+		rootSig[RootEntrySkyboxGlobalInfoCB].InitAsConstantBuffer(0);
+
+		{
+			SamplerDesc samplerState = Graphics::SamplerLinearBorderDesc;
+			rootSig.InitStaticSampler(0, samplerState);
+		}
+		rootSig.Finalize(L"Skybox");
+
+		pso.SetRasterizerState(Graphics::RasterizerTwoSided);
+		pso.SetPrimitiveTopologyType(D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE);
+		pso.SetBlendState(Graphics::BlendTraditional);
+		pso.SetDepthStencilState(Graphics::DepthStateTestEqual);
+		pso.SetRenderTargetFormat(Graphics::g_SceneColorBuffer.GetFormat(), Graphics::g_SceneDepthBuffer.GetFormat());
 
 		pso.SetRootSignature(rootSig);
 		pso.Finalize();
@@ -1056,6 +1091,9 @@ void RadianceCascades::RenderRaster(ColorBuffer& targetColor, DepthBuffer& targe
 		globals.SunIntensity = Vector3(Scalar(0.5f));
 	}
 
+	GlobalInfo globalInfo = {};
+	::FillGlobalInfo(globalInfo, camera);
+
 	Renderer::MeshSorter meshSorter = Renderer::MeshSorter(Renderer::MeshSorter::kDefault);
 	meshSorter.SetCamera(camera);
 	meshSorter.SetViewport(viewPort);
@@ -1090,6 +1128,23 @@ void RadianceCascades::RenderRaster(ColorBuffer& targetColor, DepthBuffer& targe
 #endif
 
 		meshSorter.RenderMeshes(Renderer::MeshSorter::kOpaque, gfxContext, globals);
+	}
+
+	// Skybox pass
+	{
+		gfxContext.SetPipelineState(RuntimeResourceManager::GetGraphicsPSO(PSOIDSkyboxPSO));
+		gfxContext.SetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+		gfxContext.SetRootSignature(m_skyboxRootSig);
+
+		gfxContext.SetDynamicConstantBufferView(RootEntrySkyboxGlobalInfoCB, sizeof(GlobalInfo), &globalInfo);
+
+		// Not required but is done to be explicit that no vertex buffer is being used for skybox rendering. 
+		// Everything is done in shader.
+		D3D12_VERTEX_BUFFER_VIEW* vbView = nullptr;
+		gfxContext.GetCommandList()->IASetVertexBuffers(0, 1, vbView);
+
+		// Matches index count in shader.
+		gfxContext.DrawInstanced(36, 1);
 	}
 
 	gfxContext.Finish(true);
