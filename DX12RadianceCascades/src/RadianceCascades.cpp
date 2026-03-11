@@ -226,6 +226,17 @@ void RadianceCascades::Startup()
 
 		InitializeRT();
 
+		// Initializing skybox textures
+		{
+			GPU_MEMORY_BLOCK("Skybox Textures");
+
+			for (uint32_t i = 0; i < SkyboxIDCount; i++)
+			{
+				SkyboxID skyboxID = (SkyboxID)i;
+				m_skyboxTextures[skyboxID] = ::LoadSkyboxTexture(Utils::StringToWstring(m_skyboxIDToName[skyboxID]));
+			}
+		}
+
 		{
 			GPU_MEMORY_BLOCK("Misc");
 
@@ -252,14 +263,7 @@ void RadianceCascades::Startup()
 	sTestSuite = std::make_unique<TestSuiteGatherFilter>(*this, m_rcManager3D, m_camera);
 #endif
 
-	// Initializing skybox textures
-	{
-		for (uint32_t i = 0; i < SkyboxIDCount; i++)
-		{
-			SkyboxID skyboxID = (SkyboxID)i;
-			m_skyboxTextures[skyboxID] = ::LoadSkyboxTexture(Utils::StringToWstring(m_skyboxIDToName[skyboxID]));
-		}
-	}
+	
 }
 
 void RadianceCascades::Cleanup()
