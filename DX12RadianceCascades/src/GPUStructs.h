@@ -14,6 +14,7 @@ __declspec(align(16)) struct GlobalInfo
 	Utils::GPUMatrix invViewMatrix;
 	Utils::GPUMatrix invProjMatrix;
 	Math::Vector3 cameraPos;
+	BOOL useSkybox;
 };
 
 __declspec(align(16)) struct RTParams

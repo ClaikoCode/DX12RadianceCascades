@@ -26,6 +26,8 @@ struct GlobalInfo
     matrix invViewMatrix;
     matrix invProjMatrix;
     float3 cameraPos;
+    float padding;
+    bool useSkybox;
 };
 
 struct BilinearSampleInfo

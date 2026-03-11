@@ -65,7 +65,7 @@ namespace
 		return Graphics::g_SceneColorBuffer.GetFormat();
 	}
 
-	void FillGlobalInfo(GlobalInfo& globalInfo, const Camera& camera)
+	void FillGlobalInfo(GlobalInfo& globalInfo, const Camera& camera, bool useSkybox)
 	{
 		globalInfo.viewProjMatrix = camera.GetViewProjMatrix();
 
@@ -74,6 +74,8 @@ namespace
 		globalInfo.invViewMatrix = Math::Matrix4(DirectX::XMMatrixInverse(nullptr, camera.GetViewMatrix()));
 
 		globalInfo.cameraPos = camera.GetPosition();
+
+		globalInfo.useSkybox = useSkybox;
 	}
 
 	RaytracingContext& BeginRaytracingContext(const std::wstring& name, ComPtr<ID3D12GraphicsCommandList4>& rtCommandList)
@@ -252,10 +254,12 @@ void RadianceCascades::Startup()
 
 	// Initializing skybox textures
 	{
-		TextureRef ref = ::LoadSkyboxTexture(L".\\images\\hay_bales_4k.hdr");
-		m_skyboxTextures[SkyboxIDHayBales] = ref;
+		for (uint32_t i = 0; i < SkyboxIDCount; i++)
+		{
+			SkyboxID skyboxID = (SkyboxID)i;
+			m_skyboxTextures[skyboxID] = ::LoadSkyboxTexture(Utils::StringToWstring(m_skyboxIDToName[skyboxID]));
+		}
 	}
-	
 }
 
 void RadianceCascades::Cleanup()
@@ -990,6 +994,8 @@ void RadianceCascades::InitializePSOs()
 		);
 
 		globalRootSig[RootEntryRCRaytracingRTGSceneSRV].InitAsShaderResourceView(0);
+		globalRootSig[RootEntryRCRaytracingRTGSkyboxSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1);
+		// TODO: These three could simply be a single range.
 		globalRootSig[RootEntryRCRaytracingRTGOutputUAV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 1);
 		globalRootSig[RootEntryRCRaytracingRTGGatherFilterNUAV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 1);
 		globalRootSig[RootEntryRCRaytracingRTGGatherFilterN1UAV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 2, 1);
@@ -1100,7 +1106,7 @@ void RadianceCascades::RenderRaster(ColorBuffer& targetColor, DepthBuffer& targe
 	}
 
 	GlobalInfo globalInfo = {};
-	::FillGlobalInfo(globalInfo, camera);
+	::FillGlobalInfo(globalInfo, camera, m_settings.globalSettings.useSkybox);
 
 	Renderer::MeshSorter meshSorter = Renderer::MeshSorter(Renderer::MeshSorter::kDefault);
 	meshSorter.SetCamera(camera);
@@ -1139,13 +1145,16 @@ void RadianceCascades::RenderRaster(ColorBuffer& targetColor, DepthBuffer& targe
 	}
 
 	// Skybox pass
+	if(m_settings.globalSettings.useSkybox)
 	{
+		GPU_PROFILE_BLOCK("Skybox Pass", gfxContext);
+
 		gfxContext.SetPipelineState(RuntimeResourceManager::GetGraphicsPSO(PSOIDSkyboxPSO));
 		gfxContext.SetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 		gfxContext.SetRootSignature(m_skyboxRootSig);
 
 		gfxContext.SetDynamicConstantBufferView(RootEntrySkyboxGlobalInfoCB, sizeof(GlobalInfo), &globalInfo);
-		gfxContext.SetDynamicDescriptor(RootEntrySkyboxEquirectangularSRV, 0, m_skyboxTextures[SkyboxIDHayBales].GetSRV());
+		gfxContext.SetDynamicDescriptor(RootEntrySkyboxEquirectangularSRV, 0, GetCurrentSkybox().GetSRV());
 
 		// Not required but is done to be explicit that no vertex buffer is being used for skybox rendering. 
 		// Everything is done in shader.
@@ -1170,7 +1179,7 @@ void RadianceCascades::RenderRaytracing(ColorBuffer& targetColor, Camera& camera
 	rtParams.holeSize = 0.0f;
 
 	GlobalInfo rtGlobalInfo = {};
-	::FillGlobalInfo(rtGlobalInfo, camera);
+	::FillGlobalInfo(rtGlobalInfo, camera, m_settings.globalSettings.useSkybox);
 
 	ComPtr<ID3D12GraphicsCommandList4> rtCommandList = nullptr;
 	RaytracingContext& rtContext = ::BeginRaytracingContext(L"Render Raytracing", rtCommandList);
@@ -1206,7 +1215,7 @@ void RadianceCascades::RunRCGather(Camera& camera, DepthBuffer& sourceDepthBuffe
 	ColorBuffer& destDepthBuffer = m_depthBufferCopy;
 
 	GlobalInfo globalInfo = {};
-	::FillGlobalInfo(globalInfo, camera);
+	::FillGlobalInfo(globalInfo, camera, m_settings.globalSettings.useSkybox);
 
 	RCGlobals rcGlobalInfo = {};
 	m_rcManager3D.FillRCGlobalInfo(rcGlobalInfo);
@@ -1232,6 +1241,7 @@ void RadianceCascades::RunRCGather(Camera& camera, DepthBuffer& sourceDepthBuffe
 
 		{
 			rtCommandList->SetComputeRootShaderResourceView(RootEntryRCRaytracingRTGSceneSRV, m_sceneTLAS.GetBVH());
+			rtCommandList->SetComputeRootDescriptorTable(RootEntryRCRaytracingRTGSkyboxSRV, RuntimeResourceManager::GetDescCopy(GetCurrentSkybox().GetSRV()));
 			rtContext.SetDynamicConstantBufferView(RootEntryRCRaytracingRTGGlobalInfoCB, sizeof(GlobalInfo), &globalInfo);
 			rtContext.SetDynamicConstantBufferView(RootEntryRCRaytracingRTGRCGlobalsCB, sizeof(RCGlobals), &rcGlobalInfo);
 
@@ -1331,7 +1341,7 @@ void RadianceCascades::RunRCMerge(Math::Camera& cam, ColorBuffer& minMaxDepthBuf
 		m_rcManager3D.FillRCGlobalInfo(rcGlobals);
 
 		GlobalInfo globalInfo = {};
-		::FillGlobalInfo(globalInfo, cam);
+		::FillGlobalInfo(globalInfo, cam, m_settings.globalSettings.useSkybox);
 
 		cmptContext.SetDynamicConstantBufferView(RootEntryRC3DMergeRCGlobalsCB, sizeof(RCGlobals), &rcGlobals);
 		cmptContext.SetDynamicConstantBufferView(RootEntryRC3DMergeGlobalInfoCB, sizeof(GlobalInfo), &globalInfo);
@@ -1537,7 +1547,7 @@ void RadianceCascades::RunDeferredLightingPass(ColorBuffer& albedoBuffer, ColorB
 	ColorBuffer& cascade0Buffer = m_rcManager3D.GetCascadeIntervalBuffer(0);
 
 	GlobalInfo globalInfo = {};
-	::FillGlobalInfo(globalInfo, m_camera); // TODO: Make camera as input.
+	::FillGlobalInfo(globalInfo, m_camera, m_settings.globalSettings.useSkybox); // TODO: Make camera as input.
 
 	RCGlobals rcGlobalInfo = {};
 	m_rcManager3D.FillRCGlobalInfo(rcGlobalInfo);
@@ -1661,6 +1671,16 @@ void RadianceCascades::DrawSettingsUI()
 		int* renderMode = reinterpret_cast<int*>(&gs.renderMode);
 		ImGui::RadioButton("Raster", renderMode, GlobalSettings::RenderModeRaster); ImGui::SameLine();
 		ImGui::RadioButton("Raytracing", renderMode, GlobalSettings::RenderModeRT);
+
+		ImGui::SeparatorText("Skybox");
+		ImGui::Checkbox("Render Skybox", &gs.useSkybox);
+		std::array<const char*, SkyboxIDCount> skyboxNames = {};
+		for (uint32_t i = 0; i < skyboxNames.size(); i++)
+		{
+			skyboxNames[i] = m_skyboxIDToName[(SkyboxID)i];
+		}
+		ImGui::Combo("Skyboxes", reinterpret_cast<int*>(&m_currentSkybox), skyboxNames.data(), skyboxNames.size());
+
 
 #if defined(_DEBUGDRAWING)
 		ImGui::SeparatorText("Debug Drawing");
