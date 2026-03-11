@@ -44,6 +44,7 @@ enum PSOID : psoid_t
 	PSOIDRC3DMergePSO,
 	PSOIDRC3DCoalescePSO,
 	PSOIDDeferredLightingPSO,
+	PSOIDSkyboxPSO,
 
 	PSOIDCount
 };

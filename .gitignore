@@ -6,6 +6,7 @@ ModelViewer/
 # Ignore everything in run folder except models folder.
 Run/*
 !Run/models
+!Run/images
 
 # Local runtime files.
 runtime_logs.txt

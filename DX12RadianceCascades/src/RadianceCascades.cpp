@@ -22,6 +22,9 @@
 #include "TestSuiteMasters.h"
 #include "TestSuiteGatherFilter.h"
 
+#include "Core\TextureManager.h"
+#include "Model\TextureConvert.h"
+
 using namespace Microsoft::WRL;
 
 // Mimicing how Microsoft exposes their global variables (example in Display.cpp)
@@ -62,7 +65,7 @@ namespace
 		return Graphics::g_SceneColorBuffer.GetFormat();
 	}
 
-	void FillGlobalInfo(GlobalInfo& globalInfo, const Camera& camera)
+	void FillGlobalInfo(GlobalInfo& globalInfo, const Camera& camera, bool useSkybox)
 	{
 		globalInfo.viewProjMatrix = camera.GetViewProjMatrix();
 
@@ -71,6 +74,8 @@ namespace
 		globalInfo.invViewMatrix = Math::Matrix4(DirectX::XMMatrixInverse(nullptr, camera.GetViewMatrix()));
 
 		globalInfo.cameraPos = camera.GetPosition();
+
+		globalInfo.useSkybox = useSkybox;
 	}
 
 	RaytracingContext& BeginRaytracingContext(const std::wstring& name, ComPtr<ID3D12GraphicsCommandList4>& rtCommandList)
@@ -172,6 +177,14 @@ namespace
 
 		return needsMoreFrames;
 	}
+
+	TextureRef LoadSkyboxTexture(const std::wstring& originalFile)
+	{
+		CompileTextureOnDemand(originalFile, 0);
+
+		std::wstring ddsFile = Utility::RemoveExtension(originalFile) + L".dds";
+		return TextureManager::LoadDDSFromFile(ddsFile);
+	}
 }
 
 RadianceCascades::RadianceCascades()
@@ -238,6 +251,15 @@ void RadianceCascades::Startup()
 
 	sTestSuite = std::make_unique<TestSuiteGatherFilter>(*this, m_rcManager3D, m_camera);
 #endif
+
+	// Initializing skybox textures
+	{
+		for (uint32_t i = 0; i < SkyboxIDCount; i++)
+		{
+			SkyboxID skyboxID = (SkyboxID)i;
+			m_skyboxTextures[skyboxID] = ::LoadSkyboxTexture(Utils::StringToWstring(m_skyboxIDToName[skyboxID]));
+		}
+	}
 }
 
 void RadianceCascades::Cleanup()
@@ -703,6 +725,7 @@ void RadianceCascades::InitializePSOs()
 		RuntimeResourceManager::RegisterPSO(PSOIDRC3DMergePSO,				&m_rc3dMergePSO,				PSOTypeCompute);
 		RuntimeResourceManager::RegisterPSO(PSOIDRC3DCoalescePSO,			&m_rc3dCoalescePSO,				PSOTypeCompute);
 		RuntimeResourceManager::RegisterPSO(PSOIDDeferredLightingPSO,		&m_deferredLightingPSO,			PSOTypeGraphics);
+		RuntimeResourceManager::RegisterPSO(PSOIDSkyboxPSO,					&m_skyboxPSO,					PSOTypeGraphics);
 	}
 
 	// Overwrite and update external PSO shaders.
@@ -745,6 +768,30 @@ void RadianceCascades::InitializePSOs()
 		pso.SetBlendState(Graphics::BlendTraditional);
 		pso.SetDepthStencilState(Graphics::DepthStateDisabled);
 		pso.SetRenderTargetFormats(1, &Graphics::g_SceneColorBuffer.GetFormat(), DXGI_FORMAT_UNKNOWN);
+
+		pso.SetRootSignature(rootSig);
+		pso.Finalize();
+	}
+
+	{
+		GraphicsPSO& pso = RuntimeResourceManager::GetGraphicsPSO(PSOIDSkyboxPSO);
+		RuntimeResourceManager::SetShadersForPSO(PSOIDSkyboxPSO, { ShaderIDSkyboxVS, ShaderIDSkyboxPS });
+
+		RootSignature& rootSig = m_skyboxRootSig;
+		rootSig.Reset(RootEntrySkyboxCount, 1, false);
+		rootSig[RootEntrySkyboxGlobalInfoCB].InitAsConstantBuffer(0);
+		rootSig[RootEntrySkyboxEquirectangularSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 0, 1);
+		{
+			SamplerDesc samplerState = Graphics::SamplerLinearWrapDesc;
+			rootSig.InitStaticSampler(0, samplerState);
+		}
+		rootSig.Finalize(L"Skybox");
+
+		pso.SetRasterizerState(Graphics::RasterizerTwoSided);
+		pso.SetPrimitiveTopologyType(D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE);
+		pso.SetBlendState(Graphics::BlendTraditional);
+		pso.SetDepthStencilState(Graphics::DepthStateTestEqual);
+		pso.SetRenderTargetFormat(Graphics::g_SceneColorBuffer.GetFormat(), Graphics::g_SceneDepthBuffer.GetFormat());
 
 		pso.SetRootSignature(rootSig);
 		pso.Finalize();
@@ -947,6 +994,8 @@ void RadianceCascades::InitializePSOs()
 		);
 
 		globalRootSig[RootEntryRCRaytracingRTGSceneSRV].InitAsShaderResourceView(0);
+		globalRootSig[RootEntryRCRaytracingRTGSkyboxSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1);
+		// TODO: These three could simply be a single range.
 		globalRootSig[RootEntryRCRaytracingRTGOutputUAV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 1);
 		globalRootSig[RootEntryRCRaytracingRTGGatherFilterNUAV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 1);
 		globalRootSig[RootEntryRCRaytracingRTGGatherFilterN1UAV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 2, 1);
@@ -1056,6 +1105,9 @@ void RadianceCascades::RenderRaster(ColorBuffer& targetColor, DepthBuffer& targe
 		globals.SunIntensity = Vector3(Scalar(0.5f));
 	}
 
+	GlobalInfo globalInfo = {};
+	::FillGlobalInfo(globalInfo, camera, m_settings.globalSettings.useSkybox);
+
 	Renderer::MeshSorter meshSorter = Renderer::MeshSorter(Renderer::MeshSorter::kDefault);
 	meshSorter.SetCamera(camera);
 	meshSorter.SetViewport(viewPort);
@@ -1092,6 +1144,27 @@ void RadianceCascades::RenderRaster(ColorBuffer& targetColor, DepthBuffer& targe
 		meshSorter.RenderMeshes(Renderer::MeshSorter::kOpaque, gfxContext, globals);
 	}
 
+	// Skybox pass
+	if(m_settings.globalSettings.useSkybox)
+	{
+		GPU_PROFILE_BLOCK("Skybox Pass", gfxContext);
+
+		gfxContext.SetPipelineState(RuntimeResourceManager::GetGraphicsPSO(PSOIDSkyboxPSO));
+		gfxContext.SetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+		gfxContext.SetRootSignature(m_skyboxRootSig);
+
+		gfxContext.SetDynamicConstantBufferView(RootEntrySkyboxGlobalInfoCB, sizeof(GlobalInfo), &globalInfo);
+		gfxContext.SetDynamicDescriptor(RootEntrySkyboxEquirectangularSRV, 0, GetCurrentSkybox().GetSRV());
+
+		// Not required but is done to be explicit that no vertex buffer is being used for skybox rendering. 
+		// Everything is done in shader.
+		D3D12_VERTEX_BUFFER_VIEW* vbView = nullptr;
+		gfxContext.GetCommandList()->IASetVertexBuffers(0, 1, vbView);
+
+		// Matches index count in shader.
+		gfxContext.DrawInstanced(36, 1);
+	}
+
 	gfxContext.Finish(true);
 }
 
@@ -1106,7 +1179,7 @@ void RadianceCascades::RenderRaytracing(ColorBuffer& targetColor, Camera& camera
 	rtParams.holeSize = 0.0f;
 
 	GlobalInfo rtGlobalInfo = {};
-	::FillGlobalInfo(rtGlobalInfo, camera);
+	::FillGlobalInfo(rtGlobalInfo, camera, m_settings.globalSettings.useSkybox);
 
 	ComPtr<ID3D12GraphicsCommandList4> rtCommandList = nullptr;
 	RaytracingContext& rtContext = ::BeginRaytracingContext(L"Render Raytracing", rtCommandList);
@@ -1142,7 +1215,7 @@ void RadianceCascades::RunRCGather(Camera& camera, DepthBuffer& sourceDepthBuffe
 	ColorBuffer& destDepthBuffer = m_depthBufferCopy;
 
 	GlobalInfo globalInfo = {};
-	::FillGlobalInfo(globalInfo, camera);
+	::FillGlobalInfo(globalInfo, camera, m_settings.globalSettings.useSkybox);
 
 	RCGlobals rcGlobalInfo = {};
 	m_rcManager3D.FillRCGlobalInfo(rcGlobalInfo);
@@ -1168,6 +1241,7 @@ void RadianceCascades::RunRCGather(Camera& camera, DepthBuffer& sourceDepthBuffe
 
 		{
 			rtCommandList->SetComputeRootShaderResourceView(RootEntryRCRaytracingRTGSceneSRV, m_sceneTLAS.GetBVH());
+			rtCommandList->SetComputeRootDescriptorTable(RootEntryRCRaytracingRTGSkyboxSRV, RuntimeResourceManager::GetDescCopy(GetCurrentSkybox().GetSRV()));
 			rtContext.SetDynamicConstantBufferView(RootEntryRCRaytracingRTGGlobalInfoCB, sizeof(GlobalInfo), &globalInfo);
 			rtContext.SetDynamicConstantBufferView(RootEntryRCRaytracingRTGRCGlobalsCB, sizeof(RCGlobals), &rcGlobalInfo);
 
@@ -1267,7 +1341,7 @@ void RadianceCascades::RunRCMerge(Math::Camera& cam, ColorBuffer& minMaxDepthBuf
 		m_rcManager3D.FillRCGlobalInfo(rcGlobals);
 
 		GlobalInfo globalInfo = {};
-		::FillGlobalInfo(globalInfo, cam);
+		::FillGlobalInfo(globalInfo, cam, m_settings.globalSettings.useSkybox);
 
 		cmptContext.SetDynamicConstantBufferView(RootEntryRC3DMergeRCGlobalsCB, sizeof(RCGlobals), &rcGlobals);
 		cmptContext.SetDynamicConstantBufferView(RootEntryRC3DMergeGlobalInfoCB, sizeof(GlobalInfo), &globalInfo);
@@ -1473,7 +1547,7 @@ void RadianceCascades::RunDeferredLightingPass(ColorBuffer& albedoBuffer, ColorB
 	ColorBuffer& cascade0Buffer = m_rcManager3D.GetCascadeIntervalBuffer(0);
 
 	GlobalInfo globalInfo = {};
-	::FillGlobalInfo(globalInfo, m_camera); // TODO: Make camera as input.
+	::FillGlobalInfo(globalInfo, m_camera, m_settings.globalSettings.useSkybox); // TODO: Make camera as input.
 
 	RCGlobals rcGlobalInfo = {};
 	m_rcManager3D.FillRCGlobalInfo(rcGlobalInfo);
@@ -1597,6 +1671,16 @@ void RadianceCascades::DrawSettingsUI()
 		int* renderMode = reinterpret_cast<int*>(&gs.renderMode);
 		ImGui::RadioButton("Raster", renderMode, GlobalSettings::RenderModeRaster); ImGui::SameLine();
 		ImGui::RadioButton("Raytracing", renderMode, GlobalSettings::RenderModeRT);
+
+		ImGui::SeparatorText("Skybox");
+		ImGui::Checkbox("Render Skybox", &gs.useSkybox);
+		std::array<const char*, SkyboxIDCount> skyboxNames = {};
+		for (uint32_t i = 0; i < skyboxNames.size(); i++)
+		{
+			skyboxNames[i] = m_skyboxIDToName[(SkyboxID)i];
+		}
+		ImGui::Combo("Skyboxes", reinterpret_cast<int*>(&m_currentSkybox), skyboxNames.data(), skyboxNames.size());
+
 
 #if defined(_DEBUGDRAWING)
 		ImGui::SeparatorText("Debug Drawing");
@@ -1887,6 +1971,11 @@ void RadianceCascades::FullScreenCopyCompute(PixelBuffer& source, D3D12_CPU_DESC
 void RadianceCascades::FullScreenCopyCompute(ColorBuffer& source, ColorBuffer& dest)
 {
 	FullScreenCopyCompute(source, source.GetSRV(), dest);
+}
+
+void RadianceCascades::EquilateralToCubemapCompute(TextureRef equilateralTexture, ColorBuffer cubemapTexture)
+{
+	// NOT IMPLEMENTED
 }
 
 InternalModelInstance* RadianceCascades::AddModelInstance(ModelID modelID)
