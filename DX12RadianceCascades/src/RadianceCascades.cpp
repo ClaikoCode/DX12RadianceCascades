@@ -22,6 +22,9 @@
 #include "TestSuiteMasters.h"
 #include "TestSuiteGatherFilter.h"
 
+#include "Core\TextureManager.h"
+#include "Model\TextureConvert.h"
+
 using namespace Microsoft::WRL;
 
 // Mimicing how Microsoft exposes their global variables (example in Display.cpp)
@@ -172,6 +175,14 @@ namespace
 
 		return needsMoreFrames;
 	}
+
+	TextureRef LoadSkyboxTexture(const std::wstring& originalFile)
+	{
+		CompileTextureOnDemand(originalFile, 0);
+
+		std::wstring ddsFile = Utility::RemoveExtension(originalFile) + L".dds";
+		return TextureManager::LoadDDSFromFile(ddsFile);
+	}
 }
 
 RadianceCascades::RadianceCascades()
@@ -182,15 +193,6 @@ RadianceCascades::RadianceCascades()
 		m_settings.rcSettings.usePreAveragedGather
 	)
 {
-//
-//#include "Core\TextureManager.h"
-//#include "Model\TextureConvert.h"
-//	std::wstring originalFile = basePath + textureNames[ti];
-//	CompileTextureOnDemand(originalFile, textureOptions[ti]);
-//
-//	std::wstring ddsFile = Utility::RemoveExtension(originalFile) + L".dds";
-//	model.textures[ti] = TextureManager::LoadDDSFromFile(ddsFile);
-
 	m_sceneModels.reserve(MAX_INSTANCES);
 }
 
@@ -247,6 +249,13 @@ void RadianceCascades::Startup()
 
 	sTestSuite = std::make_unique<TestSuiteGatherFilter>(*this, m_rcManager3D, m_camera);
 #endif
+
+	// Initializing skybox textures
+	{
+		TextureRef ref = ::LoadSkyboxTexture(L".\\images\\hay_bales_4k.hdr");
+		m_skyboxTextures[SkyboxIDHayBales] = ref;
+	}
+	
 }
 
 void RadianceCascades::Cleanup()
@@ -766,11 +775,10 @@ void RadianceCascades::InitializePSOs()
 
 		RootSignature& rootSig = m_skyboxRootSig;
 		rootSig.Reset(RootEntrySkyboxCount, 1, false);
-
 		rootSig[RootEntrySkyboxGlobalInfoCB].InitAsConstantBuffer(0);
-
+		rootSig[RootEntrySkyboxEquirectangularSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 0, 1);
 		{
-			SamplerDesc samplerState = Graphics::SamplerLinearBorderDesc;
+			SamplerDesc samplerState = Graphics::SamplerLinearWrapDesc;
 			rootSig.InitStaticSampler(0, samplerState);
 		}
 		rootSig.Finalize(L"Skybox");
@@ -1137,6 +1145,7 @@ void RadianceCascades::RenderRaster(ColorBuffer& targetColor, DepthBuffer& targe
 		gfxContext.SetRootSignature(m_skyboxRootSig);
 
 		gfxContext.SetDynamicConstantBufferView(RootEntrySkyboxGlobalInfoCB, sizeof(GlobalInfo), &globalInfo);
+		gfxContext.SetDynamicDescriptor(RootEntrySkyboxEquirectangularSRV, 0, m_skyboxTextures[SkyboxIDHayBales].GetSRV());
 
 		// Not required but is done to be explicit that no vertex buffer is being used for skybox rendering. 
 		// Everything is done in shader.
@@ -1942,6 +1951,11 @@ void RadianceCascades::FullScreenCopyCompute(PixelBuffer& source, D3D12_CPU_DESC
 void RadianceCascades::FullScreenCopyCompute(ColorBuffer& source, ColorBuffer& dest)
 {
 	FullScreenCopyCompute(source, source.GetSRV(), dest);
+}
+
+void RadianceCascades::EquilateralToCubemapCompute(TextureRef equilateralTexture, ColorBuffer cubemapTexture)
+{
+	// NOT IMPLEMENTED
 }
 
 InternalModelInstance* RadianceCascades::AddModelInstance(ModelID modelID)

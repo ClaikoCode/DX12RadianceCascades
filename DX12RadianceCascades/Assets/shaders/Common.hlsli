@@ -182,5 +182,21 @@ float4 BilinearInterpolation(float4 t00, float4 t10, float4 t01, float4 t11, flo
             t11 * frac.x * frac.y;
 }
 
+float2 DirectionToEquirectangularUV(float3 dir)
+{
+    float phi = atan2(dir.z, dir.x);
+    float theta = acos(dir.y);
+    float u = phi * (0.5f / MATH_PI) + 0.5f;
+    float v = theta * (1.0f / MATH_PI);
+    
+    return float2(u, v);
+}
+
+float2 DirectionToRectilinear(float3 dir)
+{
+    float x = atan2(dir.z, dir.x) / (2 * MATH_PI) + 0.5f;
+    float y = dir.y * 0.5f + 0.5f;
+    return float2(x, 1.0f - y);
+}
 
 #endif // COMMON_H

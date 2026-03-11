@@ -36,12 +36,11 @@ float4 main(Interpolators i) : SV_TARGET
     // Yellow if values was never changed (useful for debugging).
     float4 finalColor = float4(1.0f, 1.0f, 0.0f, 1.0f);
     
-    // If normals match the buffers clear value, the pixel has not been written to. 
+    // If normals match the buffers clear value, the pixel has not written any depth information. 
     if(IsZero(normals.rgb))
     {
        // Apply the background color.
-       // TODO: When a proper skybox is added (which doesnt write normal info), this step should return early, keeping the color of the skybox.
-       finalColor = float4(diffuseRadiance.rgb, 1.0f);
+       finalColor = float4(albedo.rgb, 1.0f);
     }
     // Alpha value informs if this pixel was emissive or not. 
     else if(normals.a == 1.0f) 
