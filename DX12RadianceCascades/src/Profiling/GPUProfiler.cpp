@@ -95,7 +95,7 @@ void GPUProfiler::DrawMemoryProfileTree(std::shared_ptr<MemoryProfileNode> root,
 
 		for (auto& child : root->children)
 		{
-			DrawMemoryProfileTree(child);
+			DrawMemoryProfileTree(child, defaultMemoryUnit);
 		}
 
 		ImGui::TreePop();
@@ -303,7 +303,7 @@ void GPUProfiler::DrawProfilerUI()
 		// Skip drawing from root as it its only purpose is to begin building the tree.
 		for (auto& child : m_memoryRoot->children)
 		{
-			DrawMemoryProfileTree(child);
+			DrawMemoryProfileTree(child, defaultMemoryUnit);
 		}
 	}
 
