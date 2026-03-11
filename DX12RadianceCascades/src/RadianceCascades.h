@@ -24,6 +24,18 @@
 	#define ENABLE_DEBUG_DRAW 0
 #endif
 
+enum SkyboxID
+{
+	SkyboxIDHayBales = 0,
+	SkyboxIDFireSky,
+	SkyboxIDOvercastSoil,
+	SkyboxIDBloemHill,
+	SkyboxIDSunflowersPuresky,
+	SkyboxIDRoglandClearNight,
+
+	SkyboxIDCount // Keep last
+};
+
 enum ResolutionTarget
 {
 	ResolutionTargetInvalid = 0,
@@ -157,6 +169,7 @@ struct GlobalSettings
 	bool useDebugCam = false;
 	bool renderUI = true;
 	bool useLargerUIFontScale = false;
+	bool useSkybox = true;
 };
 
 struct AppSettings
@@ -211,6 +224,7 @@ private:
 		RootEntryMinMaxDepthCount,
 
 		RootEntryRCRaytracingRTGSceneSRV = 0,
+		RootEntryRCRaytracingRTGSkyboxSRV,
 		RootEntryRCRaytracingRTGOutputUAV,
 		RootEntryRCRaytracingRTGGatherFilterNUAV,
 		RootEntryRCRaytracingRTGGatherFilterN1UAV,
@@ -250,6 +264,10 @@ private:
 		RootEntryDeferredLightingGlobalInfoCB,
 		RootEntryDeferredLightingRCGlobalsCB,
 		RootEntryDeferredLightingCount,
+
+		RootEntrySkyboxGlobalInfoCB = 0,
+		RootEntrySkyboxEquirectangularSRV,
+		RootEntrySkyboxCount,
 	};
 
 public:
@@ -297,6 +315,8 @@ private:
 	void FullScreenCopyCompute(PixelBuffer& source, D3D12_CPU_DESCRIPTOR_HANDLE sourceSRV, ColorBuffer& dest);
 	void FullScreenCopyCompute(ColorBuffer& source, ColorBuffer& dest);
 
+	void EquilateralToCubemapCompute(TextureRef equilateralTexture, ColorBuffer cubemapTexture);
+
 	InternalModelInstance* AddModelInstance(ModelID modelID);
 	void AddSceneModel(ModelID modelID, const ModelInstanceDesc& modelInstanceDesc);
 
@@ -311,6 +331,8 @@ private:
 	{
 		return GetMainSceneModelInstance().GetBoundingBox().GetCenter();
 	}
+	
+	TextureRef& GetCurrentSkybox() { return m_skyboxTextures[m_currentSkybox]; }
 
 	// EXTREMELY wasteful but it gets the job done for how much energy I have currently.
 	std::unordered_map<ModelID, std::vector<Utils::GPUMatrix>> GetGroupedModelInstances();
@@ -370,6 +392,9 @@ private:
 	GraphicsPSO m_deferredLightingPSO = GraphicsPSO(L"Deferred Lighting PSO");
 	RootSignature m_deferredLightingRootSig;
 
+	GraphicsPSO m_skyboxPSO = GraphicsPSO(L"Skybox PSO");
+	RootSignature m_skyboxRootSig;
+
 	RadianceCascadeManager3D m_rcManager3D;
 
 	ColorBuffer m_albedoBuffer;
@@ -382,4 +407,16 @@ private:
 	// Vector used for observer pattern. Textures can subscribe here and when resize is triggered, 
 	// the textures also get resized, keeping all other creation parameters the same.
 	std::vector<DisplayDependentTextureRef> m_displayDependentTextures;
+
+	std::array<TextureRef, SkyboxIDCount> m_skyboxTextures;
+	SkyboxID m_currentSkybox = SkyboxIDBloemHill;
+
+	std::unordered_map<SkyboxID, const char*> m_skyboxIDToName = {
+		{SkyboxIDHayBales,			".\\images\\hay_bales_4k.hdr"},
+		{SkyboxIDFireSky,			".\\images\\the_sky_is_on_fire_4k.hdr"},
+		{SkyboxIDOvercastSoil,		".\\images\\overcast_soil_4k.hdr"},
+		{SkyboxIDBloemHill,			".\\images\\bloem_hill_01_4k.hdr"},
+		{SkyboxIDSunflowersPuresky, ".\\images\\sunflowers_puresky_4k.hdr"},
+		{SkyboxIDRoglandClearNight, ".\\images\\rogland_clear_night_4k.hdr"}
+	};
 };

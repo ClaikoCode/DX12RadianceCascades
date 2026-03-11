@@ -102,9 +102,6 @@ PSOutput main(VSOutput vsOutput)
     float3 emissiveColor = emissiveFactor * emissiveTexture.Sample(emissiveSampler, samplingCoords);
     float3 normal = ComputeNormal(vsOutput);
     
-    float attenuation = dot(normal, normalize(SunDirection));
-    //attenuation = 1.0f;
-    
     float3 finalColor = baseColor.rgb + emissiveColor;
     
     PSOutput psOutput;
