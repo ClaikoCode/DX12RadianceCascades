@@ -24,6 +24,13 @@
 	#define ENABLE_DEBUG_DRAW 0
 #endif
 
+enum SkyboxID
+{
+	SkyboxIDHayBales = 0,
+
+	SkyboxIDCount // Keep last
+};
+
 enum ResolutionTarget
 {
 	ResolutionTargetInvalid = 0,
@@ -252,6 +259,7 @@ private:
 		RootEntryDeferredLightingCount,
 
 		RootEntrySkyboxGlobalInfoCB = 0,
+		RootEntrySkyboxEquirectangularSRV,
 		RootEntrySkyboxCount,
 	};
 
@@ -299,6 +307,8 @@ private:
 	// TODO: Take in a sampler type and change PSO to have a binding for a dynamic sampler state that is bound at runtime.
 	void FullScreenCopyCompute(PixelBuffer& source, D3D12_CPU_DESCRIPTOR_HANDLE sourceSRV, ColorBuffer& dest);
 	void FullScreenCopyCompute(ColorBuffer& source, ColorBuffer& dest);
+
+	void EquilateralToCubemapCompute(TextureRef equilateralTexture, ColorBuffer cubemapTexture);
 
 	InternalModelInstance* AddModelInstance(ModelID modelID);
 	void AddSceneModel(ModelID modelID, const ModelInstanceDesc& modelInstanceDesc);
@@ -388,4 +398,6 @@ private:
 	// Vector used for observer pattern. Textures can subscribe here and when resize is triggered, 
 	// the textures also get resized, keeping all other creation parameters the same.
 	std::vector<DisplayDependentTextureRef> m_displayDependentTextures;
+
+	std::array<TextureRef, SkyboxIDCount> m_skyboxTextures;
 };

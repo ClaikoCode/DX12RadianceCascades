@@ -32,7 +32,14 @@ namespace Utility
         va_start(ap, format);
         vsprintf_s(buffer, 256, format, ap);
         va_end(ap);
-        Print(buffer);
+
+        // Added by JD.
+        // OutputDebugStringA does not output to VS output for my app so wstring is forced.
+        wchar_t wstr[MAX_PATH];
+        if (!MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, buffer, -1, wstr, MAX_PATH))
+            wstr[0] = L'\0';
+
+        Print(wstr);
     }
 
     inline void Printf( const wchar_t* format, ... )

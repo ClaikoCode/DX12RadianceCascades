@@ -70,8 +70,8 @@ Interpolators main(uint vertexID : SV_VertexID)
     float4 vertexPos = mul(float4(cubeVertex, 0.0f), globalInfo.viewProjMatrix);
     
     // During the perspective divide, x y and z are divided by the w component. 
-    // If depth is inverted then: (z / w) = (0 / w) = 0. 
-    // If not then: (z / w) = (w / w) = 1.
+    // If depth is inverted then:   (z / w) = (0 / w) = 0. 
+    // If not then:                 (z / w) = (w / w) = 1.
     // This results in verticies being seen as infinitely far away (existing at the far plane).
     vertexPos.z = DEPTH_IS_INVERTED ? 0.0f : vertexPos.w;
     i.vertexPos = vertexPos;
