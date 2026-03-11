@@ -782,7 +782,13 @@ void RadianceCascades::InitializePSOs()
 		RuntimeResourceManager::SetShadersForPSO(PSOIDSkyboxPSO, { ShaderIDSkyboxVS, ShaderIDSkyboxPS });
 
 		RootSignature& rootSig = m_skyboxRootSig;
-		rootSig.Reset(RootEntrySkyboxCount, 1, false);
+		rootSig.Reset(
+			RootEntrySkyboxCount, 
+			1
+#if defined(_DEBUGDRAWING)
+			,false
+#endif
+		);
 		rootSig[RootEntrySkyboxGlobalInfoCB].InitAsConstantBuffer(0);
 		rootSig[RootEntrySkyboxEquirectangularSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 0, 1);
 		{
