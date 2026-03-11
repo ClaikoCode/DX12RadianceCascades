@@ -27,6 +27,11 @@
 enum SkyboxID
 {
 	SkyboxIDHayBales = 0,
+	SkyboxIDFireSky,
+	SkyboxIDOvercastSoil,
+	SkyboxIDBloemHill,
+	SkyboxIDSunflowersPuresky,
+	SkyboxIDRoglandClearNight,
 
 	SkyboxIDCount // Keep last
 };
@@ -125,7 +130,7 @@ struct RadianceCascadesSettings
 	};
 
 	CascadeTextureVis currentTextureVis = CascadeTextureVisNone;
-	bool renderRC3D = false;
+	bool renderRC3D = true;
 	bool seeCoalesceResult = false;
 	int cascadeVisIndex = 0;
 	int cascadeFilterIndex = 0;
@@ -164,6 +169,7 @@ struct GlobalSettings
 	bool useDebugCam = false;
 	bool renderUI = true;
 	bool useLargerUIFontScale = false;
+	bool useSkybox = true;
 };
 
 struct AppSettings
@@ -218,6 +224,7 @@ private:
 		RootEntryMinMaxDepthCount,
 
 		RootEntryRCRaytracingRTGSceneSRV = 0,
+		RootEntryRCRaytracingRTGSkyboxSRV,
 		RootEntryRCRaytracingRTGOutputUAV,
 		RootEntryRCRaytracingRTGGatherFilterNUAV,
 		RootEntryRCRaytracingRTGGatherFilterN1UAV,
@@ -324,6 +331,8 @@ private:
 	{
 		return GetMainSceneModelInstance().GetBoundingBox().GetCenter();
 	}
+	
+	TextureRef& GetCurrentSkybox() { return m_skyboxTextures[m_currentSkybox]; }
 
 	// EXTREMELY wasteful but it gets the job done for how much energy I have currently.
 	std::unordered_map<ModelID, std::vector<Utils::GPUMatrix>> GetGroupedModelInstances();
@@ -400,4 +409,14 @@ private:
 	std::vector<DisplayDependentTextureRef> m_displayDependentTextures;
 
 	std::array<TextureRef, SkyboxIDCount> m_skyboxTextures;
+	SkyboxID m_currentSkybox = SkyboxIDBloemHill;
+
+	std::unordered_map<SkyboxID, const char*> m_skyboxIDToName = {
+		{SkyboxIDHayBales,			".\\images\\hay_bales_4k.hdr"},
+		{SkyboxIDFireSky,			".\\images\\the_sky_is_on_fire_4k.hdr"},
+		{SkyboxIDOvercastSoil,		".\\images\\overcast_soil_4k.hdr"},
+		{SkyboxIDBloemHill,			".\\images\\bloem_hill_01_4k.hdr"},
+		{SkyboxIDSunflowersPuresky, ".\\images\\sunflowers_puresky_4k.hdr"},
+		{SkyboxIDRoglandClearNight, ".\\images\\rogland_clear_night_4k.hdr"}
+	};
 };

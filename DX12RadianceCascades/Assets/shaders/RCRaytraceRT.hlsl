@@ -17,6 +17,7 @@
 
 
 RaytracingAccelerationStructure Scene : register(t0);
+Texture2D<float4> skyboxTexture : register(t1);
 RWTexture2D<float4> renderOutput : register(u0);
 SamplerState sourceSampler : register(s0);
 
@@ -263,15 +264,16 @@ void MissShader(inout RayPayload payload)
 {
     //DrawCascadeRay(float3(0.0f, 1.0f, 0.0f), 0.0f, cascadeInfo.cascadeIndex, payload.probeIndex);
     
-    float3 missColor;
+    float3 missColor = 0.0f;
     if (cascadeInfo.cascadeIndex == (rcGlobals.cascadeCount - 1))
     {
-        float3 sunDir = normalize(float3(1.0, 1.0, 0.0));
-        missColor = SimpleSunsetSky(WorldRayDirection(), sunDir);
-    }
-    else
-    {
-        missColor = 0.0f;
+        if(globalInfo.useSkybox)
+        {
+            //float3 sunDir = normalize(float3(1.0, 1.0, 0.0));
+            //missColor = SimpleSunsetSky(WorldRayDirection(), sunDir);
+            
+            missColor = skyboxTexture.SampleLevel(sourceSampler, DirectionToEquirectangularUV(WorldRayDirection()), 0).rgb;
+        }
     }
     
     payload.result = float4(missColor, 1.0f);
