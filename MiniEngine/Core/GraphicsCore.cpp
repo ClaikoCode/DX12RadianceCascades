@@ -242,6 +242,7 @@ void Graphics::Initialize(bool RequireDXRSupport)
     if (!bUseWarpDriver)
     {
         SIZE_T MaxSize = 0;
+        bool mainDisplayUsesHDR = false; // All HDR related code added by JD.
 
         for (uint32_t Idx = 0; DXGI_ERROR_NOT_FOUND != dxgiFactory->EnumAdapters1(Idx, &pAdapter); ++Idx)
         {
@@ -276,6 +277,28 @@ void Graphics::Initialize(bool RequireDXRSupport)
 			g_Device = pDevice.Detach();
             
             Utility::Printf(L"Selected GPU:  %s (%u MB)\n", desc.Description, desc.DedicatedVideoMemory >> 20);
+
+            Microsoft::WRL::ComPtr<IDXGIOutput> output = nullptr;
+            // Check if main output monitor is available.
+            if (SUCCEEDED(pAdapter->EnumOutputs(0, &output)))
+            {
+                Microsoft::WRL::ComPtr<IDXGIOutput6> output6 = nullptr;
+                ASSERT_SUCCEEDED(output.As(&output6));
+
+                DXGI_OUTPUT_DESC1 outputDesc = {};
+                ASSERT_SUCCEEDED(output6->GetDesc1(&outputDesc));
+
+                // This checks that the monitor has HDR enabled and that it supports all Advanced Color capabilities:
+                // https://learn.microsoft.com/en-us/windows/win32/direct3darticles/high-dynamic-range
+                mainDisplayUsesHDR = (outputDesc.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020);
+            }
+        }
+
+        PostEffects::EnableHDR = mainDisplayUsesHDR;
+
+        if (mainDisplayUsesHDR)
+        {
+            Utility::Printf(L"Primary monitor identified to have HDR enabled. Enabling HDR post effects.\n");
         }
     }
 
