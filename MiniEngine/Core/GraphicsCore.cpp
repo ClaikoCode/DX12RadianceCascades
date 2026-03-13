@@ -298,7 +298,7 @@ void Graphics::Initialize(bool RequireDXRSupport)
 
         if (mainDisplayUsesHDR)
         {
-            Utility::Printf(L"Primary monitor identified to have HDR enabled. Enabling HDR post effects.\n");
+            Utility::Printf(L"Primary monitor identified to have HDR enabled. Enabling HDR PPFX.\n");
         }
     }
 
