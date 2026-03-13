@@ -118,36 +118,6 @@ struct ModelInstanceDesc
 	UpdateScript updateScript = {};
 };
 
-struct RadianceCascadesSettings
-{
-	// NOTE: Has to enforce int type
-	enum CascadeTextureVis : int
-	{
-		CascadeTextureVisNone = 0,
-		CascadeTextureVisGather,
-		CascadeTextureVisMerge,
-		CascadeTextureVisGatherFilter,
-	};
-
-	CascadeTextureVis currentTextureVis = CascadeTextureVisNone;
-	bool renderRC3D = true;
-	bool seeCoalesceResult = false;
-	int cascadeVisIndex = 0;
-	int cascadeFilterIndex = 0;
-	int cascadeVisResultIndex = -1; // Shows the result from a single cascade.
-
-	bool enableCascadeProbeVis = false;
-	int cascadeVisProbeIntervalIndex = 0;
-	int cascadeVisProbeSubset = 256;
-
-	bool usePreAveragedGather = true;
-
-	float rayLength0 = 5.0f;
-	int probeSpacing0 = 2;
-	int raysPerProbe0 = 16;
-	int maxCascadeCount = 8;
-};
-
 #define ENABLE_RT (false)
 #define ENABLE_RASTER (!ENABLE_RT)
 struct GlobalSettings
@@ -162,7 +132,7 @@ struct GlobalSettings
 	};
 
 	RenderMode renderMode = RenderModeRaster;
-	ResolutionTarget resolutionTarget = ResolutionTargetInvalid;
+	ResolutionTarget resolutionTarget = ResolutionTarget1080p;
 
 	bool renderDebugLines = ENABLE_DEBUG_DRAW;
 	bool useDepthCheckForDebugLines = false;
@@ -172,10 +142,34 @@ struct GlobalSettings
 	bool useSkybox = true;
 };
 
+struct RCRenderSettings
+{
+	bool renderRC3D = true;
+
+	// NOTE: Has to enforce int type
+	enum CascadeTextureVis : int
+	{
+		CascadeTextureVisNone = 0,
+		CascadeTextureVisGather,
+		CascadeTextureVisMerge,
+		CascadeTextureVisGatherFilter,
+	};
+
+	CascadeTextureVis currentTextureVis = CascadeTextureVisNone;
+	bool seeCoalesceResult = false;
+	int cascadeVisIndex = 0;
+	int cascadeFilterIndex = 0;
+	int cascadeVisResultIndex = -1; // Shows the result from a single cascade.
+
+	bool enableCascadeProbeVis = false;
+	int cascadeVisProbeIntervalIndex = 0;
+	int cascadeVisProbeSubset = 256;
+};
+
 struct AppSettings
 {
 	GlobalSettings globalSettings;
-	RadianceCascadesSettings rcSettings;
+	RCRenderSettings rcRenderSettings;
 };
 
 class RadianceCascades : public GameCore::IGameApp

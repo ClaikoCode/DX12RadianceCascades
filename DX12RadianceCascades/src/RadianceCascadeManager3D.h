@@ -13,11 +13,29 @@ struct ProbeDims
 	uint32_t probesY;
 };
 
+struct RC3DSettings
+{
+	bool useGatherFiltering = true;
+	bool useDepthAwareMerging = false;
+	
+	float rayLength0 = 5.0f;
+	
+	// These parameters require a rebuild if they are changed.
+	struct StaticParameters
+	{
+		int probeSpacing0 = 2;
+		int raysPerProbe0 = 16;
+		int maxCascadeCount = 8;
+
+		// Signifies that the cascade textures will be 1 / rayscalingfactor of the original size.
+		bool isUsingPreAveragedIntervals = true;
+	} staticParams;
+};
+
 class RadianceCascadeManager3D
 {
 public:
 	RadianceCascadeManager3D() = default;
-	RadianceCascadeManager3D(float rayLength0, bool usePreAverage);
 
 	void Generate(uint32_t raysPerProbe0, uint32_t probeSpacing0, uint32_t swapchainWidth, uint32_t swapchainHeight, uint32_t maxAllowedCascadeLevels = 8u);
 	// Calls Generate() using internal values with other width and height parameters.
@@ -29,7 +47,7 @@ public:
 	uint32_t GetRaysPerProbe(uint32_t cascadeIndex);
 	uint32_t GetProbeCount(uint32_t cascadeIndex);
 	ProbeDims GetProbeDims(uint32_t cascadeIndex);
-	uint32_t GetProbeSpacing() { return m_probeSpacing0; }
+	uint32_t GetProbeSpacing() { return m_rcSettings.staticParams.probeSpacing0; }
 
 	float GetStartT(uint32_t cascadeIndex);
 	float GetRayLength(uint32_t cascadeIndex);
@@ -43,9 +61,10 @@ public:
 	ReadbackBuffer& GetGatherFilterReadbackBuffer() { return m_gatherFilterReadbackBuffer; }
 	uint32_t GetProbeScalingFactor() const { return m_scalingFactor.probeScalingFactor; }
 	uint32_t GetRayScalingFactor() const { return m_scalingFactor.rayScalingFactor; }
-	float GetRayLength() { return m_rayLength0; }
-	void SetRayLength(float rayLength) { m_rayLength0 = rayLength; }
-	bool UsesPreAveragedIntervals() const { return isUsingPreAveragedIntervals; }
+	bool UsesPreAveragedIntervals() const { return m_rcSettings.staticParams.isUsingPreAveragedIntervals; }
+	bool UsesGatherFiltering() const { return m_rcSettings.useGatherFiltering; }
+
+	void SetGatherFiltering(bool useGatherFiltering) { m_rcSettings.useGatherFiltering = useGatherFiltering; }
 
 	ColorBuffer& GetCoalesceBuffer() { return m_coalescedResult; }
 
@@ -54,11 +73,7 @@ public:
 	// Will return the amount of rays that were filtered by a specific gather filter.
 	uint32_t GetFilteredRayCount(uint32_t filterIndex);
 
-public:
-	bool useGatherFiltering = true;
-	bool useDepthAwareMerging = false;
-	// Signifies that the cascade textures will be 1 / rayscalingfactor of the original size.
-	bool isUsingPreAveragedIntervals;
+	void DrawRCSettingsUI();
 
 private:
 
@@ -80,11 +95,14 @@ private:
 	// TODO: Move this to rcmanager3d as these resources heavily depend on its state. They should be re-generated if rc is re-generated.
 	ByteAddressBuffer m_gatherFilterByteAddressBuffer;
 	ReadbackBuffer m_gatherFilterReadbackBuffer;
-	uint32_t* m_gatherFilterReadbackBufferMappedPtr;
+	uint32_t* m_gatherFilterReadbackBufferMappedPtr = nullptr;
 
-	float m_rayLength0;
-	uint32_t m_raysPerProbe0 = 0u;
-	uint32_t m_probeSpacing0 = 0u;
 	uint32_t m_probeCount0X = 0u;
 	uint32_t m_probeCount0Y = 0u;
+
+	// Saved width and height since last Generate() call.
+	uint32_t m_swapchainWidth;
+	uint32_t m_swapchainHeight;
+
+	RC3DSettings m_rcSettings;
 };

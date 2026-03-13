@@ -190,10 +190,7 @@ namespace
 RadianceCascades::RadianceCascades()
 	: m_mainViewport({}), 
 	m_mainScissor({}), 
-	m_rcManager3D(
-		m_settings.rcSettings.rayLength0, 
-		m_settings.rcSettings.usePreAveragedGather
-	)
+	m_rcManager3D()
 {
 	m_sceneModels.reserve(MAX_INSTANCES);
 }
@@ -398,7 +395,7 @@ void RadianceCascades::RenderScene()
 	{
 		RenderRaster(Graphics::g_SceneColorBuffer, Graphics::g_SceneDepthBuffer, renderCamera, m_mainViewport, m_mainScissor);
 
-		if (m_settings.rcSettings.renderRC3D)
+		if (m_settings.rcRenderSettings.renderRC3D)
 		{
 			//if (m_settings.globalSettings.useDebugCam)
 			//{
@@ -411,27 +408,27 @@ void RadianceCascades::RenderScene()
 
 			RunRCGather(renderCamera, Graphics::g_SceneDepthBuffer);
 
-			if (m_settings.rcSettings.currentTextureVis == RadianceCascadesSettings::CascadeTextureVisGather)
+			if (m_settings.rcRenderSettings.currentTextureVis == RCRenderSettings::CascadeTextureVisGather)
 			{
-				FullScreenCopyCompute(m_rcManager3D.GetCascadeIntervalBuffer(m_settings.rcSettings.cascadeVisIndex), Graphics::g_SceneColorBuffer);
+				FullScreenCopyCompute(m_rcManager3D.GetCascadeIntervalBuffer(m_settings.rcRenderSettings.cascadeVisIndex), Graphics::g_SceneColorBuffer);
 			}
-			else if (m_settings.rcSettings.currentTextureVis == RadianceCascadesSettings::CascadeTextureVisGatherFilter)
+			else if (m_settings.rcRenderSettings.currentTextureVis == RCRenderSettings::CascadeTextureVisGatherFilter)
 			{
-				FullScreenCopyCompute(m_rcManager3D.GetCascadeGatherFilterBuffer(m_settings.rcSettings.cascadeFilterIndex), Graphics::g_SceneColorBuffer);
+				FullScreenCopyCompute(m_rcManager3D.GetCascadeGatherFilterBuffer(m_settings.rcRenderSettings.cascadeFilterIndex), Graphics::g_SceneColorBuffer);
 			}
 			else
 			{
 				RunRCMerge(renderCamera, m_minMaxDepthMips);
 
-				if (m_settings.rcSettings.currentTextureVis == RadianceCascadesSettings::CascadeTextureVisMerge)
+				if (m_settings.rcRenderSettings.currentTextureVis == RCRenderSettings::CascadeTextureVisMerge)
 				{
-					FullScreenCopyCompute(m_rcManager3D.GetCascadeIntervalBuffer(m_settings.rcSettings.cascadeVisIndex), Graphics::g_SceneColorBuffer);
+					FullScreenCopyCompute(m_rcManager3D.GetCascadeIntervalBuffer(m_settings.rcRenderSettings.cascadeVisIndex), Graphics::g_SceneColorBuffer);
 				}
 				else
 				{
 					RunRCCoalesce();
 
-					if (m_settings.rcSettings.seeCoalesceResult)
+					if (m_settings.rcRenderSettings.seeCoalesceResult)
 					{
 						FullScreenCopyCompute(m_rcManager3D.GetCoalesceBuffer(), Graphics::g_SceneColorBuffer);
 					}
@@ -447,7 +444,7 @@ void RadianceCascades::RenderScene()
 						);
 					}
 
-					if (m_rcManager3D.useGatherFiltering)
+					if (m_rcManager3D.UsesGatherFiltering())
 					{
 						RunComputeRCGatherFilterReduction();
 					}
@@ -1062,11 +1059,11 @@ void RadianceCascades::InitializeRCResources()
 		m_minMaxDepthMips.Create(L"Min Max Depth Mips", screenWidth / 2, screenHeight / 2, 0, DXGI_FORMAT_R32G32_FLOAT);
 
 		m_rcManager3D.Generate(
-			m_settings.rcSettings.raysPerProbe0, 
-			m_settings.rcSettings.probeSpacing0, 
+			16, 
+			2, 
 			screenWidth,
 			screenHeight,
-			m_settings.rcSettings.maxCascadeCount
+			8
 		);
 	}
 	
@@ -1258,9 +1255,9 @@ void RadianceCascades::RunRCGather(Camera& camera, DepthBuffer& sourceDepthBuffe
 #if defined(_DEBUG)
 
 			CascadeVisInfo cascadeVisInfo = {};
-			cascadeVisInfo.enableProbeVis = m_settings.rcSettings.enableCascadeProbeVis;
-			cascadeVisInfo.cascadeVisIndex = m_settings.rcSettings.cascadeVisProbeIntervalIndex;
-			cascadeVisInfo.probeSubset = m_settings.rcSettings.cascadeVisProbeSubset;
+			cascadeVisInfo.enableProbeVis = m_settings.rcRenderSettings.enableCascadeProbeVis;
+			cascadeVisInfo.cascadeVisIndex = m_settings.rcRenderSettings.cascadeVisProbeIntervalIndex;
+			cascadeVisInfo.probeSubset = m_settings.rcRenderSettings.cascadeVisProbeSubset;
 
 			rtContext.SetDynamicConstantBufferView(RootEntryRCRaytracingRTGRCVisCB, sizeof(CascadeVisInfo), &cascadeVisInfo);
 #endif
@@ -1280,10 +1277,10 @@ void RadianceCascades::RunRCGather(Camera& camera, DepthBuffer& sourceDepthBuffe
 		uint32_t baseCascade = 0;
 		uint32_t maxCascade = uint32_t(m_rcManager3D.GetCascadeIntervalCount());
 
-		int cascdeVisResultIndex = m_settings.rcSettings.cascadeVisResultIndex;
+		int cascdeVisResultIndex = m_settings.rcRenderSettings.cascadeVisResultIndex;
 		if (cascdeVisResultIndex > -1 && (uint32_t)cascdeVisResultIndex < maxCascade)
 		{
-			baseCascade = m_settings.rcSettings.cascadeVisResultIndex;
+			baseCascade = m_settings.rcRenderSettings.cascadeVisResultIndex;
 			maxCascade = baseCascade + 1;
 		}
 
@@ -1301,7 +1298,7 @@ void RadianceCascades::RunRCGather(Camera& camera, DepthBuffer& sourceDepthBuffe
 			const DescriptorHandle& rcBufferUAV = RuntimeResourceManager::GetDescCopy(cascadeBuffer.GetUAV());
 			rtCommandList->SetComputeRootDescriptorTable(RootEntryRCRaytracingRTGOutputUAV, rcBufferUAV);
 
-			if (m_rcManager3D.useGatherFiltering)
+			if (m_rcManager3D.UsesGatherFiltering())
 			{
 				// Last cascade has no higher cascade to filter.
 				if (cascadeIndex < m_rcManager3D.GetCascadeIntervalCount() - 1)
@@ -1689,7 +1686,7 @@ void RadianceCascades::DrawSettingsUI()
 		{
 			skyboxNames[i] = m_skyboxIDToName[(SkyboxID)i];
 		}
-		ImGui::Combo("Skyboxes", reinterpret_cast<int*>(&m_currentSkybox), skyboxNames.data(), skyboxNames.size());
+		ImGui::Combo("Skyboxes", reinterpret_cast<int*>(&m_currentSkybox), skyboxNames.data(), (int)skyboxNames.size());
 
 
 #if defined(_DEBUGDRAWING)
@@ -1706,216 +1703,57 @@ void RadianceCascades::DrawSettingsUI()
 		ImGui::Checkbox("Draw inactive profile graphs", &GPUProfiler::Get().profilerSettings.drawInactiveProfiles);
 	}
 #pragma endregion
-	
-#pragma region CascadeSettings
-	// TODO: This feels a bit backwards. Almost all settings are taken from the RC manager itself. 
-	// Maybe its better to just have a function in the rc manager that calls GUI functions?
+
+#pragma region RCSettings
 	if (ImGui::CollapsingHeader("Radiance Cascade Settings", ImGuiTreeNodeFlags_DefaultOpen))
 	{
+		ImGui::Checkbox("Render RC 3D", &m_settings.rcRenderSettings.renderRC3D);
 
-		RadianceCascadesSettings& rcs = m_settings.rcSettings;
-
-		ImGui::Checkbox("Render RC 3D", &rcs.renderRC3D);
-
-		if (rcs.renderRC3D)
+		if (m_settings.rcRenderSettings.renderRC3D)
 		{
-			bool shouldGenerateRCResources = false;
+			m_rcManager3D.DrawRCSettingsUI();
 
-			ImGui::Separator();
-
-			ImGui::Checkbox("Use Depth Aware Merging (WIP)", &m_rcManager3D.useDepthAwareMerging);
-			ImGui::Checkbox("Use Gather Filtering", &m_rcManager3D.useGatherFiltering);
-
-			bool prevPreAverageUsage = m_rcManager3D.isUsingPreAveragedIntervals;
-			if (ImGui::Checkbox("Use Pre Average Intervals", &m_rcManager3D.isUsingPreAveragedIntervals))
 			{
-				if (prevPreAverageUsage != m_rcManager3D.isUsingPreAveragedIntervals)
+				RCRenderSettings& rcrs = m_settings.rcRenderSettings;
+				int maxCascadeIntervalIndex = m_rcManager3D.GetCascadeIntervalCount() - 1;
+
+				ImGui::SeparatorText("Radiance Cascade Visualizations");
+
+				ImGui::Checkbox("See Coalesce Result", &rcrs.seeCoalesceResult);
+
+				ImGui::SliderInt("Cascade Result Index", &rcrs.cascadeVisResultIndex, -1, maxCascadeIntervalIndex);
+
+				ImGui::Checkbox("Visualize Probes", &rcrs.enableCascadeProbeVis);
+				if (rcrs.enableCascadeProbeVis)
 				{
-					shouldGenerateRCResources = true;
+					ImGui::SliderInt("Cascade Interval", &rcrs.cascadeVisProbeIntervalIndex, 0, maxCascadeIntervalIndex);
+					ImGui::SliderInt("Probe Subset", &rcrs.cascadeVisProbeSubset, 1, 256);
 				}
-			}
 
-			ImGui::SliderInt("Cascade Result Index", &rcs.cascadeVisResultIndex, -1, m_rcManager3D.GetCascadeIntervalCount() - 1);
+				ImGui::Text("Cascade Texture Visualization:");
+				int* visEnumToIntPtr = reinterpret_cast<int*>(&rcrs.currentTextureVis);
+				ImGui::RadioButton("None", visEnumToIntPtr, RCRenderSettings::CascadeTextureVisNone); ImGui::SameLine();
+				ImGui::RadioButton("Gather", visEnumToIntPtr, RCRenderSettings::CascadeTextureVisGather); ImGui::SameLine();
+				ImGui::RadioButton("Merge", visEnumToIntPtr, RCRenderSettings::CascadeTextureVisMerge); ImGui::SameLine();
+				ImGui::RadioButton("Gather Filter", visEnumToIntPtr, RCRenderSettings::CascadeTextureVisGatherFilter);
 
-			if (ImGui::SliderFloat("Ray Length", &rcs.rayLength0, 0.1f, 250.0f))
-			{
-				m_rcManager3D.SetRayLength(rcs.rayLength0);
-			}
-
-			// Rays per probe settings
-			{
-				ImGui::AlignTextToFramePadding();
-				ImGui::Text("Rays per probe 0:");
-				ImGui::SameLine();
-
-				ImGui::RadioButton("4", &rcs.raysPerProbe0, 4); ImGui::SameLine();
-				ImGui::RadioButton("16", &rcs.raysPerProbe0, 16); ImGui::SameLine();
-				ImGui::RadioButton("36", &rcs.raysPerProbe0, 36); ImGui::SameLine();
-				ImGui::RadioButton("64", &rcs.raysPerProbe0, 64);
-
-				if (m_rcManager3D.GetRaysPerProbe(0) != rcs.raysPerProbe0)
+				if (rcrs.currentTextureVis != RCRenderSettings::CascadeTextureVisNone)
 				{
-					shouldGenerateRCResources = true;
-				}
-			}
-
-			// Probe spacing settings
-			{
-				ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x * 0.2f);
-				if (ImGui::InputInt("Probe Spacing [1 - 16]", &rcs.probeSpacing0, 1, 0))
-				{
-					rcs.probeSpacing0 = int(Math::Clamp(float(rcs.probeSpacing0), 1.0f, 16.0f));
-
-					if (m_rcManager3D.GetProbeSpacing() != rcs.probeSpacing0)
+					if (rcrs.currentTextureVis == RCRenderSettings::CascadeTextureVisGatherFilter)
 					{
-						shouldGenerateRCResources = true;
+						static int correspondingCascadeIndexForFilter = 1;
+						ImGui::SliderInt("Cascade Index", &correspondingCascadeIndexForFilter, 1, maxCascadeIntervalIndex);
+						rcrs.cascadeFilterIndex = correspondingCascadeIndexForFilter - 1;
 					}
-				}
-			}
-			
-			// Max cascade count settings
-			{
-				ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x * 0.2f);
-				int prevMaxCascadeCount = rcs.maxCascadeCount;
-				if (ImGui::InputInt("Max Cascade Count [1 - 10]", &rcs.maxCascadeCount, 1, 0))
-				{
-					rcs.maxCascadeCount = int(Math::Clamp(float(rcs.maxCascadeCount), 1.0f, 10.0f));
-
-					if (prevMaxCascadeCount != rcs.maxCascadeCount)
+					else
 					{
-						shouldGenerateRCResources = true;
+						ImGui::SliderInt("Cascade Index", &rcrs.cascadeVisIndex, 0, maxCascadeIntervalIndex);
 					}
-				}
-			}
-			
-
-			if (shouldGenerateRCResources)
-			{
-				m_rcManager3D.Generate(
-					rcs.raysPerProbe0, 
-					rcs.probeSpacing0, 
-					::GetSceneColorWidth(), 
-					::GetSceneColorHeight(),
-					rcs.maxCascadeCount
-				);
-			}
-
-			const ColorBuffer& cascade0Buffer = m_rcManager3D.GetCascadeIntervalBuffer(0);
-			const uint32_t cascadeResolutionWidth = cascade0Buffer.GetWidth();
-			const uint32_t cascadeResolutionHeight = cascade0Buffer.GetHeight();
-
-			ImGui::Text("Cascade Count: %u", m_rcManager3D.GetCascadeIntervalCount());
-			ImGui::Text("Using pre-averaging: %s", m_rcManager3D.UsesPreAveragedIntervals() ? "Yes" : "No");
-			uint64_t rcVRAMUsage = m_rcManager3D.GetTotalVRAMUsage();
-			ImGui::Text("Vram usage: %.1f MB", rcVRAMUsage / (float)MemoryUnit::MegaByte);
-
-			// Create a table with 6 columns: Cascade, Buffer Resolution, Probe Count, Ray Count, Start Dist, Length
-			uint32_t cascadeTableHeaderCount = 6;
-			// One extra on the end if gather filtering is used.
-			if (m_rcManager3D.useGatherFiltering) { cascadeTableHeaderCount++; }
-
-			if (ImGui::BeginTable("CascadeTable", cascadeTableHeaderCount, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_NoHostExtendX))
-			{
-				ImGui::TableSetupColumn("Cascade", ImGuiTableColumnFlags_WidthFixed);
-				ImGui::TableSetupColumn("Buffer Resolution", ImGuiTableColumnFlags_WidthFixed);
-				ImGui::TableSetupColumn("Probe Count", ImGuiTableColumnFlags_WidthFixed);
-				ImGui::TableSetupColumn("Rays Per Probe", ImGuiTableColumnFlags_WidthFixed);
-				ImGui::TableSetupColumn("Ray Start Distance", ImGuiTableColumnFlags_WidthFixed);
-				ImGui::TableSetupColumn("Ray Length", ImGuiTableColumnFlags_WidthFixed);
-				if(m_rcManager3D.useGatherFiltering) { ImGui::TableSetupColumn("Filtered Rays", ImGuiTableColumnFlags_WidthFixed); }
-				ImGui::TableHeadersRow();
-
-				// Add a row for each cascade
-				for (unsigned int i = 0; i < m_rcManager3D.GetCascadeIntervalCount(); i++) {
-					ImGui::TableNextRow();
-
-					// Cascade column
-					ImGui::TableSetColumnIndex(0);
-					ImGui::Text("%u", i);
-
-					// Cascade Resolution column
-					const ColorBuffer& cascadeBuffer = m_rcManager3D.GetCascadeIntervalBuffer(i);
-					ImGui::TableSetColumnIndex(1);
-					ImGui::Text("%u x %u", cascadeBuffer.GetWidth(), cascadeBuffer.GetHeight());
-
-					// Probe Count column
-					//uint32_t cascadeCountPerDim = m_rcManager3D.GetProbeCountPerDim(i);
-					ProbeDims cascadeCountPerDim = m_rcManager3D.GetProbeDims(i);
-					ImGui::TableSetColumnIndex(2);
-					ImGui::Text("%u x %u", cascadeCountPerDim.probesX, cascadeCountPerDim.probesY);
-
-					// Rays Per Probe column
-					ImGui::TableSetColumnIndex(3);
-					ImGui::Text("%u", m_rcManager3D.GetRaysPerProbe(i));
-
-					// Ray Start Distance column
-					ImGui::TableSetColumnIndex(4);
-					ImGui::Text("%.1f", m_rcManager3D.GetStartT(i));
-
-					// Ray Length column
-					ImGui::TableSetColumnIndex(5);
-					ImGui::Text("%.1f", m_rcManager3D.GetRayLength(i));
-
-					if (m_rcManager3D.useGatherFiltering)
-					{
-						ImGui::TableSetColumnIndex(6);
-						if (i == 0)
-						{
-							ImGui::Text("n/a");
-						}
-						else
-						{
-							int gatherFilterIndex = i - 1;
-							ColorBuffer& gatherFilterTexture = m_rcManager3D.GetCascadeGatherFilterBuffer(gatherFilterIndex);
-							uint32_t gatherFilterReductionSum = m_rcManager3D.GetFilteredRayCount(gatherFilterIndex);
-							
-							uint32_t totalRays = gatherFilterTexture.GetWidth() * gatherFilterTexture.GetHeight();
-							uint32_t filteredRayCount = totalRays - gatherFilterReductionSum;
-
-							ImGui::Text("%u (%.2f%%)", filteredRayCount, 100.0f * filteredRayCount / totalRays);
-						}
-					}
-				}
-
-				ImGui::EndTable();
-			}
-
-			ImGui::SeparatorText("Radiance Cascade Visualizations");
-
-			ImGui::Checkbox("See Coalesce Result", &rcs.seeCoalesceResult);
-
-			ImGui::Checkbox("Visualize Probes", &rcs.enableCascadeProbeVis);
-			if (rcs.enableCascadeProbeVis)
-			{
-				ImGui::SliderInt("Cascade Interval", &rcs.cascadeVisProbeIntervalIndex, 0, m_rcManager3D.GetCascadeIntervalCount() - 1);
-				ImGui::SliderInt("Probe Subset", &rcs.cascadeVisProbeSubset, 1, 256);
-			}
-
-			ImGui::Text("Cascade Texture Visualization:");
-			int* visEnumToIntPtr = reinterpret_cast<int*>(&rcs.currentTextureVis);
-			ImGui::RadioButton("None", visEnumToIntPtr, RadianceCascadesSettings::CascadeTextureVisNone); ImGui::SameLine();
-			ImGui::RadioButton("Gather", visEnumToIntPtr, RadianceCascadesSettings::CascadeTextureVisGather); ImGui::SameLine();
-			ImGui::RadioButton("Merge", visEnumToIntPtr, RadianceCascadesSettings::CascadeTextureVisMerge); ImGui::SameLine();
-			ImGui::RadioButton("Gather Filter", visEnumToIntPtr, RadianceCascadesSettings::CascadeTextureVisGatherFilter);
-
-			if (rcs.currentTextureVis != RadianceCascadesSettings::CascadeTextureVisNone)
-			{
-				if (rcs.currentTextureVis == RadianceCascadesSettings::CascadeTextureVisGatherFilter)
-				{
-					static int correspondingCascadeIndexForFilter = 1;
-					ImGui::SliderInt("Cascade Index", &correspondingCascadeIndexForFilter, 1, m_rcManager3D.GetCascadeIntervalCount() - 1);
-					rcs.cascadeFilterIndex = correspondingCascadeIndexForFilter - 1;
-				}
-				else
-				{
-					ImGui::SliderInt("Cascade Index", &rcs.cascadeVisIndex, 0, m_rcManager3D.GetCascadeIntervalCount() - 1);
 				}
 			}
 		}
 	}
 #pragma endregion
-
-
 	
 	ImGui::End();
 }

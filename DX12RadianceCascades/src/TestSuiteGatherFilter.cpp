@@ -155,7 +155,7 @@ void TestSuiteGatherFilter::OnCaseBegin(const TestCase& testCase)
 		maxCascadeLevel
 	);
 
-	m_rcManager3D.useGatherFiltering = inputs.useGatherFilter;
+	m_rcManager3D.SetGatherFiltering(inputs.useGatherFilter);
 
 	const CameraTransform& camTransform = sScenarioTransforms[inputs.scenario];
 	m_camera.SetEyeAtUp(camTransform.pos, camTransform.pos + camTransform.lookDir, Math::Vector3(Math::kYUnitVector));
