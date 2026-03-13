@@ -37,18 +37,10 @@ float4 main(Interpolators i) : SV_TARGET
     float4 finalColor = float4(1.0f, 1.0f, 0.0f, 1.0f);
     
     // If normals match the buffers clear value, the pixel has not written any depth information. 
-    
     if(IsZero(normals.rgb))
     {
-        // Apply the background color.
-        finalColor = float4(0.0f, 0.0f, 0.0f, 1.0f);
-        
-        // TODO: Fix bug where at the edges of geometry normals will be 0 but 
-        // there will still be an albedo color present pertaining to geometry instead of skybox.
-        if(globalInfo.useSkybox)
-        {
-            finalColor = float4(albedo.rgb, 1.0f);
-        }
+        // Keep the color of the render target.
+        finalColor = float4(0.0f, 0.0f, 0.0f, 0.0f);
     }
     // Alpha value informs if this pixel was emissive or not. 
     else if(normals.a == 1.0f) 
@@ -145,7 +137,7 @@ float4 main(Interpolators i) : SV_TARGET
             else
             {
                 float4 radiance = diffuseRadianceBuffer.Sample(linearSampler, uv);
-                finalColor = float4(albedo.rgb, 1.0f) * radiance;
+                finalColor = float4(albedo.rgb * radiance.rgb, 1.0f);
             }
         }
     }
