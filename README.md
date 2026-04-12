@@ -13,8 +13,8 @@ The project was part of my master thesis:
     * RTPSO that mirrors MiniEngine's regular PSO abstractions.
     * A BLAS and TLAS builder that follows geometry data structure from MiniEngine's model loader.
 * Hardware accelerated raytracing implementation of RC:
-    * Probes are placed in world space, with its position calculated from the depth buffer.
-    * One invocation of raytracing shader per probe ray for each probe.
+    * Uses Screen-space Probes with World-space cascade Intervals (SPWI), which captures emissive sources off-screen.
+    * Highest cascade interval samples HDR skybox texture to create diffuse environmental lighting.
     * Simple deferred rendering combined with RC output to solve for global illumination.
 * A custom shader compiler using DirectX Shader Compiler DLL for compiling HLSL programs:
     * Watches for file updates on a separate thread.
@@ -35,7 +35,7 @@ The project was part of my master thesis:
 2. Select configuration: **Release** or **Debug** (console output, allocation of debug visualization resources, no compiler optimizations)
 3. Build solution and run
 
-If you want to change resolution (defaulted to 1080p) find `Display.cpp` and change the preprocessor macro starting with RES_ to the desired resolution. Recompile to apply. 
+There is a setting at the top of the GUI for changing resultion (defaulted to 1080p).
 
 For higher resolution monitors, it is recommended to enable *larger font scale* from the *global settings* menu in the *UI* section (during runtime).
 
