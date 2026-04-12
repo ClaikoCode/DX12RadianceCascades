@@ -199,7 +199,6 @@ void RayGenerationShader()
         // If gather rays are not full occluded, they will be used in cascade merging: write a flag telling next cascade that it should not ignore gathering.
         // Because the last cascade will not be included in the filtering step, the last upper cascade to be filtered should be the one before it.
         if (radianceOutput.a > 0.0f && cascadeInfo.cascadeIndex < (rcGlobals.cascadeCount - 1))
-        //if (radianceOutput.a > 0.0f && cascadeInfo.cascadeIndex < (rcGlobals.cascadeCount - 1))
         { 
             int2 translationDims = sqrt(rcGlobals.rayScalingFactor);
             for (int i = 0; i < rcGlobals.rayScalingFactor; i++)

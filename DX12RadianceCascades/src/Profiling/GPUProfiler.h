@@ -55,7 +55,7 @@ struct PerfProfile
 
 	float GetLastSample() const
 	{
-		return timeSamples[(currentSampleCount + MaxFrametimeSampleCount - 1u) % MaxFrametimeSampleCount];
+		return timeSamples[(currentSampleCount - 1u + MaxFrametimeSampleCount) % MaxFrametimeSampleCount];
 	}
 };
 

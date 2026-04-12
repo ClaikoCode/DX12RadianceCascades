@@ -207,10 +207,7 @@ void GPUProfiler::UpdatePerformanceProfiles(uint64_t timestampFrequency)
 		uint64_t endTime = m_queryHeapMemory[queryStartIndex + 1];
 
 		double frameTimeMS = double(endTime - startTime) / timestampFrequency * 1000.0;
-		perfProfile.timeSamples[perfProfile.currentSampleCount++] = (float)frameTimeMS;
-
-		// Circlular buffer adjustment.
-		perfProfile.currentSampleCount = perfProfile.currentSampleCount % MaxFrametimeSampleCount;
+		perfProfile.timeSamples[perfProfile.currentSampleCount++ % MaxFrametimeSampleCount] = (float)frameTimeMS;
 	}
 }
 
@@ -255,9 +252,7 @@ void GPUProfiler::DrawProfilerUI()
 				continue;
 			}
 
-			// Moved by MaxSampleCount to avoid underflow if current sample count is 0.
-			const uint32_t lastSampleIndex = (perfProfile.currentSampleCount + MaxFrametimeSampleCount - 1) % MaxFrametimeSampleCount;
-			float lastSampleTime = perfProfile.timeSamples[lastSampleIndex];
+			float lastSampleTime = perfProfile.GetLastSample();
 
 			float timeSum = 0.0f;
 			for (float timeSample : perfProfile.timeSamples)
@@ -314,7 +309,6 @@ void GPUProfiler::ClearProfiles()
 {
 	for (uint32_t i = 0u; i < m_profileCount; i++)
 	{
-		const uint32_t queryStartIndex = i * 2;
 		PerfProfile& perfProfile = m_profiles[i];
 
 		ASSERT(perfProfile.isQuerying == false);
@@ -322,7 +316,6 @@ void GPUProfiler::ClearProfiles()
 		perfProfile.currentSampleCount = 0u;
 		perfProfile.timeSamples.fill(0.0f);
 	}
-
 }
 
 PerfProfileBlock::PerfProfileBlock(CommandContext& commandContext, const char* name)

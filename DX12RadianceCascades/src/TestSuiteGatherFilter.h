@@ -8,6 +8,9 @@
 #include <unordered_map>
 #include <array>
 
+// Constant max level cascades for all tests.
+constexpr uint32_t TestSuiteGatherFilterMaxCascadeCount = 6u;
+
 struct TestSuiteGatherFilterInputs
 {
 	enum Scenario
@@ -28,7 +31,8 @@ struct TestSuiteGatherFilterInputs
 
 struct TestSuiteGatherFilterOutputs
 {
-	std::unordered_map<const char*, std::array<float, 128>> frameTimes;
+	std::unordered_map<const char*, std::array<float, 1024>> frameTimes;
+	std::array<float, TestSuiteGatherFilterMaxCascadeCount - 1u> filteredRayProportions;
 };
 
 class TestSuiteGatherFilter : public TestSuite<TestSuiteGatherFilterInputs, TestSuiteGatherFilterOutputs>

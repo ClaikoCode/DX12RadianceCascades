@@ -47,6 +47,7 @@ public:
 	uint32_t GetRaysPerProbe(uint32_t cascadeIndex);
 	uint32_t GetProbeCount(uint32_t cascadeIndex);
 	ProbeDims GetProbeDims(uint32_t cascadeIndex);
+	uint32_t GetTotalRays(uint32_t cascadeIndex);
 	uint32_t GetProbeSpacing() { return m_rcSettings.staticParams.probeSpacing0; }
 
 	float GetStartT(uint32_t cascadeIndex);

@@ -33,12 +33,18 @@ static const std::array<const wchar_t*, ResolutionTargetCount> sResolutionNames 
 	L"2160p"
 }};
 
+// These are the only profiles of interest.
+static const std::vector<const char*> sRelevantProfileNames = {
+	"RC Gather",
+	"RC Merge Pass",
+	"Diffuse Lighting"
+};
 
 TestSuiteGatherFilter::TestSuiteGatherFilter(RadianceCascades& radianceCascades, RadianceCascadeManager3D& rcManager3D, Math::Camera& camera)
 	: m_rcManager3D(rcManager3D), m_radianceCascades(radianceCascades), m_camera(camera)
 {
-	std::vector<uint32_t> raysPerProbe0Vals = { 16, 64 };
-	std::vector<uint32_t> probeSpacing0Vals = { 1, 2 };
+	std::vector<uint32_t> raysPerProbe0Vals = { 16 };
+	std::vector<uint32_t> probeSpacing0Vals = { 1 };
 	std::vector<bool> useGatherFilterVals = { false, true };
 	std::vector<MeasurementScenario> scenarios = {
 		MeasurementScenario::ScenarioLowOcclusion,
@@ -73,7 +79,6 @@ TestSuiteGatherFilter::TestSuiteGatherFilter(RadianceCascades& radianceCascades,
 			}
 		}
 	}
-	
 }
 
 void TestSuiteGatherFilter::OutputTestSuiteToCSV()
@@ -92,10 +97,16 @@ void TestSuiteGatherFilter::OutputTestSuiteToCSV()
 		// Add names for each column in the CSV file.
 		fileStream << L"RaysPerProbe,ProbeSpacing,UseGatherFilter,Scenario,Resolution";
 
-		// Add names of each average frame time as headers.
+		// Add names of each frame time profile as headers.
 		for (const auto& [profileName, _] : m_testCases[0].outputs.frameTimes)
 		{
 			fileStream << L"," << profileName;
+		}
+
+		// Add columns for the filtered ray count for each gather filter.
+		for (uint32_t i = 0u; i < m_rcManager3D.GetGatherFilterCount(); i++)
+		{
+			fileStream << ",RaysFilteredProportion" << i;
 		}
 
 		// Add column for frame number for the measurements
@@ -129,6 +140,11 @@ void TestSuiteGatherFilter::OutputTestSuiteToCSV()
 				fileStream << frameTimes[frameIndex] << L",";
 			}
 
+			for (uint32_t i = 0u; i < testCase.outputs.filteredRayProportions.size(); i++)
+			{
+				fileStream << testCase.outputs.filteredRayProportions[i] << L",";
+			}
+
 			fileStream << frameIndex;
 
 			fileStream << L"\n";
@@ -145,14 +161,12 @@ void TestSuiteGatherFilter::OnCaseBegin(const TestCase& testCase)
 	uint32_t width, height;
 	ResolutionTargetToDimensions(inputs.resolution, width, height);
 
-	// Constant max level cascades for all tests.
-	const uint32_t maxCascadeLevel = 6u;
 	m_rcManager3D.Generate(
 		inputs.raysPerProbe0,
 		inputs.probeSpacing0,
 		width,
 		height,
-		maxCascadeLevel
+		TestSuiteGatherFilterMaxCascadeCount
 	);
 
 	m_rcManager3D.SetGatherFiltering(inputs.useGatherFilter);
@@ -186,7 +200,15 @@ bool TestSuiteGatherFilter::OnCaseTick(TestCase& testCase)
 			continue;
 		}
 
-		testCase.outputs.frameTimes[profile.name][m_framesCollected] = profile.GetLastSample();
+		// Search if profile name can be found.
+		for (const char* renderPassName : sRelevantProfileNames)
+		{
+			if (strcmp(renderPassName, profile.name) == 0)
+			{
+				testCase.outputs.frameTimes[profile.name][m_framesCollected] = profile.GetLastSample();
+				break;
+			}
+		}
 	}
 
 	m_framesCollected++;
@@ -197,5 +219,19 @@ bool TestSuiteGatherFilter::OnCaseTick(TestCase& testCase)
 
 void TestSuiteGatherFilter::OnCaseCompleted(TestCase& testCase)
 {
-	
+	if (testCase.inputs.useGatherFilter == false)
+	{
+		testCase.outputs.filteredRayProportions.fill(0.0f);
+		return;
+	}
+
+	ASSERT(m_rcManager3D.GetGatherFilterCount() == testCase.outputs.filteredRayProportions.size());
+
+	for (uint32_t i = 0; i < m_rcManager3D.GetGatherFilterCount(); i++)
+	{
+		uint32_t filteredRayCount = m_rcManager3D.GetFilteredRayCount(i);
+		uint32_t totalRays = m_rcManager3D.GetTotalRays(i + 1);
+
+		testCase.outputs.filteredRayProportions[i] = (float)filteredRayCount / totalRays;
+	}
 }

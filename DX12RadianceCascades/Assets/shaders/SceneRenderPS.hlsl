@@ -104,14 +104,13 @@ PSOutput main(VSOutput vsOutput)
     
     float3 finalColor = baseColor.rgb + emissiveColor;
     
-    PSOutput psOutput;
-    
     float isEmissive = 0.0f;
-    if (length(emissiveColor) > 0.0f)
+    if (!IsZero(emissiveColor))
     {
         isEmissive = 1.0f;
     }
     
+    PSOutput psOutput;
     psOutput.albedoBuffer = float4(finalColor, 1.0f);
     //psOutput.albedoBuffer = float4(baseColor.rgb, 1.0f);
     // Store emissiveness in normal buffer.

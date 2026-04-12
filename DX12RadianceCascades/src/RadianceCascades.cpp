@@ -313,6 +313,12 @@ void RadianceCascades::Update(float deltaT)
 		m_settings.globalSettings.renderUI = !m_settings.globalSettings.renderUI;
 	}
 
+	if (GameInput::IsFirstPressed(GameInput::kKey_o))
+	{
+		bool usesGatherFiltering = m_rcManager3D.UsesGatherFiltering();
+		m_rcManager3D.SetGatherFiltering(!usesGatherFiltering);
+	}
+
 #endif
 
 
@@ -336,6 +342,7 @@ void RadianceCascades::Update(float deltaT)
 			else
 			{
 				sShouldWaitNextAvailableFrame = false;
+				GPUProfiler::Get().ClearProfiles();
 			}
 			
 		}
@@ -502,9 +509,6 @@ void RadianceCascades::RenderScene()
 				nullptr
 			));
 
-			// Clear profile data.
-			GPUProfiler::Get().ClearProfiles();
-
 			LOG_INFO(L"GPU driver optimizations have been applied and disabled for the rest of the testing suite.");
 		}
 	}
@@ -635,11 +639,26 @@ void RadianceCascades::InitializeScene()
 {
 	GPU_MEMORY_BLOCK("Scene");
 
+
+	struct CameraTransform
+	{
+		Math::Vector3 pos;
+		Math::Vector3 lookDir;
+	};
+
+	// These positions and directions were gathered at different parts of the scene and then rounded.
+	static const std::array<CameraTransform, 3> sScenarioTransforms = { {
+		{ Math::Vector3(-1280.0f, -435.0f, -345.0f), Math::Vector3(0.85f, 0.0f, 0.5f) },
+		{ Math::Vector3(-650.0f, -500.0f, 0.0f), Math::Vector3(1.0f, 0.0f, 0.0f) },
+		{ Math::Vector3(-2180.0f, 2100.0f, -1300.0f), Math::Vector3(0.8f, -0.35f, 0.50f) }
+	} };
+
+
 	// Super lazy, I know.
-	int sceneIndex = 6;
+	int sceneIndex = 4;
 
 #if defined(RUN_TESTS)
-	sceneIndex = 3; 
+	sceneIndex = 5; 
 #endif
 
 	if (sceneIndex == 0) // Default scene
@@ -675,13 +694,30 @@ void RadianceCascades::InitializeScene()
 	{
 		AddSceneModel(ModelIDLantern, { 100.0f });
 	}
-	else if (sceneIndex == 3) // Testing scene
+	else if (sceneIndex == 3) // Testing scene masters
 	{
 		AddSceneModel(ModelIDSponza, { 100.0f, Vector3(0.0f, 0.0f, 0.0f) });
 
 		Math::Vector3 modelCenter = GetMainSceneModelCenter();
 		float yPos = -100.0f;
 		AddSceneModel(ModelIDSphereTest, { 130.0f, Vector3(0.0f, yPos, 0.0f) + modelCenter, {}, ::BScriptPosOscillation });
+	}
+	else if (sceneIndex == 4) // Alternate testing scene methodology
+	{
+		AddSceneModel(ModelIDSponza, { 100.0f, Vector3(0.0f, 0.0f, 0.0f) });
+		AddSceneModel(ModelIDSphereTest, { 30.0f, Vector3(-1144.8726f, -500.7697f, -413.66125f), {} });
+
+		Math::Vector3 modelCenter = GetMainSceneModelCenter();
+		float yPos = 300.0f;
+		AddSceneModel(ModelIDSphereTest, { 130.0f, Vector3(0.0f, yPos, 0.0f) + modelCenter, {} });
+	}
+	else if (sceneIndex == 5) // Testing scene methodology
+	{
+		AddSceneModel(ModelIDSponza, { 100.0f, Vector3(0.0f, 0.0f, 0.0f) });
+
+		Math::Vector3 modelCenter = GetMainSceneModelCenter();
+		float yPos = -100.0f;
+		AddSceneModel(ModelIDSphereTest, { 130.0f, Vector3(0.0f, yPos, 0.0f) + modelCenter, {}});
 	}
 	else if (sceneIndex == 6) // Presentation photos
 	{
@@ -698,12 +734,20 @@ void RadianceCascades::InitializeScene()
 		m_camera.SetAspectRatio(heightOverWidth);
 		m_camera.SetFOV(Utils::HorizontalFovToVerticalFov(Math::XMConvertToRadians(CAM_FOV), 1.0f / heightOverWidth));
 
+		if (sceneIndex == 4)
+		{
+			auto transform = sScenarioTransforms[2];
+			m_camera.SetEyeAtUp(transform.pos, transform.lookDir, Vector3(kYUnitVector));
+		}
+		else
+		{
+			Vector3 modelCenter = GetMainSceneModelCenter();
+			m_camera.SetEyeAtUp(Vector3(0.0f, -560.0f, -200.0f), modelCenter - Vector3(0.0f, 300.0f, 0.0f), Vector3(kYUnitVector));
+			//m_camera.SetEyeAtUp(Vector3(-250.0f, -325.0f, 0.0f), Vector3(0.0f, -550.0f, 0.0f), Vector3(kYUnitVector));
+			
+		}
 		
-		Vector3 modelCenter = GetMainSceneModelCenter();
-		m_camera.SetEyeAtUp(Vector3(0.0f, -560.0f, -200.0f), modelCenter - Vector3(0.0f, 300.0f, 0.0f), Vector3(kYUnitVector));
-		//m_camera.SetEyeAtUp(Vector3(-250.0f, -325.0f, 0.0f), Vector3(0.0f, -550.0f, 0.0f), Vector3(kYUnitVector));
 		m_camera.SetZRange(0.5f, 5000.0f);
-		
 		m_cameraController.reset(new FlyingFPSCamera(m_camera, Vector3(kYUnitVector)));
 	}
 }

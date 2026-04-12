@@ -188,6 +188,11 @@ ProbeDims RadianceCascadeManager3D::GetProbeDims(uint32_t cascadeIndex)
 	return probeDims;
 }
 
+uint32_t RadianceCascadeManager3D::GetTotalRays(uint32_t cascadeIndex)
+{
+	return GetProbeCount(cascadeIndex) * GetRaysPerProbe(cascadeIndex);
+}
+
 float RadianceCascadeManager3D::GetStartT(uint32_t cascadeIndex)
 {
 	float startT = Math::GeometricSeriesSum(GetRayLength(0), (float)m_scalingFactor.rayScalingFactor, (float)cascadeIndex);
@@ -227,7 +232,19 @@ uint32_t RadianceCascadeManager3D::GetFilteredRayCount(uint32_t filterIndex)
 {
 	ASSERT(m_gatherFilterReadbackBufferMappedPtr != nullptr && filterIndex < GetGatherFilterCount());
 
-	return m_gatherFilterReadbackBufferMappedPtr[filterIndex];
+	const ColorBuffer& filterBuffer = GetCascadeGatherFilterBuffer(filterIndex);
+	const uint32_t totalRays = filterBuffer.GetWidth() * filterBuffer.GetHeight();
+
+	// The reduction gives how many rays were NOT filtered so they are removed from total to get actual filtered rays.
+	uint32_t filteredRayCount = totalRays - m_gatherFilterReadbackBufferMappedPtr[filterIndex];
+
+	// Each ray generation shader dispatches 4 rays if pre averaged intervals is on.
+	if (m_rcSettings.staticParams.isUsingPreAveragedIntervals)
+	{
+		filteredRayCount *= 4;
+	}
+
+	return filteredRayCount;
 }
 
 void RadianceCascadeManager3D::DrawRCSettingsUI()
@@ -237,7 +254,7 @@ void RadianceCascadeManager3D::DrawRCSettingsUI()
 	ImGui::Separator();
 
 	ImGui::Checkbox("Use Depth Aware Merging (WIP)", &m_rcSettings.useDepthAwareMerging);
-	ImGui::Checkbox("Use Gather Filtering", &m_rcSettings.useGatherFiltering);
+	ImGui::Checkbox("Use Gather Filtering (toggle with 'o')", &m_rcSettings.useGatherFiltering);
 
 	ImGui::Checkbox("Use Pre Average Intervals", &m_rcSettings.staticParams.isUsingPreAveragedIntervals);
 
@@ -353,13 +370,9 @@ void RadianceCascadeManager3D::DrawRCSettingsUI()
 				}
 				else
 				{
-					int gatherFilterIndex = i - 1;
-					ColorBuffer& gatherFilterTexture = GetCascadeGatherFilterBuffer(gatherFilterIndex);
-					uint32_t gatherFilterReductionSum = GetFilteredRayCount(gatherFilterIndex);
-
-					uint32_t totalRays = gatherFilterTexture.GetWidth() * gatherFilterTexture.GetHeight();
-					uint32_t filteredRayCount = totalRays - gatherFilterReductionSum;
-
+					uint32_t filteredRayCount = GetFilteredRayCount(i - 1);
+					uint32_t totalRays = GetTotalRays(i);
+					
 					ImGui::Text("%u (%.2f%%)", filteredRayCount, 100.0f * filteredRayCount / totalRays);
 				}
 			}
