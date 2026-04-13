@@ -98,6 +98,7 @@ RuntimeResourceManager::RuntimeResourceManager() : m_psoMap({})
 		AddModelImpl(ModelIDSponza, L"models\\Sponza\\PBR\\sponza2.gltf", true);
 		AddModelImpl(ModelIDSphereTest, L"models\\Testing\\SphereTest.gltf", true);
 		AddModelImpl(ModelIDLantern, L"models\\Lantern\\Lantern.gltf", true);
+		AddModelImpl(ModelIDBeautifulGame, L"models\\ABeautifulGame\\ABeautifulGame.gltf", true);
 	}
 }
 

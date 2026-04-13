@@ -6,6 +6,11 @@
 
 using namespace Microsoft::WRL;
 
+struct alignas(D3D12_RAYTRACING_TRANSFORM3X4_BYTE_ALIGNMENT) AffineRowMaj3x4
+{
+	float data[sizeof(float) * 3 * 4];
+};
+
 constexpr uint32_t MaxInstanceDescriptions = 512u;
 constexpr D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS DefaultTLASBuildFlags =
 	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE | 
@@ -25,6 +30,54 @@ void BLASBuffer::Init(std::shared_ptr<Model> modelPtr)
 	const Model& model = *m_modelPtr;
 	const uint32_t numMeshes = model.m_NumMeshes;
 	const Mesh* meshPtr = (const Mesh*)model.m_MeshData.get();
+
+	UploadBuffer matrixBuffer = UploadBuffer();
+	matrixBuffer.Create(L"BLAS Matrix Buffer", sizeof(AffineRowMaj3x4) * model.m_NumNodes);
+	AffineRowMaj3x4* matrixBufferPtr = (AffineRowMaj3x4*)matrixBuffer.Map();
+	
+	const GraphNode* sceneGraph = m_modelPtr->m_SceneGraph.get();
+
+	// The section below is largely copied from Model.cpp on traversing the 
+	// scene graph when updating scene model transforms.
+	static const size_t kMaxStackDepth = 32;
+
+	size_t stackIdx = 0;
+	Math::Matrix4 matrixStack[kMaxStackDepth];
+	Math::Matrix4 parentMatrix = Math::Matrix4(Math::kIdentity);
+	
+	int iterations = 0;
+	for (const GraphNode* node = sceneGraph; ; ++node)
+	{
+		iterations++;
+
+		Math::Matrix4 xform = node->xform;
+		if (!node->skeletonRoot)
+			xform = parentMatrix * xform;
+
+		Math::Matrix4 transposed = Math::Transpose(xform);
+		float* rowMajTransformData = reinterpret_cast<float*>(&transposed);
+		memcpy(&matrixBufferPtr[node->matrixIdx], rowMajTransformData, sizeof(AffineRowMaj3x4));
+
+		if (node->hasChildren)
+		{
+			if (node->hasSibling)
+			{
+				ASSERT(stackIdx < kMaxStackDepth, "Overflowed the matrix stack");
+				matrixStack[stackIdx++] = parentMatrix;
+			}
+
+			parentMatrix = xform;
+		}
+		else if (!node->hasSibling)
+		{
+			if(stackIdx == 0)
+				break;
+
+			parentMatrix = matrixStack[--stackIdx];
+		}
+	}
+
+	matrixBuffer.Unmap();
 
 	// Fill geometry description information per submesh.
 	std::vector<D3D12_RAYTRACING_GEOMETRY_DESC> geometryDescs(numMeshes);
@@ -48,11 +101,11 @@ void BLASBuffer::Init(std::shared_ptr<Model> modelPtr)
 		triangleDesc.VertexBuffer.StartAddress = modelDataBuffer + mesh.vbOffset;
 		triangleDesc.VertexBuffer.StrideInBytes = mesh.vbStride;
 
-		triangleDesc.IndexFormat = DXGI_FORMAT_R16_UINT;
+		triangleDesc.IndexFormat = (DXGI_FORMAT)mesh.ibFormat;
 		triangleDesc.IndexBuffer = modelDataBuffer + mesh.ibOffset;
 		triangleDesc.IndexCount = mesh.draw[0].primCount;
 
-		triangleDesc.Transform3x4 = D3D12_GPU_VIRTUAL_ADDRESS_NULL;
+		triangleDesc.Transform3x4 = matrixBuffer.GetGpuVirtualAddress() + sizeof(AffineRowMaj3x4) * mesh.meshCBV;
 	}
 
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC blasDesc = {};

@@ -655,7 +655,7 @@ void RadianceCascades::InitializeScene()
 
 
 	// Super lazy, I know.
-	int sceneIndex = 4;
+	int sceneIndex = 7;
 
 #if defined(RUN_TESTS)
 	sceneIndex = 5; 
@@ -688,7 +688,7 @@ void RadianceCascades::InitializeScene()
 	}
 	else if (sceneIndex == 1)
 	{
-		AddSceneModel(ModelIDSphereTest, { 100.0f, Vector3(0.0f, 0.0f, 0.0f) });
+		AddSceneModel(ModelIDSponza, { 100.0f, Vector3(0.0f, 0.0f, 0.0f) });
 	}
 	else if (sceneIndex == 2)
 	{
@@ -726,6 +726,10 @@ void RadianceCascades::InitializeScene()
 		Math::Vector3 modelCenter = GetMainSceneModelCenter();
 
 		AddSceneModel(ModelIDSphereTest, { 130.0f, Vector3(0.0f, -550.0f, 0.0f) });
+	}
+	else if (sceneIndex == 7)
+	{
+		AddSceneModel(ModelIDBeautifulGame, { 1000.0f, Vector3(0.0f, 0.0f, 0.0f) });
 	}
 
 	// Setup camera

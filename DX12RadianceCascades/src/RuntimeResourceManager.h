@@ -15,6 +15,7 @@ enum ModelID : UUID64
 	ModelIDSponza = 0,
 	ModelIDSphereTest,
 	ModelIDLantern,
+	ModelIDBeautifulGame,
 };
 
 enum RayDispatchID : uint32_t
