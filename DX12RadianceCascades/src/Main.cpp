@@ -10,6 +10,12 @@
 
 #include "RadianceCascades.h"
 
+#if defined(_DEBUG)
+#define CONFIG_NAME L"Debug"
+#else
+#define CONFIG_NAME L"Release"
+#endif
+
 int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int nCmdShow)
 {
     Logging::Initialize(false, L"runtime_logs.txt");
@@ -26,7 +32,9 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPSTR, _In
     int returnVal = 0;
     {
         RadianceCascades radianceCascades = RadianceCascades();
-        returnVal = GameCore::RunApplication(radianceCascades, L"RadianceCascades", hInstance, nCmdShow);
+
+        const wchar_t* appName = L"DX12 Radiance Cascades (" CONFIG_NAME L")";
+        returnVal = GameCore::RunApplication(radianceCascades, appName, hInstance, nCmdShow);
     }
     
     Graphics::Shutdown();
