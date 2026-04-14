@@ -655,7 +655,7 @@ void RadianceCascades::InitializeScene()
 
 
 	// Super lazy, I know.
-	int sceneIndex = 7;
+	int sceneIndex = 6;
 
 #if defined(RUN_TESTS)
 	sceneIndex = 5; 
