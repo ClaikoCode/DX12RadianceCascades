@@ -32,18 +32,18 @@ The project was part of my master thesis:
 ## Getting started
 
 1. Open *RadianceCascadesImpl.sln* (only tested on VS 2022)
-2. Select configuration: **Release** or **Debug** (console output, allocation of debug visualization resources, no compiler optimizations)
-3. Right-click on the *DX12RadianceCascades* solution in the **Solution Explorer** and select **Properties**<br>
-    3.1. Set the target configuration (top left of the properties window) to **All Configurations**<br>
-    3.2. Navigate to **Debugging** properties and change the **Working Directory** to *$(SolutionDir)Run*<br>
-    3.3. Click **Apply** to save the changes
+2. Right-click on the *DX12RadianceCascades* solution in the **Solution Explorer** and select **Properties**<br>
+    2.1. Set the target configuration (top left of the properties window) to **All Configurations**<br>
+    2.2. Navigate to **Debugging** properties and change the **Working Directory** to *$(SolutionDir)Run*<br>
+    2.3. Click **Apply** to save the changes and close the properties window
+3. Select build configuration: **Release** or **Debug**. Debug configuration uses console output, allocation of debug visualization resources, and no compiler optimizations.
 4. Build solution and run
 
 ### Running the application
 
-During first execution of the program, the MiniEngine loader will have all mesh assets converted to file formats that are faster to read and ready for loading into VRAM. This may take some time at first, with asset conversions being displayed into the Visual Studio output console. Keep in mind that this will increase the allocated space on disk. 
+During first execution of the program, the MiniEngine loader will have all mesh assets converted to file formats that are faster to read and ready for loading into VRAM on subsequent runs. This may take some time at first, with asset conversions being displayed into the Visual Studio output console. Keep in mind that this will increase the allocated space on disk. 
 
-When loaded, there is a setting at the top of the GUI for changing resolution if desired (defaulted to 1080p).
+Once running the program, there is a setting at the top of the GUI for changing resolution if desired (defaulted to 1080p).
 
 For higher resolution monitors, it is recommended to enable *larger font scale* from the *global settings* menu in the *UI* section (during runtime).
 
