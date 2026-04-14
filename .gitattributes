@@ -1,4 +1,2 @@
-Run/Models/* filter=lfs diff=lfs merge=lfs -text
-Run/Images/* filter=lfs diff=lfs merge=lfs -text
 Run/Models/** filter=lfs diff=lfs merge=lfs -text
 Run/Images/** filter=lfs diff=lfs merge=lfs -text
