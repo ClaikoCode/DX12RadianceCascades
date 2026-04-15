@@ -23,6 +23,7 @@ namespace AppGUI
 	{
 		IMGUI_CHECKVERSION();
 		ImGui::CreateContext();
+		ImPlot::CreateContext();
 
 		{
 			ImGuiIO& io = ImGui::GetIO();
@@ -85,6 +86,7 @@ namespace AppGUI
 
 		g_UIDescHeap.Destroy();
 
+		ImPlot::DestroyContext();
 		ImGui::DestroyContext();
 	}
 }

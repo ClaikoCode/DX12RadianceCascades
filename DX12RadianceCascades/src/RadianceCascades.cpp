@@ -397,7 +397,6 @@ void RadianceCascades::RenderScene()
 		RenderDepthOnly(renderCamera, m_debugCamDepthBuffer, m_mainViewport, m_mainScissor, true);
 	}
 
-
 	if (m_settings.globalSettings.renderMode == GlobalSettings::RenderModeRaster)
 	{
 		RenderRaster(Graphics::g_SceneColorBuffer, Graphics::g_SceneDepthBuffer, renderCamera, m_mainViewport, m_mainScissor);
@@ -655,7 +654,7 @@ void RadianceCascades::InitializeScene()
 
 
 	// Super lazy, I know.
-	int sceneIndex = 6;
+	int sceneIndex = 7;
 
 #if defined(RUN_TESTS)
 	sceneIndex = 5; 

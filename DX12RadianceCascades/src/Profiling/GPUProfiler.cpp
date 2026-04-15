@@ -222,66 +222,69 @@ void GPUProfiler::DrawProfilerUI()
 
 	if(ImGui::CollapsingHeader("Frametime", ImGuiTreeNodeFlags_DefaultOpen))
 	{
-		// Used for dynamic text formatting.
-		int longestProfileName = 0;
-		const size_t longestAllowedLength = 40;
-		for (PerfProfile& perfProfile : m_profiles)
+		if (ImPlot::BeginPlot("Performance Plots"))
 		{
-			if (perfProfile.name != nullptr)
-			{
-				int profileNameLength = int(strnlen_s(perfProfile.name, longestAllowedLength));
+			ImPlot::SetupAxis(ImAxis_X1, nullptr, ImPlotAxisFlags_NoTickLabels);
+			ImPlot::SetupAxis(ImAxis_Y1, "Exec. time (ms)", ImPlotAxisFlags_AutoFit);
+			ImPlot::SetupAxisLimitsConstraints(ImAxis_Y1, 0, FLT_MAX);
+			ImPlot::SetupLegend(ImPlotLocation_East, ImPlotLegendFlags_Outside);
+			ImPlotSpec spec = {};
 
-				if (profileNameLength > longestProfileName)
+			for (uint32_t profileIndex = 0; profileIndex < m_profiles.size(); profileIndex++)
+			{
+				PerfProfile& perfProfile = m_profiles[profileIndex];
+
+				if (perfProfile.name == nullptr)
 				{
-					longestProfileName = profileNameLength;
+					continue;
+				}
+
+				if (!profilerSettings.drawInactiveProfiles && m_profileActiveThisFrame[profileIndex] == false)
+				{
+					continue;
+				}
+
+				float lastSampleTime = perfProfile.GetLastSample();
+
+				float timeSum = 0.0f;
+				float minTime = FLT_MAX;
+				float maxTime = 0;
+				for (float timeSample : perfProfile.timeSamples)
+				{
+					timeSum += timeSample;
+
+					if (timeSample > maxTime)
+					{
+						maxTime = timeSample;
+					}
+
+					if (timeSample < minTime)
+					{
+						minTime = timeSample;
+					}
+				}
+				float averageTime = timeSum / perfProfile.timeSamples.size();
+
+				if (profilerSettings.drawInactiveProfiles && m_profileActiveThisFrame[profileIndex] == false)
+				{
+					ImPlot::HideNextItem(true, ImPlotCond_Always);
+				}
+
+				spec.Offset = perfProfile.currentSampleCount;
+				ImPlot::PlotLine(perfProfile.name, perfProfile.timeSamples.data(), (int)perfProfile.timeSamples.size(), 1.0f, 0.0, spec);
+
+				if (ImPlot::BeginLegendPopup(perfProfile.name))
+				{
+					ImGui::Text("Average: %.2f ms", averageTime);
+					ImGui::Text("Current: %.2f ms", lastSampleTime);
+					ImGui::Text("Min: %.2f  Max: %.2f", minTime, maxTime);
+					ImPlot::EndLegendPopup();
 				}
 			}
+
+			ImPlot::EndPlot();
 		}
-
-		for (uint32_t profileIndex = 0; profileIndex < m_profiles.size(); profileIndex++)
-		{
-			PerfProfile& perfProfile = m_profiles[profileIndex];
-
-			if (perfProfile.name == nullptr)
-			{
-				continue;
-			}
-
-			if (!profilerSettings.drawInactiveProfiles && m_profileActiveThisFrame[profileIndex] == false)
-			{
-				continue;
-			}
-
-			float lastSampleTime = perfProfile.GetLastSample();
-
-			float timeSum = 0.0f;
-			for (float timeSample : perfProfile.timeSamples)
-			{
-				timeSum += timeSample;
-			}
-			float averageTime = timeSum / perfProfile.timeSamples.size();
-
-			char formattedPlotName[128] = { 0 };
-			sprintf_s(formattedPlotName, "%-*s (%.2f ms | Avg: %.2f ms)", longestProfileName, perfProfile.name, lastSampleTime, averageTime);
-
-			const char* overlayText = "";
-			if (profilerSettings.drawInactiveProfiles && m_profileActiveThisFrame[profileIndex] == false)
-			{
-				overlayText = "[INACTIVE]";
-			}
-
-			ImGui::PlotLines(
-				formattedPlotName,
-				perfProfile.timeSamples.data(),
-				(int)perfProfile.timeSamples.size(),
-				perfProfile.currentSampleCount,
-				overlayText,
-				0.0f,
-				FLT_MAX, // Dynamically adjust for maximum values.
-				ImVec2(350.0f, 30.0f)
-			);
-		}
-
+		
 		// Reset update flags
 		for (uint32_t i = 0; i < m_profileActiveThisFrame.size(); i++)
 		{
