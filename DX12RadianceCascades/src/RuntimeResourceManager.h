@@ -40,7 +40,7 @@ enum PSOID : psoid_t
 	PSOIDRaytracingTestPSO,
 	PSOIDDebugDrawNoDepthPSO,
 	PSOIDDebugDrawDepthPSO,
-	PSOIDComputeMinMaxDepthPSO,
+	PSOIDComputeHiZBufferPSO,
 	PSOIDRCRaytracingPSO,
 	PSOIDRC3DMergePSO,
 	PSOIDRC3DCoalescePSO,

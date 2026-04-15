@@ -248,6 +248,11 @@ void RadianceCascades::Startup()
 
 			m_depthBufferCopy.Create(L"Depth Copy", width, height, 1, DXGI_FORMAT_R32_FLOAT);
 			RegisterDisplayDependentTexture(&m_depthBufferCopy, TextureTypeColor);
+
+			m_hiZBuffer.Create(L"Hi-Z Buffer", width, height, 0, DXGI_FORMAT_R32G32_FLOAT);
+			RegisterDisplayDependentTexture(&m_hiZBuffer, TextureTypeColor);
+
+			m_hiZReadbackBuffer.Create(L"Hi-z Readback Buffer", 2, sizeof(float));
 		}
 	}
 	
@@ -401,17 +406,10 @@ void RadianceCascades::RenderScene()
 	{
 		RenderRaster(Graphics::g_SceneColorBuffer, Graphics::g_SceneDepthBuffer, renderCamera, m_mainViewport, m_mainScissor);
 
+		BuildHiZBuffer(Graphics::g_SceneDepthBuffer);
+
 		if (m_settings.rcRenderSettings.renderRC3D)
 		{
-			//if (m_settings.globalSettings.useDebugCam)
-			//{
-			//	BuildMinMaxDepthBuffer(m_debugCamDepthBuffer);
-			//}
-			//else
-			//{
-			//	BuildMinMaxDepthBuffer(Graphics::g_SceneDepthBuffer);
-			//}
-
 			RunRCGather(renderCamera, Graphics::g_SceneDepthBuffer);
 
 			if (m_settings.rcRenderSettings.currentTextureVis == RCRenderSettings::CascadeTextureVisGather)
@@ -424,7 +422,7 @@ void RadianceCascades::RenderScene()
 			}
 			else
 			{
-				RunRCMerge(renderCamera, m_minMaxDepthMips);
+				RunRCMerge(renderCamera, m_hiZBuffer);
 
 				if (m_settings.rcRenderSettings.currentTextureVis == RCRenderSettings::CascadeTextureVisMerge)
 				{
@@ -768,7 +766,7 @@ void RadianceCascades::InitializePSOs()
 		RuntimeResourceManager::RegisterPSO(PSOIDGatherFilterReductionPSO,	&m_gatherFilterReductionPSO,	PSOTypeCompute);
 		RuntimeResourceManager::RegisterPSO(PSOIDComputeFullScreenCopyPSO,	&m_fullScreenCopyComputePSO,	PSOTypeCompute);
 		RuntimeResourceManager::RegisterPSO(PSOIDRaytracingTestPSO,			&m_rtTestPSO,					PSOTypeRaytracing);
-		RuntimeResourceManager::RegisterPSO(PSOIDComputeMinMaxDepthPSO,		&m_minMaxDepthPSO,				PSOTypeCompute);
+		RuntimeResourceManager::RegisterPSO(PSOIDComputeHiZBufferPSO,		&m_HiZGenerationPSO,			PSOTypeCompute);
 		RuntimeResourceManager::RegisterPSO(PSOIDRCRaytracingPSO,			&m_rcRaytracePSO,				PSOTypeRaytracing);
 		RuntimeResourceManager::RegisterPSO(PSOIDRC3DMergePSO,				&m_rc3dMergePSO,				PSOTypeCompute);
 		RuntimeResourceManager::RegisterPSO(PSOIDRC3DCoalescePSO,			&m_rc3dCoalescePSO,				PSOTypeCompute);
@@ -800,7 +798,7 @@ void RadianceCascades::InitializePSOs()
 		rootSig[RootEntryDeferredLightingAlbedoSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 0, 1);
 		rootSig[RootEntryDeferredLightingNormalSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1);
 		rootSig[RootEntryDeferredLightingDiffuseRadianceSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 2, 1);
-		rootSig[RootEntryDeferredLightingCascade0MinMaxDepthSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 3, 1);
+		rootSig[RootEntryDeferredLightingCascade0HiZSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 3, 1);
 		rootSig[RootEntryDeferredLightingDepthBufferSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 4, 1);
 		rootSig[RootEntryDeferredLightingCascade0SRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 5, 1);
 		rootSig[RootEntryDeferredLightingGlobalInfoCB].InitAsConstantBuffer(0);
@@ -922,15 +920,15 @@ void RadianceCascades::InitializePSOs()
 	}
 
 	{
-		ComputePSO& pso = RuntimeResourceManager::GetComputePSO(PSOIDComputeMinMaxDepthPSO);
-		RuntimeResourceManager::SetShaderForPSO(PSOIDComputeMinMaxDepthPSO, ShaderIDMinMaxDepthCS);
+		ComputePSO& pso = RuntimeResourceManager::GetComputePSO(PSOIDComputeHiZBufferPSO);
+		RuntimeResourceManager::SetShaderForPSO(PSOIDComputeHiZBufferPSO, ShaderIDHiZMipGenerationCS);
 
-		RootSignature& rootSig = m_minMaxDepthRootSig;
-		rootSig.Reset(RootEntryMinMaxDepthCount);
-		rootSig[RootEntryMinMaxDepthSourceInfo].InitAsConstantBuffer(0);
-		rootSig[RootEntryMinMaxDepthSourceDepthUAV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 1);
-		rootSig[RootEntryMinMaxDepthTargetDepthUAV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 1);
-		rootSig.Finalize(L"Min Max Depth");
+		RootSignature& rootSig = m_hiZRootSig;
+		rootSig.Reset(RootEntryHiZCount);
+		rootSig[RootEntryHiZSourceInfo].InitAsConstantBuffer(0);
+		rootSig[RootEntryHiZSourceDepthUAV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 1);
+		rootSig[RootEntryHiZTargetDepthUAV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 1);
+		rootSig.Finalize(L"Hi-Z");
 
 		pso.SetRootSignature(rootSig);
 		pso.Finalize();
@@ -946,7 +944,7 @@ void RadianceCascades::InitializePSOs()
 		rootSig[RootEntryRC3DMergeCascadeNUAV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 1);
 		rootSig[RootEntryRC3DMergeRCGlobalsCB].InitAsConstantBuffer(0);
 		rootSig[RootEntryRC3DMergeCascadeInfoCB].InitAsConstantBuffer(1);
-		rootSig[RootEntryRC3DMergeMinMaxDepthSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1);
+		rootSig[RootEntryRC3DMergeHiZSRV].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1);
 		rootSig[RootEntryRC3DMergeGlobalInfoCB].InitAsConstantBuffer(2);
 		{
 			SamplerDesc sampler = Graphics::SamplerLinearBorderDesc;
@@ -1102,8 +1100,6 @@ void RadianceCascades::InitializeRCResources()
 
 		uint32_t screenWidth = ::GetSceneColorWidth();
 		uint32_t screenHeight = ::GetSceneColorHeight();
-
-		m_minMaxDepthMips.Create(L"Min Max Depth Mips", screenWidth / 2, screenHeight / 2, 0, DXGI_FORMAT_R32G32_FLOAT);
 
 		m_rcManager3D.Generate(
 			16, 
@@ -1380,9 +1376,11 @@ void RadianceCascades::RunRCGather(Camera& camera, DepthBuffer& sourceDepthBuffe
 	rtContext.Finish(true);
 }
 
-void RadianceCascades::RunRCMerge(Math::Camera& cam, ColorBuffer& minMaxDepthBuffer)
+void RadianceCascades::RunRCMerge(Math::Camera& cam, ColorBuffer& hiZBuffer)
 {
 	ComputeContext& cmptContext = ComputeContext::Begin(L"RC Merge Compute");
+
+	ReadbackBuffer rbBuffer = {};
 
 	{
 		GPU_PROFILE_BLOCK("RC Merge Pass", cmptContext);
@@ -1401,7 +1399,7 @@ void RadianceCascades::RunRCMerge(Math::Camera& cam, ColorBuffer& minMaxDepthBuf
 		cmptContext.SetDynamicConstantBufferView(RootEntryRC3DMergeGlobalInfoCB, sizeof(GlobalInfo), &globalInfo);
 
 		cmptContext.TransitionResource(m_depthBufferCopy, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-		cmptContext.SetDynamicDescriptor(RootEntryRC3DMergeMinMaxDepthSRV, 0, m_depthBufferCopy.GetSRV());
+		cmptContext.SetDynamicDescriptor(RootEntryRC3DMergeHiZSRV, 0, m_depthBufferCopy.GetSRV());
 
 #if defined(_DEBUGDRAWING)
 		DebugDrawer::BindDebugBuffers(cmptContext, RootEntryRC3DMergeCount);
@@ -1455,62 +1453,84 @@ void RadianceCascades::RenderDepthOnly(Camera& camera, DepthBuffer& targetDepth,
 	gfxContext.Finish(true);
 }
 
-void RadianceCascades::BuildMinMaxDepthBuffer(DepthBuffer& sourceDepthBuffer)
+void RadianceCascades::BuildHiZBuffer(DepthBuffer& sourceDepthBuffer)
 {
-	ColorBuffer& minMaxDepthCopy = m_depthBufferCopy;
-	ColorBuffer& minMaxMipMaps = m_minMaxDepthMips;
+	ColorBuffer& depthBufferCopy = m_depthBufferCopy;
+	ColorBuffer& hiZBuffer = m_hiZBuffer;
 
-	ComputeContext& cmptContext = ComputeContext::Begin(L"Min Max Depth");
+	ComputeContext& cmptContext = ComputeContext::Begin(L"Hi-Z");
 
 	{
-		GPU_PROFILE_BLOCK("Min Max Depth Pass", cmptContext);
+		GPU_PROFILE_BLOCK("Hi-Z Pass", cmptContext);
 
-		const ComputePSO& cmptPSO = RuntimeResourceManager::GetComputePSO(PSOIDComputeMinMaxDepthPSO);
+		const ComputePSO& cmptPSO = RuntimeResourceManager::GetComputePSO(PSOIDComputeHiZBufferPSO);
 		cmptContext.SetPipelineState(cmptPSO);
 		cmptContext.SetRootSignature(cmptPSO.GetRootSignature());
 
 		// Copy the depth buffer to a color buffer that can be read from as a UAV.
 		{
 			cmptContext.TransitionResource(sourceDepthBuffer, D3D12_RESOURCE_STATE_COPY_SOURCE);
-			cmptContext.TransitionResource(minMaxDepthCopy, D3D12_RESOURCE_STATE_COPY_DEST);
-			cmptContext.CopySubresource(minMaxDepthCopy, 0, sourceDepthBuffer, 0);
+			cmptContext.TransitionResource(depthBufferCopy, D3D12_RESOURCE_STATE_COPY_DEST);
+			cmptContext.CopySubresource(depthBufferCopy, 0, sourceDepthBuffer, 0);
 		}
 
-		cmptContext.TransitionResource(minMaxMipMaps, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-		cmptContext.TransitionResource(minMaxDepthCopy, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-		cmptContext.TransitionResource(m_minMaxDepthMips, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
+		cmptContext.TransitionResource(hiZBuffer, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+		cmptContext.TransitionResource(depthBufferCopy, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+		cmptContext.TransitionResource(hiZBuffer, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
 
 		// The first pass of min max depth uses the full resolution copy and writes to the first mip. 
 		{
 			SourceInfo depthSourceInfo = {};
 			depthSourceInfo.isFirstDepth = true;
-			depthSourceInfo.sourceWidth = minMaxDepthCopy.GetWidth();
-			depthSourceInfo.sourceHeight = minMaxDepthCopy.GetHeight();
+			depthSourceInfo.sourceWidth = depthBufferCopy.GetWidth();
+			depthSourceInfo.sourceHeight = depthBufferCopy.GetHeight();
 
-			cmptContext.SetDynamicConstantBufferView(RootEntryMinMaxDepthSourceInfo, sizeof(depthSourceInfo), &depthSourceInfo);
-			cmptContext.SetDynamicDescriptors(RootEntryMinMaxDepthSourceDepthUAV, 0, 1, &minMaxDepthCopy.GetUAV());
-			cmptContext.SetDynamicDescriptors(RootEntryMinMaxDepthTargetDepthUAV, 0, 1, &m_minMaxDepthMips.GetUAV());
+			// Has to be the same resolution.
+			ASSERT(depthSourceInfo.sourceWidth == hiZBuffer.GetWidth() && depthSourceInfo.sourceHeight == hiZBuffer.GetHeight());
 
-			cmptContext.Dispatch2D(depthSourceInfo.sourceWidth >> 1, depthSourceInfo.sourceHeight >> 1);
+			cmptContext.SetDynamicConstantBufferView(RootEntryHiZSourceInfo, sizeof(depthSourceInfo), &depthSourceInfo);
+			cmptContext.SetDynamicDescriptors(RootEntryHiZSourceDepthUAV, 0, 1, &depthBufferCopy.GetUAV());
+			cmptContext.SetDynamicDescriptors(RootEntryHiZTargetDepthUAV, 0, 1, &hiZBuffer.GetUAV());
+
+			cmptContext.Dispatch2D(depthSourceInfo.sourceWidth, depthSourceInfo.sourceHeight);
 		}
 
-		const D3D12_CPU_DESCRIPTOR_HANDLE* startUAV = &m_minMaxDepthMips.GetUAV();
-		const uint32_t numMipMaps = minMaxMipMaps.GetNumMipMaps();
+		const D3D12_CPU_DESCRIPTOR_HANDLE* startUAV = &hiZBuffer.GetUAV();
+		const uint32_t numMipMaps = hiZBuffer.GetNumMipMaps();
 		for (uint32_t i = 0; i < numMipMaps; i++)
 		{
 			SourceInfo depthSourceInfo = {};
 			depthSourceInfo.isFirstDepth = false;
-			depthSourceInfo.sourceWidth = minMaxMipMaps.GetWidth() >> i;
-			depthSourceInfo.sourceHeight = minMaxMipMaps.GetHeight() >> i;
+			depthSourceInfo.sourceWidth = hiZBuffer.GetWidth() >> i;
+			depthSourceInfo.sourceHeight = hiZBuffer.GetHeight() >> i;
 
-			cmptContext.SetDynamicConstantBufferView(RootEntryMinMaxDepthSourceInfo, sizeof(depthSourceInfo), &depthSourceInfo);
-			cmptContext.SetDynamicDescriptors(RootEntryMinMaxDepthSourceDepthUAV, 0, 1, startUAV + i);
-			cmptContext.SetDynamicDescriptors(RootEntryMinMaxDepthTargetDepthUAV, 0, 1, startUAV + i + 1);
+			cmptContext.SetDynamicConstantBufferView(RootEntryHiZSourceInfo, sizeof(depthSourceInfo), &depthSourceInfo);
+			cmptContext.SetDynamicDescriptors(RootEntryHiZSourceDepthUAV, 0, 1, startUAV + i);
+			cmptContext.SetDynamicDescriptors(RootEntryHiZTargetDepthUAV, 0, 1, startUAV + i + 1);
 
 			// Must insert resource barrier between each dispatch as the output will otherwise be undefined.
 			// TODO: Find why this is necessary when the same resource is being used? Each dispatch needs to be executed before the next can start, no?
-			cmptContext.InsertUAVBarrier(m_minMaxDepthMips);
+			cmptContext.InsertUAVBarrier(hiZBuffer);
 			cmptContext.Dispatch2D(depthSourceInfo.sourceWidth >> 1, depthSourceInfo.sourceHeight >> 1);
+		}
+
+		// Copy min max info into readback buffer.
+		{
+			cmptContext.TransitionResource(hiZBuffer, D3D12_RESOURCE_STATE_COPY_SOURCE);
+			cmptContext.TransitionResource(m_hiZReadbackBuffer, D3D12_RESOURCE_STATE_COPY_DEST, true);
+
+			D3D12_TEXTURE_COPY_LOCATION sourceLocation = CD3DX12_TEXTURE_COPY_LOCATION(hiZBuffer.GetResource(), hiZBuffer.GetNumMipMaps());
+
+			D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint = {};
+			footprint.Footprint.Format = DXGI_FORMAT_R32G32_FLOAT;
+			footprint.Footprint.Width = 1;
+			footprint.Footprint.Height = 1;
+			footprint.Footprint.Depth = 1;
+			footprint.Footprint.RowPitch = D3D12_TEXTURE_DATA_PITCH_ALIGNMENT; // Required minium pitch.
+
+			D3D12_TEXTURE_COPY_LOCATION destLocation = CD3DX12_TEXTURE_COPY_LOCATION(m_hiZReadbackBuffer.GetResource(), footprint);
+
+			cmptContext.GetCommandList()->CopyTextureRegion(&destLocation, 0, 0, 0, &sourceLocation, nullptr);
 		}
 	}
 
@@ -1597,7 +1617,7 @@ void RadianceCascades::RunDeferredLightingPass(ColorBuffer& albedoBuffer, ColorB
 {
 	// TODO: Have these as input parameters. Better yet, create an input struct because its getting very long.
 	ColorBuffer& depthBuffer = m_depthBufferCopy;
-	ColorBuffer& minMaxDepthBuffer = m_minMaxDepthMips;
+	ColorBuffer& hiZBuffer = m_hiZBuffer;
 	ColorBuffer& cascade0Buffer = m_rcManager3D.GetCascadeIntervalBuffer(0);
 
 	GlobalInfo globalInfo = {};
@@ -1616,7 +1636,7 @@ void RadianceCascades::RunDeferredLightingPass(ColorBuffer& albedoBuffer, ColorB
 		gfxContext.TransitionResource(normalBuffer, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 		gfxContext.TransitionResource(diffuseRadianceBuffer, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 		gfxContext.TransitionResource(depthBuffer, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-		gfxContext.TransitionResource(minMaxDepthBuffer, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+		gfxContext.TransitionResource(hiZBuffer, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 		gfxContext.TransitionResource(cascade0Buffer, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 		gfxContext.TransitionResource(outputBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
@@ -1632,7 +1652,7 @@ void RadianceCascades::RunDeferredLightingPass(ColorBuffer& albedoBuffer, ColorB
 		gfxContext.SetDynamicDescriptor(RootEntryDeferredLightingAlbedoSRV, 0, albedoBuffer.GetSRV());
 		gfxContext.SetDynamicDescriptor(RootEntryDeferredLightingNormalSRV, 0, normalBuffer.GetSRV());
 		gfxContext.SetDynamicDescriptor(RootEntryDeferredLightingDiffuseRadianceSRV, 0, diffuseRadianceBuffer.GetSRV());
-		gfxContext.SetDynamicDescriptor(RootEntryDeferredLightingCascade0MinMaxDepthSRV, 0, minMaxDepthBuffer.GetSRV());
+		gfxContext.SetDynamicDescriptor(RootEntryDeferredLightingCascade0HiZSRV, 0, hiZBuffer.GetSRV());
 		gfxContext.SetDynamicDescriptor(RootEntryDeferredLightingDepthBufferSRV, 0, depthBuffer.GetSRV());
 		gfxContext.SetDynamicDescriptor(RootEntryDeferredLightingCascade0SRV, 0, cascade0Buffer.GetSRV());
 		gfxContext.SetDynamicConstantBufferView(RootEntryDeferredLightingGlobalInfoCB, sizeof(GlobalInfo), &globalInfo);
@@ -1735,7 +1755,6 @@ void RadianceCascades::DrawSettingsUI()
 		}
 		ImGui::Combo("Skyboxes", reinterpret_cast<int*>(&m_currentSkybox), skyboxNames.data(), (int)skyboxNames.size());
 
-
 #if defined(_DEBUGDRAWING)
 		ImGui::SeparatorText("Debug Drawing");
 		ImGui::Checkbox("Use Debug Cam", &gs.useDebugCam);
@@ -1825,8 +1844,8 @@ void RadianceCascades::ClearBuffers()
 	}
 
 	{
-		gfxContext.TransitionResource(m_minMaxDepthMips, D3D12_RESOURCE_STATE_RENDER_TARGET, true);
-		gfxContext.ClearColor(m_minMaxDepthMips);
+		gfxContext.TransitionResource(m_hiZBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET, true);
+		gfxContext.ClearColor(m_hiZBuffer);
 	}
 
 	{
@@ -1933,4 +1952,14 @@ std::vector<TLASInstanceGroup> RadianceCascades::GetTLASInstanceGroups()
 void RadianceCascades::RegisterDisplayDependentTexture(PixelBuffer* pixelBuffer, TextureType textureType)
 {
 	m_displayDependentTextures.emplace_back(textureType, pixelBuffer);
+}
+
+void RadianceCascades::GetSceneMinMaxDepth(float& minDepth, float& maxDepth)
+{
+	float* hiZMinMax = reinterpret_cast<float*>(m_hiZReadbackBuffer.Map());
+
+	minDepth = hiZMinMax[0];
+	maxDepth = hiZMinMax[1];
+
+	m_hiZReadbackBuffer.Unmap();
 }

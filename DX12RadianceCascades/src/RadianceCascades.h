@@ -212,10 +212,10 @@ private:
 		RootEntryRTLOffsetConstants,
 		RootEntryRTLCount,
 
-		RootEntryMinMaxDepthSourceInfo = 0,
-		RootEntryMinMaxDepthSourceDepthUAV,
-		RootEntryMinMaxDepthTargetDepthUAV,
-		RootEntryMinMaxDepthCount,
+		RootEntryHiZSourceInfo = 0,
+		RootEntryHiZSourceDepthUAV,
+		RootEntryHiZTargetDepthUAV,
+		RootEntryHiZCount,
 
 		RootEntryRCRaytracingRTGSceneSRV = 0,
 		RootEntryRCRaytracingRTGSkyboxSRV,
@@ -240,7 +240,7 @@ private:
 		RootEntryRC3DMergeCascadeNUAV,
 		RootEntryRC3DMergeRCGlobalsCB,
 		RootEntryRC3DMergeCascadeInfoCB,
-		RootEntryRC3DMergeMinMaxDepthSRV,
+		RootEntryRC3DMergeHiZSRV,
 		RootEntryRC3DMergeGlobalInfoCB,
 		RootEntryRC3DMergeCount,
 
@@ -252,7 +252,7 @@ private:
 		RootEntryDeferredLightingAlbedoSRV = 0,
 		RootEntryDeferredLightingNormalSRV,
 		RootEntryDeferredLightingDiffuseRadianceSRV,
-		RootEntryDeferredLightingCascade0MinMaxDepthSRV,
+		RootEntryDeferredLightingCascade0HiZSRV,
 		RootEntryDeferredLightingDepthBufferSRV,
 		RootEntryDeferredLightingCascade0SRV,
 		RootEntryDeferredLightingGlobalInfoCB,
@@ -292,9 +292,9 @@ private:
 	void RenderRaster(ColorBuffer& targetColor, DepthBuffer& targetDepth, Camera& camera, D3D12_VIEWPORT viewPort, D3D12_RECT scissor);
 	void RenderRaytracing(ColorBuffer& targetColor, Camera& camera);
 	void RunRCGather(Camera& camera, DepthBuffer& sourceDepthBuffer);
-	void RunRCMerge(Math::Camera& cam, ColorBuffer& minMaxDepthBuffer);
+	void RunRCMerge(Math::Camera& cam, ColorBuffer& hiZBuffer);
 	void RenderDepthOnly(Camera& camera, DepthBuffer& targetDepth, D3D12_VIEWPORT viewPort, D3D12_RECT scissor, bool clearDepth = false);
-	void BuildMinMaxDepthBuffer(DepthBuffer& sourceDepthBuffer);
+	void BuildHiZBuffer(DepthBuffer& sourceDepthBuffer);
 	void RunRCCoalesce();
 	void RunComputeRCGatherFilterReduction();
 	void RunDeferredLightingPass(ColorBuffer& albedoBuffer, ColorBuffer& normalBuffer, ColorBuffer& diffuseRadianceBuffer, ColorBuffer& outputBuffer);
@@ -334,6 +334,9 @@ private:
 
 	void RegisterDisplayDependentTexture(PixelBuffer* pixelBuffer, TextureType textureType);
 
+	// This should only be called after rendering or at least after BuildHiZBuffer() has been called.
+	void GetSceneMinMaxDepth(float& minDepth, float& maxDepth);
+
 private:
 	bool m_shouldQuit = false;
 
@@ -367,8 +370,8 @@ private:
 	RootSignature1 m_rtTestLocalRootSig;
 	TLASBuffers m_sceneTLAS;
 
-	ComputePSO m_minMaxDepthPSO = ComputePSO(L"Min Max Depth Compute");
-	RootSignature m_minMaxDepthRootSig;
+	ComputePSO m_HiZGenerationPSO = ComputePSO(L"Min Max Depth Compute");
+	RootSignature m_hiZRootSig;
 
 	RaytracingPSO m_rcRaytracePSO = RaytracingPSO(L"RC Raytrace PSO");
 	RootSignature1 m_rcRaytraceGlobalRootSig;
@@ -394,7 +397,9 @@ private:
 	ColorBuffer m_albedoBuffer;
 
 	ColorBuffer m_depthBufferCopy;
-	ColorBuffer m_minMaxDepthMips;
+	// Hierarchical Z buffer. Each mip stores min and max depth values.
+	ColorBuffer m_hiZBuffer;
+	ReadbackBuffer m_hiZReadbackBuffer;
 
 	DepthBuffer m_debugCamDepthBuffer;
 
