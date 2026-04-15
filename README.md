@@ -1,4 +1,4 @@
-# Radiance Cascades in DirectX 12 - Master Thesis
+# Radiance Cascades in DirectX 12
 
 This repo contains a solution for real-time global illumination through a novel probe-based approach called Radiance Cascades (RC), introduced by Alexander Sannikov from Grinding Gear Games. The solution leverages hardware accelerated raytracing using DirectX 12. The implementation was built on top of [Microsoft's MiniEngine demo](https://github.com/microsoft/DirectX-Graphics-Samples/tree/master/MiniEngine), which gave useful as well as an open set of abstractions for many DX12 resources and usage patterns.
 
@@ -32,7 +32,7 @@ The project was part of my master thesis:
 ## Getting started
 
 1. Open *RadianceCascadesImpl.sln* (only tested on VS 2022)
-2. Right-click on the *DX12RadianceCascades* solution in the **Solution Explorer** and select **Properties**<br>
+2. Right-click on the *DX12RadianceCascades* project in the **Solution Explorer** and select **Properties**<br>
     2.1. Set the target configuration (top left of the properties window) to **All Configurations**<br>
     2.2. Navigate to **Debugging** properties and change the **Working Directory** to *$(SolutionDir)Run*<br>
     2.3. Click **Apply** to save the changes and close the properties window
