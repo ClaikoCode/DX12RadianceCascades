@@ -2,6 +2,8 @@
 
 #include "Core\VectorMath.h"
 #include <locale> // For wstring convert
+#include <cstdint>
+#include <array>
 
 namespace Math
 {
@@ -108,4 +110,46 @@ struct TreeNode
 
 	std::shared_ptr<TreeNode<T>> parent = nullptr;
 	std::vector<std::shared_ptr<TreeNode<T>>> children = {};
+};
+
+template <typename T, std::size_t Size>
+class CircularBuffer
+{
+public:
+	void insert(const T& value)
+	{
+		uint32_t writeIndex = head % Size;
+		
+		buffer[writeIndex] = value;
+
+		head++;
+	}
+
+	const T& prev()
+	{
+		return buffer[(head + Size - 1) % Size];
+	}
+
+	size_t size() const
+	{
+		return Size;
+	}
+
+	// Scenario where head has looped around once accounted for.
+	//   head tail
+	//    \/  \/
+	// [x, y, z, w, ...]
+	uint32_t offset() const
+	{
+		return head >= Size ? (head % Size) : head;
+	}
+
+	T* data()
+	{
+		return buffer.data();
+	}
+
+private:
+	std::array<T, Size> buffer;
+	uint32_t head;
 };

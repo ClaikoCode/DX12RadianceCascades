@@ -301,6 +301,7 @@ private:
 	void UpdateViewportAndScissor();
 
 	void DrawSettingsUI();
+	void DrawRealtimeMetricsUI();
 
 	void ClearBuffers();
 

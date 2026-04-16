@@ -42,6 +42,20 @@ constexpr size_t MAX_INSTANCES = 256;
 static const DXGI_FORMAT s_FlatlandSceneFormat = DXGI_FORMAT_R16G16B16A16_FLOAT;
 static const std::wstring s_BackupModelPath = L"models\\Testing\\SphereTest.gltf";
 
+constexpr size_t gRealtimeCount = 1024;
+struct RealtimeMetrics
+{
+	CircularBuffer<float, gRealtimeCount> depthAvg;
+	CircularBuffer<float, gRealtimeCount> cascade1FilteredRayRatio;
+	CircularBuffer<float, gRealtimeCount> frametimeWithoutPOF;
+	CircularBuffer<float, gRealtimeCount> frametimeWithPOF;
+
+	bool writeMetricsToCSV = false;
+	bool enablePOFTesting = false;
+};
+
+static RealtimeMetrics s_RealtimeMetrics = {};
+
 #define SAMPLE_LEN_0 20.0f
 #define RAYS_PER_PROBE_0 4.0f
 #define CAM_FOV 90.0f
@@ -270,6 +284,21 @@ void RadianceCascades::Startup()
 
 void RadianceCascades::Cleanup()
 {
+	// Write realtime perf data
+	if(s_RealtimeMetrics.enablePOFTesting && s_RealtimeMetrics.writeMetricsToCSV)
+	{
+		std::ofstream outFile("RealtimePerfData.csv");
+	
+		outFile << "POF-on,POF-off,Filtered-ray-ratio\n";
+		for (uint32_t i = 0; i < gRealtimeCount; i++)
+		{
+			outFile << s_RealtimeMetrics.frametimeWithPOF.data()[i] << ",";
+			outFile << s_RealtimeMetrics.frametimeWithoutPOF.data()[i] << ",";
+			outFile << s_RealtimeMetrics.cascade1FilteredRayRatio.data()[i] << "\n";
+		}
+	}
+	
+
 	Graphics::g_CommandManager.IdleGPU();
 	AppGUI::Shutdown();
 	
@@ -528,6 +557,7 @@ void RadianceCascades::RenderUI(GraphicsContext& uiContext)
 
 	{
 		DrawSettingsUI();
+		DrawRealtimeMetricsUI();
 
 #if defined(PROFILE_GPU)
 		GPUProfiler::Get().DrawProfilerUI();
@@ -1821,6 +1851,125 @@ void RadianceCascades::DrawSettingsUI()
 	}
 #pragma endregion
 	
+	ImGui::End();
+}
+
+void RadianceCascades::DrawRealtimeMetricsUI()
+{
+	ImGui::Begin("Realtime Metrics");
+
+	ImGui::Checkbox("Enable POF testing", &s_RealtimeMetrics.enablePOFTesting);
+	if (s_RealtimeMetrics.enablePOFTesting)
+	{
+		// Collect data
+		{
+			// Min max depth average
+			{
+				float min, max;
+				GetSceneMinMaxDepth(min, max);
+
+				s_RealtimeMetrics.depthAvg.insert((min + max) / 2.0f);
+			}
+
+			{
+				uint32_t filteredRayCount = m_rcManager3D.GetFilteredRayCount(0);
+				uint32_t totalRays = m_rcManager3D.GetTotalRays(1);
+
+				if (m_rcManager3D.UsesGatherFiltering()) {
+					s_RealtimeMetrics.cascade1FilteredRayRatio.insert((float)filteredRayCount / totalRays);
+				}
+				
+			}
+
+			{
+				auto& profiles = GPUProfiler::Get().GetProfiles();
+
+				for (const auto& profile : profiles)
+				{
+					if (profile.name != nullptr && std::string_view(profile.name) == "RC Gather")
+					{
+						float lastSample = profile.GetLastSample();
+						if (m_rcManager3D.UsesGatherFiltering())
+						{
+							s_RealtimeMetrics.frametimeWithPOF.insert(lastSample);
+						}
+						else
+						{
+							s_RealtimeMetrics.frametimeWithoutPOF.insert(lastSample);
+						}
+					}
+				}
+
+				// Toggle gather filtering.
+				m_rcManager3D.SetGatherFiltering(!m_rcManager3D.UsesGatherFiltering());
+			}
+		}
+
+		// The code block below was written by Claude.ai Opus 4.6 (Extended)
+		// Before BeginPlot — compute union of both frametime buffers
+		static double ft_min = 0.0;
+		static double ft_max = 20.0;  // sensible startup default until data arrives
+		{
+			auto& pof = s_RealtimeMetrics.frametimeWithPOF;
+			auto& nopof = s_RealtimeMetrics.frametimeWithoutPOF;
+
+			double u_min = DBL_MAX;
+			double u_max = -DBL_MAX;
+
+			if (pof.size() > 0) {
+				auto [mn, mx] = std::minmax_element(pof.data(), pof.data() + pof.size());
+				u_min = min(u_min, (double)*mn);
+				u_max = max(u_max, (double)*mx);
+			}
+			if (nopof.size() > 0) {
+				auto [mn, mx] = std::minmax_element(nopof.data(), nopof.data() + nopof.size());
+				u_min = min(u_min, (double)*mn);
+				u_max = max(u_max, (double)*mx);
+			}
+			if (u_min <= u_max) {
+				double range = u_max - u_min;
+				if (range < 1e-9) range = 1.0;          // avoid zero-height axis
+				ft_min = 0.0;                           // frametimes are non-negative, lock floor
+				ft_max = u_max + range * 0.1;           // 10% headroom so peaks aren't on the edge
+			}
+		}
+
+		ImGui::Checkbox("Write data to CSV on exit", &s_RealtimeMetrics.writeMetricsToCSV);
+
+		if (ImPlot::BeginPlot("Occlusion Metrics"))
+		{
+			ImPlot::SetupAxis(ImAxis_Y2, "Frametime POF On", ImPlotAxisFlags_AuxDefault);
+			ImPlot::SetupAxis(ImAxis_Y3, "Frametime POF Off", ImPlotAxisFlags_AuxDefault);
+			ImPlot::SetupAxisLinks(ImAxis_Y2, &ft_min, &ft_max);
+			ImPlot::SetupAxisLinks(ImAxis_Y3, &ft_min, &ft_max);
+
+			ImPlot::SetupAxis(ImAxis_Y1, "Ray filter ratio");
+			ImPlot::SetupAxisLimits(ImAxis_Y1, 0.0, 1.0);
+			auto& rayRatioCircBuff = s_RealtimeMetrics.cascade1FilteredRayRatio;
+			ImPlotSpec rayRatioSpec = {};
+			rayRatioSpec.Offset = rayRatioCircBuff.offset();
+			ImPlot::PlotLine("ratio", rayRatioCircBuff.data(), (int)rayRatioCircBuff.size(), 2.0f, 0.0, rayRatioSpec);
+
+
+
+			auto& pofCircBuff = s_RealtimeMetrics.frametimeWithPOF;
+			ImPlotSpec pofSpec = {};
+			pofSpec.Offset = pofCircBuff.offset();
+			ImPlot::SetAxis(ImAxis_Y2);
+			ImPlot::PlotLine("POF", pofCircBuff.data(), (int)pofCircBuff.size(), 2.0f, 0.0, pofSpec);
+
+			auto& noPOFCircBuff = s_RealtimeMetrics.frametimeWithoutPOF;
+			ImPlotSpec nopofSpec = {};
+			nopofSpec.Offset = noPOFCircBuff.offset();
+			ImPlot::SetAxis(ImAxis_Y3);
+			ImPlot::PlotLine("No POF", noPOFCircBuff.data(), (int)noPOFCircBuff.size(), 2.0f, 1.0, nopofSpec);
+
+			ImPlot::EndPlot();
+		}
+	}
+	
+
+
 	ImGui::End();
 }
 
