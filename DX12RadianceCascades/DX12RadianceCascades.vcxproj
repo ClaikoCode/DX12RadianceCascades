@@ -223,6 +223,7 @@ if %errorlevel% leq 3 exit 0</Command>
     <ClInclude Include="src\TestSuite.h" />
     <ClInclude Include="src\TestSuiteGatherFilter.h" />
     <ClInclude Include="src\TestSuiteMasters.h" />
+    <ClInclude Include="src\TestSuitePOFThreshold.h" />
     <ClInclude Include="src\Utils.h" />
   </ItemGroup>
   <ItemGroup>
@@ -276,6 +277,7 @@ if %errorlevel% leq 3 exit 0</Command>
     <ClCompile Include="src\ShaderTable.cpp" />
     <ClCompile Include="src\TestSuiteGatherFilter.cpp" />
     <ClCompile Include="src\TestSuiteMasters.cpp" />
+    <ClCompile Include="src\TestSuitePOFThreshold.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\MiniEngine\Core\Core.vcxproj">

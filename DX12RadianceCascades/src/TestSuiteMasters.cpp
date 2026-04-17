@@ -26,7 +26,7 @@ MastersTestSuite::MastersTestSuite(RadianceCascadeManager3D& rcManager3D, uint32
 		{
 			for (uint32_t maxCascadeLevel : maxAllowedCascadeLevelsVals)
 			{
-				AddCase({
+				m_testCases.EmplaceTestCase({
 					.raysPerProbe0 = raysPerProbe,
 					.probeSpacing0 = probeSpacing,
 					.maxAllowedCascadeLevels = maxCascadeLevel
@@ -36,9 +36,9 @@ MastersTestSuite::MastersTestSuite(RadianceCascadeManager3D& rcManager3D, uint32
 	}
 }
 
-void MastersTestSuite::OnCaseBegin(const TestCase& testCase)
+void MastersTestSuite::OnCaseBegin(uint32_t testIndex)
 {
-	const MasterTestSuiteInputs& inputs = testCase.inputs;
+	const Inputs& inputs = m_testCases[testIndex].inputs;
 
 	m_rcManager3D.Generate(
 		inputs.raysPerProbe0,
@@ -59,16 +59,18 @@ void MastersTestSuite::OnCaseBegin(const TestCase& testCase)
 	m_framesWaitedFor = 0;
 }
 
-bool MastersTestSuite::OnCaseTick(TestCase& testCase)
+bool MastersTestSuite::OnCaseTick(uint32_t testIndex)
 {
 	LOG_DEBUG(L"Current frame count: {} ({}%)", m_framesWaitedFor, 100 * m_framesWaitedFor / sFramesBetweenTests);
 
 	return ++m_framesWaitedFor >= sFramesBetweenTests;
 }
 
-void MastersTestSuite::OnCaseCompleted(TestCase& testCase)
+void MastersTestSuite::OnCaseCompleted(uint32_t testIndex)
 {
 	auto& profiles = GPUProfiler::Get().GetProfiles();
+	auto& testCase = m_testCases[testIndex];
+
 	for (const auto& profile : profiles)
 	{
 		if (profile.name == nullptr)
@@ -119,9 +121,9 @@ void MastersTestSuite::OutputTestSuiteToCSV()
 	}
 
 	// Data
-	for (size_t i = 0; i < m_testCases.size(); i++)
+	for (uint32_t i = 0; i < (uint32_t)m_testCases.size(); i++)
 	{
-		TestCase& testCase = m_testCases[i];
+		auto& testCase = m_testCases[i];
 
 		uint32_t raysPerProbeValue = testCase.inputs.raysPerProbe0;
 		uint32_t probeSpacingValue = testCase.inputs.probeSpacing0;
@@ -143,5 +145,10 @@ void MastersTestSuite::OutputTestSuiteToCSV()
 	}
 
 	fileStream.close();
+}
+
+size_t MastersTestSuite::GetCaseCount()
+{
+	return m_testCases.size();
 }
 

@@ -114,6 +114,9 @@
     <ClInclude Include="src\AppGUI\implot_internal.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="src\TestSuitePOFThreshold.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\Main.cpp">
@@ -195,6 +198,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\AppGUI\implot_items.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\TestSuitePOFThreshold.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
