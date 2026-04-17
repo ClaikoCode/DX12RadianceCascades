@@ -264,7 +264,7 @@ void RadianceCascades::Startup()
 			RegisterDisplayDependentTexture(&m_depthBufferCopy, TextureTypeColor);
 
 			m_hiZBuffer.Create(L"Hi-Z Buffer", width, height, 0, DXGI_FORMAT_R32G32_FLOAT);
-			RegisterDisplayDependentTexture(&m_hiZBuffer, TextureTypeColor);
+			RegisterDisplayDependentTexture(&m_hiZBuffer, TextureTypeColor, true);
 
 			m_hiZReadbackBuffer.Create(L"Hi-z Readback Buffer", 2, sizeof(float));
 		}
@@ -634,11 +634,11 @@ void RadianceCascades::ResizeToResolutionTarget(ResolutionTarget resolutionTarge
 			{
 				ColorBuffer* colorTexture = dynamic_cast<ColorBuffer*>(textureRef.pixelBuffer);
 				
-				uint32_t numMips = colorTexture->GetNumMipMaps();
-				ASSERT(numMips == 0, "Does not support resizing textures with mip maps.");
+				// GetNumMipMaps() will return number of mip maps EXCLUDING the first. 
+				uint32_t numMips = textureRef.useMaxMips ? 0 : colorTexture->GetNumMipMaps() + 1;
 
 				// At creation, num mips includes the 0:th mip (the texture itself). Using 0 means all mips.
-				colorTexture->Create(name, width, height, numMips + 1, colorTexture->GetFormat());
+				colorTexture->Create(name, width, height, numMips, colorTexture->GetFormat());
 
 				// Update resource manager descriptors.
 				RuntimeResourceManager::UpdateDescriptor(colorTexture->GetUAV());
@@ -682,7 +682,7 @@ void RadianceCascades::InitializeScene()
 
 
 	// Super lazy, I know.
-	int sceneIndex = 7;
+	int sceneIndex = 4;
 
 #if defined(RUN_TESTS)
 	sceneIndex = 5; 
@@ -1541,7 +1541,7 @@ void RadianceCascades::BuildHiZBuffer(DepthBuffer& sourceDepthBuffer)
 			// Must insert resource barrier between each dispatch as the output will otherwise be undefined.
 			// TODO: Find why this is necessary when the same resource is being used? Each dispatch needs to be executed before the next can start, no?
 			cmptContext.InsertUAVBarrier(hiZBuffer);
-			cmptContext.Dispatch2D(depthSourceInfo.sourceWidth >> 1, depthSourceInfo.sourceHeight >> 1);
+			cmptContext.Dispatch2D(max(depthSourceInfo.sourceWidth >> 1, 1), max(depthSourceInfo.sourceHeight >> 1, 1));
 		}
 
 		// Copy min max info into readback buffer.
@@ -2098,9 +2098,9 @@ std::vector<TLASInstanceGroup> RadianceCascades::GetTLASInstanceGroups()
 	return instanceGroups;
 }
 
-void RadianceCascades::RegisterDisplayDependentTexture(PixelBuffer* pixelBuffer, TextureType textureType)
+void RadianceCascades::RegisterDisplayDependentTexture(PixelBuffer* pixelBuffer, TextureType textureType, bool useMaxMips /*= false*/)
 {
-	m_displayDependentTextures.emplace_back(textureType, pixelBuffer);
+	m_displayDependentTextures.emplace_back(textureType, pixelBuffer, useMaxMips);
 }
 
 void RadianceCascades::GetSceneMinMaxDepth(float& minDepth, float& maxDepth)

@@ -81,6 +81,7 @@ struct DisplayDependentTextureRef
 {
 	TextureType pixelBufferType = TextureTypeNone;
 	PixelBuffer* pixelBuffer;
+	bool useMaxMips;
 };
 
 typedef std::function<void(ModelInstance*, float, double)> UpdateScript;
@@ -333,7 +334,7 @@ private:
 	std::unordered_map<ModelID, std::vector<Utils::GPUMatrix>> GetGroupedModelInstances();
 	std::vector<TLASInstanceGroup> GetTLASInstanceGroups();
 
-	void RegisterDisplayDependentTexture(PixelBuffer* pixelBuffer, TextureType textureType);
+	void RegisterDisplayDependentTexture(PixelBuffer* pixelBuffer, TextureType textureType, bool useMaxMips = false);
 
 	// This should only be called after rendering or at least after BuildHiZBuffer() has been called.
 	void GetSceneMinMaxDepth(float& minDepth, float& maxDepth);
