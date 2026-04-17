@@ -5,7 +5,7 @@
 #include "Logger.h"
 #include "Core\Math\Vector.h"
 
-using MeasurementScenario = TestSuiteGatherFilterInputs::Scenario;
+using MeasurementScenario = TestSuiteGatherFilter::Scenario;
 
 struct CameraTransform
 {
@@ -67,7 +67,7 @@ TestSuiteGatherFilter::TestSuiteGatherFilter(RadianceCascades& radianceCascades,
 				{
 					for (MeasurementScenario scenario : scenarios)
 					{
-						AddCase({
+						m_testCases.EmplaceTestCase({
 							.raysPerProbe0 = raysPerProbe,
 							.probeSpacing0 = probeSpacing,
 							.useGatherFilter = useGatherFilter,
@@ -116,9 +116,9 @@ void TestSuiteGatherFilter::OutputTestSuiteToCSV()
 	}
 
 	// Data
-	for (size_t i = 0; i < m_testCases.size(); i++)
+	for (uint32_t i = 0; i < (uint32_t)m_testCases.size(); i++)
 	{
-		TestCase& testCase = m_testCases[i];
+		auto& testCase = m_testCases[i];
 
 		uint32_t raysPerProbeValue = testCase.inputs.raysPerProbe0;
 		uint32_t probeSpacingValue = testCase.inputs.probeSpacing0;
@@ -154,9 +154,9 @@ void TestSuiteGatherFilter::OutputTestSuiteToCSV()
 	fileStream.close();
 }
 
-void TestSuiteGatherFilter::OnCaseBegin(const TestCase& testCase)
+void TestSuiteGatherFilter::OnCaseBegin(uint32_t caseIndex)
 {
-	const TestSuiteGatherFilterInputs& inputs = testCase.inputs;
+	const Inputs& inputs = m_testCases[caseIndex].inputs;
 
 	uint32_t width, height;
 	ResolutionTargetToDimensions(inputs.resolution, width, height);
@@ -166,7 +166,7 @@ void TestSuiteGatherFilter::OnCaseBegin(const TestCase& testCase)
 		inputs.probeSpacing0,
 		width,
 		height,
-		TestSuiteGatherFilterMaxCascadeCount
+		sGatherFilterMaxCascadeCount
 	);
 
 	m_rcManager3D.SetGatherFiltering(inputs.useGatherFilter);
@@ -189,7 +189,7 @@ void TestSuiteGatherFilter::OnCaseBegin(const TestCase& testCase)
 	m_framesCollected = 0;
 }
 
-bool TestSuiteGatherFilter::OnCaseTick(TestCase& testCase)
+bool TestSuiteGatherFilter::OnCaseTick(uint32_t caseIndex)
 {
 	auto& profiles = GPUProfiler::Get().GetProfiles();
 
@@ -205,7 +205,7 @@ bool TestSuiteGatherFilter::OnCaseTick(TestCase& testCase)
 		{
 			if (strcmp(renderPassName, profile.name) == 0)
 			{
-				testCase.outputs.frameTimes[profile.name][m_framesCollected] = profile.GetLastSample();
+				m_testCases[caseIndex].outputs.frameTimes[profile.name][m_framesCollected] = profile.GetLastSample();
 				break;
 			}
 		}
@@ -217,8 +217,10 @@ bool TestSuiteGatherFilter::OnCaseTick(TestCase& testCase)
 	return m_framesCollected == sFramesToCollect;
 }
 
-void TestSuiteGatherFilter::OnCaseCompleted(TestCase& testCase)
+void TestSuiteGatherFilter::OnCaseCompleted(uint32_t caseIndex)
 {
+	auto& testCase = m_testCases[caseIndex];
+
 	if (testCase.inputs.useGatherFilter == false)
 	{
 		testCase.outputs.filteredRayProportions.fill(0.0f);
@@ -234,4 +236,9 @@ void TestSuiteGatherFilter::OnCaseCompleted(TestCase& testCase)
 
 		testCase.outputs.filteredRayProportions[i] = (float)filteredRayCount / totalRays;
 	}
+}
+
+size_t TestSuiteGatherFilter::GetCaseCount()
+{
+	return m_testCases.size();
 }
