@@ -19,8 +19,11 @@
 
 #include "RadianceCascades.h"
 
-#include "TestSuiteMasters.h"
-#include "TestSuiteGatherFilter.h"
+#if defined(RUN_TESTS)
+	#include "TestSuiteMasters.h"
+	#include "TestSuiteGatherFilter.h"
+	#include "TestSuitePOFThreshold.h"
+#endif
 
 #include "Core\TextureManager.h"
 #include "Model\TextureConvert.h"
@@ -170,7 +173,11 @@ namespace
 	{
 		ComPtr<ID3D12Device5> device5;
 		ThrowIfFailedHR(Graphics::g_Device->QueryInterface(IID_PPV_ARGS(&device5)));
-		ThrowIfFailedHR(device5->SetStablePowerState(TRUE));
+		ThrowIfFailedHR(
+			device5->SetStablePowerState(TRUE), 
+			L"Failed to set stable power state. To use this feature, make sure the machine is in developer mode: "
+			"https://learn.microsoft.com/en-us/windows/advanced-settings/developer-mode"
+		);
 
 		LOG_INFO(L"Stable Power State enabled.");
 	}
@@ -276,7 +283,35 @@ void RadianceCascades::Startup()
 	::EnableStablePowerState();
 	::EnableDriverBackgroundOptimizations();
 
-	sTestSuite = std::make_unique<TestSuiteGatherFilter>(*this, m_rcManager3D, m_camera);
+	switch (TEST_TO_RUN)
+	{
+		case TestIDMasters:
+			sTestSuite = std::make_unique<MastersTestSuite>(m_rcManager3D, ::GetSceneColorWidth(), ::GetSceneColorHeight());
+			break;
+		case TestIDGatherFilter:
+			sTestSuite = std::make_unique<TestSuiteGatherFilter>(*this, m_rcManager3D, m_camera);
+			break;
+		case TestIDPOFThreshold:
+			{
+				// These are non-overlapping to get an even distribution.
+				
+				// SPONZA
+				AxisAlignedBox sponzaRoof = AxisAlignedBox(Math::Vector3(-1900, 900, -1200), Math::Vector3(1900, 1300, 1200));
+				AxisAlignedBox sponzaUpperInterior = AxisAlignedBox(Math::Vector3(-900, -600, -200), Math::Vector3(900, 300, 200));
+				AxisAlignedBox sponzaInterior = AxisAlignedBox(Math::Vector3(-1300, -600, -500), Math::Vector3(1300, 100, 500));
+				std::vector<AxisAlignedBox> sponzaVolumes = { sponzaRoof, sponzaUpperInterior, sponzaInterior };
+
+				AxisAlignedBox chessAboveBoard = AxisAlignedBox(Math::Vector3(-350, -60, -350), Math::Vector3(350, 130, 350));
+				std::vector<AxisAlignedBox> chessVolumes = { chessAboveBoard };
+
+				const std::vector<AxisAlignedBox> sponzaBoxes = chessVolumes;
+
+				sTestSuite = std::make_unique<TestSuitePOFThreshold>(m_camera, m_rcManager3D, sponzaBoxes);
+			}
+			break;
+		default:
+			ASSERT(false, "Code should not be reached");
+	}
 #endif
 
 	
@@ -680,13 +715,8 @@ void RadianceCascades::InitializeScene()
 		{ Math::Vector3(-2180.0f, 2100.0f, -1300.0f), Math::Vector3(0.8f, -0.35f, 0.50f) }
 	} };
 
-
 	// Super lazy, I know.
-	int sceneIndex = 4;
-
-#if defined(RUN_TESTS)
-	sceneIndex = 5; 
-#endif
+	int sceneIndex = 7;
 
 	if (sceneIndex == 0) // Default scene
 	{

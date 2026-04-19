@@ -37,6 +37,9 @@ class RadianceCascadeManager3D
 public:
 	RadianceCascadeManager3D() = default;
 
+	RadianceCascadeManager3D(RadianceCascadeManager3D& other) = delete;
+	RadianceCascadeManager3D(RadianceCascadeManager3D&& temp) = delete;
+
 	void Generate(uint32_t raysPerProbe0, uint32_t probeSpacing0, uint32_t swapchainWidth, uint32_t swapchainHeight, uint32_t maxAllowedCascadeLevels = 8u);
 	// Calls Generate() using internal values with other width and height parameters.
 	void Resize(uint32_t width, uint32_t height);
@@ -65,7 +68,10 @@ public:
 	bool UsesPreAveragedIntervals() const { return m_rcSettings.staticParams.isUsingPreAveragedIntervals; }
 	bool UsesGatherFiltering() const { return m_rcSettings.useGatherFiltering; }
 
-	void SetGatherFiltering(bool useGatherFiltering) { m_rcSettings.useGatherFiltering = useGatherFiltering; }
+	void SetGatherFiltering(bool useGatherFiltering) 
+	{ 
+		m_rcSettings.useGatherFiltering = useGatherFiltering; 
+	}
 
 	ColorBuffer& GetCoalesceBuffer() { return m_coalescedResult; }
 

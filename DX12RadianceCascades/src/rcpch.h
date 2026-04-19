@@ -17,6 +17,16 @@
 
 // Comment to toggle tests
 //#define RUN_TESTS
+#if defined(RUN_TESTS)
+    enum TestID : unsigned int
+    {
+        TestIDMasters = 0,
+        TestIDGatherFilter,
+        TestIDPOFThreshold
+    };
+    
+    #define TEST_TO_RUN (TestIDPOFThreshold)
+#endif
 
 // Comment to toggle GPU profiling
 #define PROFILE_GPU
